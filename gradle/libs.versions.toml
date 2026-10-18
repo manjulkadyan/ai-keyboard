@@ -44,6 +44,7 @@ google-ump = "4.0.0"
 androidx-datastore = "1.2.1"
 # Moving this version means re-checking the android-all pin (14-robolectric-...) in gradle/robolectric-offline.gradle.kts
 robolectric = "4.17"
+turbine = "1.2.1"
 
 
 
@@ -114,6 +115,10 @@ google-ump = { module = "com.google.android.ump:user-messaging-platform", versio
 androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "androidx-datastore" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine" }
+# FORK(S1-onboarding): onboarding view model tests (Turbine)
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 
 
 

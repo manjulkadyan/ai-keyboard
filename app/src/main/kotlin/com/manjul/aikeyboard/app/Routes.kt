@@ -76,7 +76,7 @@ import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
 import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
 import com.manjul.aikeyboard.app.settings.typing.TypingScreen
-import com.manjul.aikeyboard.app.setup.SetupScreen
+import com.manjul.aikeyboard.fork.onboarding.OnboardingScreen // FORK(S1-onboarding)
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.reflect.KClass
@@ -279,7 +279,8 @@ object Routes {
                 ) + fadeOut(spring(stiffness = Spring.StiffnessMedium))
             },
         ) {
-            composable<Setup.Screen> { SetupScreen() }
+            // FORK(S1-onboarding): the setup route shows the new onboarding flow; upstream SetupScreen stays, unused
+            composable<Setup.Screen> { OnboardingScreen() }
 
             composableWithDeepLink(Settings.Home::class) { HomeScreen() }
 

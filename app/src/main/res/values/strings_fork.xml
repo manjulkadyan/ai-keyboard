@@ -40,4 +40,31 @@
     <string name="private_apps__summary" tools:ignore="MissingTranslation">In private apps the keyboard does not learn, suggest, or save anything.</string>
     <string name="private_apps__suggested" tools:ignore="MissingTranslation">Suggested</string>
     <string name="private_apps__all_apps" tools:ignore="MissingTranslation">All apps</string>
+    <string name="onboarding__welcome_title" tools:ignore="MissingTranslation">Welcome to AI Keyboard</string>
+    <string name="onboarding__welcome_tagline" tools:ignore="MissingTranslation">Speak or type in your language. Send it in theirs.</string>
+    <string name="onboarding__welcome_privacy" tools:ignore="MissingTranslation">We never see passwords. No ads in your keyboard.</string>
+    <string name="onboarding__get_started" tools:ignore="MissingTranslation">Get started</string>
+    <string name="onboarding__enable_title" tools:ignore="MissingTranslation">Turn on AI Keyboard</string>
+    <string name="onboarding__enable_body" tools:ignore="MissingTranslation">Open the keyboard settings and switch on AI Keyboard. Then come back here.</string>
+    <string name="onboarding__enable_button" tools:ignore="MissingTranslation">Open keyboard settings</string>
+    <string name="onboarding__select_title" tools:ignore="MissingTranslation">Choose AI Keyboard</string>
+    <string name="onboarding__select_body" tools:ignore="MissingTranslation">Pick AI Keyboard as your current keyboard.</string>
+    <string name="onboarding__select_button" tools:ignore="MissingTranslation">Choose keyboard</string>
+    <string name="onboarding__languages_title" tools:ignore="MissingTranslation">Your languages</string>
+    <string name="onboarding__languages_body" tools:ignore="MissingTranslation">Pick the languages you write in. You can change this later.</string>
+    <string name="onboarding__continue" tools:ignore="MissingTranslation">Continue</string>
+    <string name="onboarding__skip" tools:ignore="MissingTranslation">Skip</string>
+    <string name="onboarding__done" tools:ignore="MissingTranslation">Done</string>
+    <string name="onboarding__try_title" tools:ignore="MissingTranslation">Try it out</string>
+    <string name="onboarding__try_body" tools:ignore="MissingTranslation">Type here with your new keyboard, or tap the microphone to speak.</string>
+    <string name="onboarding__try_field_hint" tools:ignore="MissingTranslation">Type something</string>
+    <string name="onboarding__try_mic" tools:ignore="MissingTranslation">Speak instead</string>
+    <string name="onboarding__try_mic_denied" tools:ignore="MissingTranslation">Microphone access is off. You can keep typing, and turn voice on later in system settings.</string>
+    <string name="onboarding__voice_notice_title" tools:ignore="MissingTranslation">Before you speak</string>
+    <string name="onboarding__voice_notice_on_device" tools:ignore="MissingTranslation">Voice typing uses the on-device speech recognition. Your voice stays on this phone.</string>
+    <string name="onboarding__voice_notice_system" tools:ignore="MissingTranslation">Voice typing uses the speech service on your phone. It may send audio to the service provider to turn it into text.</string>
+    <string name="onboarding__voice_notice_whisper" tools:ignore="MissingTranslation">Voice typing uses a Whisper speech model that runs on your device. Your voice stays on this phone.</string>
+    <string name="onboarding__voice_notice_agree" tools:ignore="MissingTranslation">Agree</string>
+    <string name="onboarding__voice_notice_not_now" tools:ignore="MissingTranslation">Not now</string>
+    <string name="onboarding__home_select_card" tools:ignore="MissingTranslation">Select AI Keyboard as your keyboard</string>
 </resources>

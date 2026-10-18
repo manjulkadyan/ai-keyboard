@@ -71,7 +71,8 @@ fun HomeScreen() = FlorisScreen {
             FlorisWarningCard(
                 modifier = Modifier.padding(8.dp),
                 showIcon = false,
-                text = stringRes(R.string.settings__home__ime_not_selected),
+                // FORK(S1-onboarding): "Select AI Keyboard as your keyboard" card
+                text = stringRes(R.string.onboarding__home_select_card),
                 onClick = { InputMethodUtils.showImePicker(context) },
             )
         }

@@ -20,6 +20,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
+import android.os.SystemClock // FORK(S1-onboarding)
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
@@ -48,6 +49,10 @@ import com.manjul.aikeyboard.app.ext.ExtensionImportScreenType
 import com.manjul.aikeyboard.app.setup.NotificationPermissionState
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.cacheManager
+import com.manjul.aikeyboard.featureSettingsStore // FORK(S1-onboarding)
+import com.manjul.aikeyboard.lib.util.InputMethodUtils // FORK(S1-onboarding)
+import kotlinx.coroutines.flow.first // FORK(S1-onboarding)
+import kotlinx.coroutines.withTimeoutOrNull // FORK(S1-onboarding)
 import com.manjul.aikeyboard.lib.FlorisLocale
 import com.manjul.aikeyboard.lib.compose.LocalPreviewFieldController
 import com.manjul.aikeyboard.lib.compose.PreviewKeyboardField
@@ -63,6 +68,9 @@ import org.florisboard.lib.compose.conditional
 import org.florisboard.lib.compose.stringRes
 import org.florisboard.lib.kotlin.collectIn
 import java.util.concurrent.atomic.AtomicBoolean
+
+// FORK(S1-onboarding)
+private const val SPLASH_MAX_MS = 1000L
 
 enum class AppTheme(val id: String) {
     AUTO("auto"),
@@ -84,11 +92,18 @@ class FlorisAppActivity : ComponentActivity() {
     private var showAppIcon = true
     private var resourcesContext by mutableStateOf(this as Context)
     private var intentToBeHandled by mutableStateOf<Intent?>(null)
+    // FORK(S1-onboarding)
+    private val featureSettingsStore by featureSettingsStore()
+    private var startAtHome = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Splash screen should be installed before calling super.onCreate()
+        // FORK(S1-onboarding): splash is held at most 1 s, even if the stores are slow to load
+        val splashStart = SystemClock.uptimeMillis()
         installSplashScreen().apply {
-            setKeepOnScreenCondition { !appContext.preferenceStoreLoaded.value }
+            setKeepOnScreenCondition {
+                !appContext.preferenceStoreLoaded.value && SystemClock.uptimeMillis() - splashStart < SPLASH_MAX_MS
+            }
         }
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -120,6 +135,10 @@ class FlorisAppActivity : ComponentActivity() {
                 prefs.internal.isImeSetUp.set(false)
             }
             AppVersionUtils.updateVersionOnInstallAndLastUse(this, prefs)
+            // FORK(S1-onboarding): Home only for a finished onboarding with the keyboard enabled and selected
+            val settings = withTimeoutOrNull(SPLASH_MAX_MS) { featureSettingsStore.flow.first() }
+            startAtHome = settings?.onboardingDone == true &&
+                InputMethodUtils.isFlorisboardEnabled(this) && InputMethodUtils.isFlorisboardSelected(this)
             setContent {
                 ProvideLocalizedResources(
                     resourcesContext,
@@ -174,7 +193,6 @@ class FlorisAppActivity : ComponentActivity() {
         val navController = rememberNavController()
         val previewFieldController = rememberPreviewFieldController()
 
-        val isImeSetUp by prefs.internal.isImeSetUp.observeAsState()
 
         CompositionLocalProvider(
             LocalNavController provides navController,
@@ -197,7 +215,8 @@ class FlorisAppActivity : ComponentActivity() {
                     Routes.AppNavHost(
                         modifier = Modifier.weight(1.0f),
                         navController = navController,
-                        startDestination = if (isImeSetUp) Routes.Settings.Home::class else Routes.Setup.Screen::class,
+                        // FORK(S1-onboarding): onboarding unless done and the keyboard is enabled and selected
+                        startDestination = if (startAtHome) Routes.Settings.Home::class else Routes.Setup.Screen::class,
                     )
                     PreviewKeyboardField(previewFieldController)
                 }
