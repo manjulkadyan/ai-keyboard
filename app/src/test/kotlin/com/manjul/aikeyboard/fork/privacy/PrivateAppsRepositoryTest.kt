@@ -73,6 +73,13 @@ class PrivateAppsRepositoryTest {
     }
 
     @Test
+    fun `repeat add logs nothing`() = runTest {
+        repo.add("com.bank")
+        repo.add("com.bank")
+        assertEquals(1, logged.size)
+    }
+
+    @Test
     fun `remove does not log`() = runTest {
         repo.remove("com.bank")
         assertTrue(logged.isEmpty())

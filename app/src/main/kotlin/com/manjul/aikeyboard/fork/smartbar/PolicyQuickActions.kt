@@ -21,6 +21,9 @@ import kotlinx.coroutines.flow.StateFlow
 
 private val FailClosed: StateFlow<PolicyDecision> = MutableStateFlow(PolicyDecision.Locked)
 
+/** The decision of the live controller, or [PolicyDecision.Locked] when there is none (fail closed). */
+fun decisionOrLocked(current: PolicyDecision?): PolicyDecision = current ?: PolicyDecision.Locked
+
 /** The live policy decision for UI code. Without a running IME service it is [PolicyDecision.Locked]. */
 @Composable
 fun rememberPolicyDecision(): PolicyDecision {

@@ -126,7 +126,7 @@ fun HomeScreen() = FlorisScreen {
             title = stringRes(R.string.settings__smartbar__title),
             onClick = { navController.navigate(Routes.Settings.Smartbar) },
         )
-        // FORK(S1-smartbar): Privacy > Private apps
+        // FORK(S1-smartbar): home entry for the Private apps screen (no Privacy parent screen)
         Preference(
             icon = Icons.Default.Lock,
             title = stringRes(R.string.private_apps__title),

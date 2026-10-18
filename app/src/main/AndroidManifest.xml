@@ -19,7 +19,7 @@
         <intent>
             <action android:name="android.service.textservice.SpellCheckerService"/>
         </intent>
-        <!-- FORK(S1-smartbar): launcher apps, listed in Settings > Privacy > Private apps -->
+        <!-- FORK(S1-smartbar): launcher apps, listed in the Private apps settings screen -->
         <intent>
             <action android:name="android.intent.action.MAIN"/>
             <category android:name="android.intent.category.LAUNCHER"/>

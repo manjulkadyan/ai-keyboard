@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.MutableLiveData
 import com.manjul.aikeyboard.FlorisImeService
 import com.manjul.aikeyboard.fork.privacy.makeAppPrivate // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.smartbar.decisionOrLocked // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
@@ -99,7 +100,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
 
     // FORK(S1-smartbar): fail closed when the IME service (and with it the policy controller) is not running
     private fun policyDecision(): PolicyDecision =
-        FlorisImeService.policyControllerOrNull()?.decision?.value ?: PolicyDecision.Locked
+        decisionOrLocked(FlorisImeService.policyControllerOrNull()?.decision?.value)
 
     val layoutManager = LayoutManager(context)
     private val keyboardCache = TextKeyboardCache()

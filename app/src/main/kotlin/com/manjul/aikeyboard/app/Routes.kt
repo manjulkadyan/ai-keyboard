@@ -149,7 +149,7 @@ object Routes {
         @Deeplink("settings/smartbar")
         object Smartbar
 
-        // FORK(S1-smartbar): Privacy > Private apps
+        // FORK(S1-smartbar): Private apps screen, reached from the Settings home (no Privacy parent screen)
         @Serializable
         @Deeplink("settings/privacy/private-apps")
         object PrivateApps

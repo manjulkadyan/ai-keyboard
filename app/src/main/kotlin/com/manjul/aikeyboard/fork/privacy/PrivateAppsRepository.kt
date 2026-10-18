@@ -10,6 +10,9 @@ import android.content.pm.PackageManager
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.EventCatalog
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 data class AppEntry(val packageName: String, val label: String)
 
@@ -19,11 +22,15 @@ class PrivateAppsRepository(
     private val pm: PackageManager,
     private val log: (AnalyticsEvent) -> Unit = {},
 ) {
-    val privatePackages get() = store.flow
+    val privatePackages: Flow<Set<String>> get() = store.flow.map { it.privatePackages }.distinctUntilChanged()
 
     suspend fun add(pkg: String) {
-        store.update { it.copy(privatePackages = it.privatePackages + pkg) }
-        log(EventCatalog.privacyPrivateAppAdd())
+        var added = false
+        store.update {
+            added = pkg !in it.privatePackages
+            it.copy(privatePackages = it.privatePackages + pkg)
+        }
+        if (added) log(EventCatalog.privacyPrivateAppAdd())
     }
 
     suspend fun remove(pkg: String) {

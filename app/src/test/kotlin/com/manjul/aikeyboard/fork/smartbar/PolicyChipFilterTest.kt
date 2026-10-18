@@ -6,8 +6,11 @@
 package com.manjul.aikeyboard.fork.smartbar
 
 import com.manjul.aikeyboard.fork.smartbar.ChipId.*
+import android.text.InputType
+import com.manjul.aikeyboard.ime.policy.FieldDescriptor
+import com.manjul.aikeyboard.ime.policy.PolicyContext
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
-import com.manjul.aikeyboard.ime.policy.SensitivityReason
+import com.manjul.aikeyboard.ime.policy.SensitiveFieldPolicy
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -17,8 +20,21 @@ class PolicyChipFilterTest {
     private val all = ChipId.entries.toList()
     private val allRegistered = ChipId.entries.toSet()
 
-    // Same capabilities as SensitiveFieldPolicy gives a password field.
-    private val password = PolicyDecision.Locked.copy(reasons = setOf(SensitivityReason.PASSWORD))
+    private val password = SensitiveFieldPolicy.evaluate(
+        FieldDescriptor(
+            packageName = "some.app",
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            imeOptions = 0,
+            hintText = null,
+            label = null,
+        ),
+        PolicyContext(
+            deviceLocked = false,
+            incognitoManual = false,
+            privatePackages = emptySet(),
+            forceSensitivePackages = emptySet(),
+        ),
+    )
 
     @Test
     fun `password field keeps only emoji and settings`() {

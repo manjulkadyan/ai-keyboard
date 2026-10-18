@@ -35,7 +35,7 @@
     <string name="quick_action__toggle_private_app" tools:ignore="MissingTranslation">Make private</string>
     <string name="quick_action__toggle_private_app__tooltip" tools:ignore="MissingTranslation">Make this app private</string>
 
-    <!-- Settings > Privacy > Private apps. -->
+    <!-- Private apps settings screen. -->
     <string name="private_apps__title" tools:ignore="MissingTranslation">Private apps</string>
     <string name="private_apps__summary" tools:ignore="MissingTranslation">In private apps the keyboard does not learn, suggest, or save anything.</string>
     <string name="private_apps__suggested" tools:ignore="MissingTranslation">Suggested</string>

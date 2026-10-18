@@ -27,14 +27,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
-import com.manjul.aikeyboard.core.datastore.FeatureSettings
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.florisboard.lib.compose.stringRes
 
-/** Settings > Privacy > Private apps: every field in a toggled app is treated as sensitive. */
+/** Private apps (a Settings home entry; there is no Privacy parent screen yet): every field in a toggled app is treated as sensitive. */
 @Composable
 fun PrivateAppsScreen() = FlorisScreen {
     title = stringRes(R.string.private_apps__title)
@@ -52,8 +51,7 @@ fun PrivateAppsScreen() = FlorisScreen {
             suggestions = repository.suggestions()
         }
     }
-    val settings by repository.privatePackages.collectAsState(initial = FeatureSettings())
-    val privatePackages = settings.privatePackages
+    val privatePackages by repository.privatePackages.collectAsState(initial = emptySet())
 
     content {
         @Composable
