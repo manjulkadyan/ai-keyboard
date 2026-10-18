@@ -70,6 +70,13 @@
         { "code": 57, "label": "9" }
       ]
     },
+    "ه": {
+      "main": { "code": 1729, "label": "ہ" },
+      "relevant": [
+        { "code": 1726, "label": "ھ" },
+        { "code": 1730, "label": "ۂ" }
+      ]
+    },
     "پ": {
       "relevant": [
         { "code": 48, "label": "0"}
@@ -165,6 +172,8 @@
     "~right": {
       "main": { "code": 1611, "label": "ً" },
       "relevant": [
+        { "code": 1748, "label": "۔" },
+        { "code": 1567, "label": "؟" },
         { "code": 1622, "label": "ٖ" },
         { "code": 1648, "label": "ٰ" },
         { "code": 1619, "label": "ٓ" },

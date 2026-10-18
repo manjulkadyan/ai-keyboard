@@ -697,7 +697,8 @@
       "currencySet": "org.florisboard.currencysets:pakistani_rupee",
       "popupMapping": "org.florisboard.localization:ur-PK",
       "preferred": {
-        "characters": "org.florisboard.layouts:urdu_phonetic"
+        "characters": "org.florisboard.layouts:urdu_phonetic",
+        "numericRow": "org.florisboard.layouts:persian"
       }
     },
     {

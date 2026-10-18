@@ -1,0 +1,48 @@
+[
+  [
+    { "code": 1590, "label": "ض" },
+    { "code": 1589, "label": "ص" },
+    { "code": 1579, "label": "ث" },
+    { "code": 1602, "label": "ق" },
+    { "code": 1601, "label": "ف" },
+    { "code": 1594, "label": "غ" },
+    { "code": 1593, "label": "ع" },
+    { "code": 1582, "label": "خ" },
+    { "code": 1581, "label": "ح" },
+    { "code": 1580, "label": "ج" }
+  ],
+  [
+    { "code": 1588, "label": "ش" },
+    { "code": 1587, "label": "س" },
+    { "$": "case_selector", "lower": { "code": 1740, "label": "ی" }, "upper": { "code": 1574, "label": "ئ" } },
+    { "code": 1576, "label": "ب" },
+    { "code": 1604, "label": "ل" },
+    { "$": "case_selector", "lower": { "code": 1575, "label": "ا" }, "upper": { "code": 1570, "label": "آ" } },
+    { "code": 1578, "label": "ت" },
+    { "code": 1606, "label": "ن" },
+    { "code": 1605, "label": "م" },
+    { "code": 1705, "label": "ک" }
+  ],
+  [
+    { "$": "case_selector", "lower": { "code": 1591, "label": "ط" }, "upper": { "code": 1592, "label": "ظ" } },
+    { "code": 1672, "label": "ڈ" },
+    { "code": 1657, "label": "ٹ" },
+    { "code": 1585, "label": "ر" },
+    { "code": 1583, "label": "د" },
+    { "code": 1662, "label": "پ" },
+    { "$": "case_selector", "lower": { "code": 1608, "label": "و" }, "upper": { "code": 1572, "label": "ؤ" } },
+    { "code": 1711, "label": "گ" },
+    { "code": 1670, "label": "چ" }
+  ],
+  [
+    { "code": -11, "label": "shift", "type": "modifier" },
+    { "code": 1584, "label": "ذ" },
+    { "$": "case_selector", "lower": { "code": 1586, "label": "ز" }, "upper": { "code": 1688, "label": "ژ" } },
+    { "code": 1681, "label": "ڑ" },
+    { "code": 1722, "label": "ں" },
+    { "$": "case_selector", "lower": { "code": 1729, "label": "ہ" }, "upper": { "code": 1726, "label": "ھ" } },
+    { "$": "case_selector", "lower": { "code": 1569, "label": "ء" }, "upper": { "code": 1730, "label": "ۂ" } },
+    { "$": "case_selector", "lower": { "code": 1746, "label": "ے" }, "upper": { "code": 1747, "label": "ۓ" } },
+    { "$": "case_selector", "lower": { "code": 1748, "label": "۔" }, "upper": { "code": 1567, "label": "؟" } }
+  ]
+]

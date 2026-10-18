@@ -59,6 +59,10 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt` | S1-clipboard | `historyAutoCleanOldEnabled` default true, `historyAutoCleanOldAfter` default 1440 (minutes, 24 h) |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt` | S1-clipboard | Auto-clean slider max 120 -> 1440 minutes so the 24 h default is reachable |
 | `app/src/main/res/xml/method.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt` | S1-subtypes | `method.xml`: the single placeholder subtype is replaced by the 8 MVP subtypes (en-US, es-ES, fr-FR, pt-BR, ar, ur-PK, id, hi-IN; labels in `strings_fork.xml`). `SubtypeManager.ensureDefaultSubtypes(tags)` adds missing presets by primary locale, in order, idempotently; called from onboarding only, never on IME start |
+| `app/src/main/assets/ime/keyboard/org.florisboard.localization/extension.json` | S1-layouts | `ur-PK` preset: `numericRow` set to `org.florisboard.layouts:persian` (Extended Arabic-Indic digits U+06F0-U+06F9, the Urdu digits; each key's long-press gives the western digit). The number-row layout is also the top row of the symbols layer, so this is the per-subtype native/western digit choice; users switch it with "Number row layout" in the subtype editor (`western_arabic` for western). `ar` and `hi-IN` already default to native digits. Characters defaults are unchanged (`urdu_phonetic`, `hindi_in`); our `org.aikeyboard.layouts` layouts need no preset entry because the subtype editor lists every indexed characters layout |
+| `app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ur-PK.json` | S1-layouts | Coverage gaps in `urdu_phonetic` (guarded by `ScriptCoverageTest`): its h key is Arabic heh `ه` (U+0647), so the mapping's `ہ` entry never matched; a new `ه` entry offers `ہ` (main), `ھ`, `ۂ`. `~right` (the `.` key) now starts with `۔` and `؟` |
+| `app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ar.json` | S1-layouts | `؛` (U+061B) added first in `~right` relevant (after the `؟` main): the Arabic characters keyboard had no Arabic semicolon |
+| `app/src/main/kotlin/com/manjul/aikeyboard/lib/FlorisLocale.kt` | S1-layouts | `supportsCapitalization` is false for `ur`: Urdu has no case, and auto-shift at sentence start would otherwise type the shift layer of `urdu_standard` (our layout, which puts `ھ`, `ۓ`, `ۂ`, `آ`, ... on shift) |
 
 ## Marker-exempt files
 
@@ -77,6 +81,7 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | File | Why no inline marker |
 |---|---|
 | `app/src/main/assets/ime/theme/org.florisboard.themes{,.my}/extension.json` | JSON has no comment syntax; branding-only title change recorded in the S0-branding row above |
+| `app/src/main/assets/ime/keyboard/org.florisboard.localization/{extension.json,popupMappings/ur-PK.json,popupMappings/ar.json}` | JSON has no comment syntax; S1-layouts additions recorded in the rows above |
 | `README.md` | Rewritten from scratch for the fork (S0-branding); no upstream hunk is left to annotate |
 
 ## Decisions

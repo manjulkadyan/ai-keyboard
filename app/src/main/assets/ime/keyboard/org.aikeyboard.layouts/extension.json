@@ -1,0 +1,31 @@
+{
+  "$": "ime.extension.keyboard",
+  "meta": {
+    "id": "org.aikeyboard.layouts",
+    "version": "0.1.0",
+    "title": "AI Keyboard layouts",
+    "description": "Urdu standard and Hindi phonetic layouts. Pick them in the subtype editor.",
+    "maintainers": [ "AI Keyboard contributors" ],
+    "license": "apache-2.0"
+  },
+  "dependencies": [
+    "org.florisboard.layouts"
+  ],
+  "layouts": {
+    "characters": [
+      {
+        "id": "urdu_standard",
+        "label": "اردو (Standard)",
+        "authors": [ "AI Keyboard contributors" ],
+        "direction": "rtl",
+        "modifier": "org.florisboard.layouts:arabic"
+      },
+      {
+        "id": "hindi_phonetic",
+        "label": "हिंदी (Phonetic)",
+        "authors": [ "AI Keyboard contributors" ],
+        "direction": "ltr"
+      }
+    ]
+  }
+}

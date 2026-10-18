@@ -217,7 +217,7 @@ class FlorisLocale private constructor(val base: Locale) {
      */
     val supportsCapitalization: Boolean
         get() = when (language) {
-            "zh", "ko", "th", "bn", "hi" -> false
+            "zh", "ko", "th", "bn", "hi", "ur" -> false // FORK(S1-layouts): Urdu has no case; auto-shift would pick urdu_standard's shift layer
             else -> true
         }
 
