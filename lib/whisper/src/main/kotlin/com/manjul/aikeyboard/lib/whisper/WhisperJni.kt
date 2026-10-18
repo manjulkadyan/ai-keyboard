@@ -20,17 +20,22 @@ internal object WhisperJni : WhisperNativeCalls {
 
     override fun init(modelPath: String, threads: Int): Long = nativeInit(modelPath, threads)
 
-    override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String? =
-        nativeTranscribe(ctx, pcm, lang, translate)
+    override fun transcribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray? =
+        nativeTranscribe(ptr, pcm, lang, translate)
 
-    override fun free(ctx: Long) = nativeFree(ctx)
+    override fun abort(ptr: Long) = nativeAbort(ptr)
+
+    override fun free(ptr: Long) = nativeFree(ptr)
 
     @JvmStatic
     external fun nativeInit(modelPath: String, threads: Int): Long
 
     @JvmStatic
-    external fun nativeTranscribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String?
+    external fun nativeTranscribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray?
 
     @JvmStatic
-    external fun nativeFree(ctx: Long)
+    external fun nativeAbort(ptr: Long)
+
+    @JvmStatic
+    external fun nativeFree(ptr: Long)
 }

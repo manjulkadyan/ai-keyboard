@@ -7,7 +7,11 @@ package com.manjul.aikeyboard.lib.whisper
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
@@ -19,7 +23,7 @@ class WhisperNativeContractTest {
     private class FakeCalls(
         var available: Boolean = true,
         var initResult: Long = 42L,
-        var transcribeResult: String? = " hello world",
+        var transcribeResult: ByteArray? = " hello world".toByteArray(),
     ) : WhisperNativeCalls {
         val calls = mutableListOf<String>()
         var lastThreads = -1
@@ -34,24 +38,46 @@ class WhisperNativeContractTest {
             return initResult
         }
 
-        override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String? {
-            calls += "transcribe"
+        override fun transcribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray? {
+            calls += "transcribe:$ptr"
             lastLang = lang
             lastTranslate = translate
             return transcribeResult
         }
 
-        override fun free(ctx: Long) {
-            calls += "free:$ctx"
+        override fun abort(ptr: Long) {
+            calls += "abort:$ptr"
+        }
+
+        override fun free(ptr: Long) {
+            calls += "free:$ptr"
+        }
+    }
+
+    /** A decode that runs until aborted (or released by the test), like whisper_full polling abort_callback. */
+    private class BlockingCalls : WhisperNativeCalls {
+        val inside = CountDownLatch(1)
+        val aborted = CountDownLatch(1)
+        val frees = mutableListOf<Long>()
+
+        override fun isAvailable() = true
+        override fun init(modelPath: String, threads: Int) = 7L
+        override fun transcribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray? {
+            inside.countDown()
+            return if (aborted.await(5, TimeUnit.SECONDS)) null else "late".toByteArray()
+        }
+        override fun abort(ptr: Long) = aborted.countDown()
+        override fun free(ptr: Long) {
+            synchronized(frees) { frees += ptr }
         }
     }
 
     private val pcm = FloatArray(16_000)
 
     @Test
-    fun `load returns the native handle`() {
+    fun `load returns a non-zero handle`() {
         val bridge = WhisperBridge(FakeCalls())
-        assertEquals(42L, bridge.load("/models/base.bin", threads = 4))
+        assertNotEquals(0L, bridge.load("/models/base.bin", threads = 4))
     }
 
     @Test
@@ -81,10 +107,29 @@ class WhisperNativeContractTest {
     }
 
     @Test
+    fun `WhisperNative rejects a blank path before loading the native library`() {
+        assertEquals(0L, WhisperNative.load("", threads = 1))
+    }
+
+    @Test
     fun `load clamps the thread count to at least 1`() {
         val calls = FakeCalls()
-        WhisperBridge(calls).load("/models/base.bin", threads = 0)
+        WhisperBridge(calls, maxThreads = 4).load("/models/base.bin", threads = 0)
         assertEquals(1, calls.lastThreads)
+    }
+
+    @Test
+    fun `load clamps the thread count to maxThreads`() {
+        val calls = FakeCalls()
+        WhisperBridge(calls, maxThreads = 4).load("/models/base.bin", threads = 64)
+        assertEquals(4, calls.lastThreads)
+    }
+
+    @Test
+    fun `default maxThreads is at most MAX_WHISPER_THREADS`() {
+        val calls = FakeCalls()
+        WhisperBridge(calls).load("/models/base.bin", threads = 1_000)
+        assertEquals(minOf(Runtime.getRuntime().availableProcessors(), MAX_WHISPER_THREADS), calls.lastThreads)
     }
 
     @Test
@@ -98,12 +143,13 @@ class WhisperNativeContractTest {
     }
 
     @Test
-    fun `transcribe passes language and translate through and trims the result`() {
+    fun `transcribe passes the native pointer, language and translate through and trims the result`() {
         val calls = FakeCalls()
         val bridge = WhisperBridge(calls)
         val ctx = bridge.load("/models/base.bin", threads = 4)
 
         assertEquals("hello world", bridge.transcribe(ctx, pcm, "hi", translate = true))
+        assertEquals("transcribe:42", calls.calls.last())
         assertEquals("hi", calls.lastLang)
         assertTrue(calls.lastTranslate)
     }
@@ -114,6 +160,25 @@ class WhisperNativeContractTest {
         val bridge = WhisperBridge(calls)
         bridge.transcribe(bridge.load("/models/base.bin", threads = 4), pcm, "en")
         assertEquals(false, calls.lastTranslate)
+    }
+
+    @Test
+    fun `a 4-byte emoji and Devanagari decode intact`() {
+        val text = "नमस्ते 🎵"
+        val calls = FakeCalls(transcribeResult = text.toByteArray(Charsets.UTF_8))
+        val bridge = WhisperBridge(calls)
+
+        assertEquals(text, bridge.transcribe(bridge.load("/models/base.bin", threads = 4), pcm, "hi"))
+    }
+
+    @Test
+    fun `a truncated multi-byte sequence becomes U+FFFD instead of failing`() {
+        // "ab" followed by the first two bytes of the 3-byte UTF-8 encoding of U+0928.
+        val bytes = byteArrayOf('a'.code.toByte(), 'b'.code.toByte(), 0xE0.toByte(), 0xA4.toByte())
+        val calls = FakeCalls(transcribeResult = bytes)
+        val bridge = WhisperBridge(calls)
+
+        assertEquals("ab�", bridge.transcribe(bridge.load("/models/base.bin", threads = 4), pcm, "hi"))
     }
 
     @Test
@@ -138,6 +203,20 @@ class WhisperNativeContractTest {
     }
 
     @Test
+    fun `a freed handle stays invalid after the same native pointer is loaded again`() {
+        val calls = FakeCalls(initResult = 42L)
+        val bridge = WhisperBridge(calls)
+        val first = bridge.load("/models/base.bin", threads = 4)
+        bridge.free(first)
+
+        val second = bridge.load("/models/base.bin", threads = 4)
+
+        assertNotEquals(first, second)
+        assertThrows<IllegalArgumentException> { bridge.transcribe(first, pcm, "en") }
+        assertEquals("hello world", bridge.transcribe(second, pcm, "en"))
+    }
+
+    @Test
     fun `free twice releases the native context once`() {
         val calls = FakeCalls()
         val bridge = WhisperBridge(calls)
@@ -150,36 +229,44 @@ class WhisperNativeContractTest {
     }
 
     @Test
-    fun `free waits for a running transcription on the same bridge`() {
-        val order = mutableListOf<String>()
-        val inside = java.util.concurrent.CountDownLatch(1)
-        val calls = object : WhisperNativeCalls {
-            override fun isAvailable() = true
-            override fun init(modelPath: String, threads: Int) = 7L
-            override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String {
-                inside.countDown()
-                Thread.sleep(200)
-                synchronized(order) { order += "transcribe-end" }
-                return "ok"
-            }
-            override fun free(ctx: Long) {
-                synchronized(order) { order += "free" }
-            }
-        }
+    fun `free during a running decode returns promptly, aborts it and frees once`() {
+        val calls = BlockingCalls()
         val bridge = WhisperBridge(calls)
         val ctx = bridge.load("/models/base.bin", threads = 4)
+        var outcome: Throwable? = null
+        val worker = Thread {
+            try {
+                bridge.transcribe(ctx, pcm, "en")
+            } catch (t: Throwable) {
+                outcome = t
+            }
+        }.apply { start() }
+        calls.inside.await()
 
-        val worker = Thread { bridge.transcribe(ctx, pcm, "en") }.apply { start() }
-        inside.await()
+        val started = System.nanoTime()
         bridge.free(ctx)
-        worker.join()
+        val freeMillis = (System.nanoTime() - started) / 1_000_000
+        worker.join(5_000)
 
-        assertEquals(listOf("transcribe-end", "free"), order)
+        assertTrue(freeMillis < 1_000, "free blocked for $freeMillis ms")
+        assertEquals(0L, calls.aborted.count, "decode was not aborted")
+        assertIs<WhisperException>(outcome)
+        assertEquals(listOf(7L), calls.frees)
+        assertThrows<IllegalArgumentException> { bridge.transcribe(ctx, pcm, "en") }
     }
 
     @Test
-    fun `WhisperNative implements WhisperApi`() {
-        val api: WhisperApi = WhisperNative
-        assertTrue(api is WhisperNative)
+    fun `a second transcribe on a busy handle throws instead of waiting`() {
+        val calls = BlockingCalls()
+        val bridge = WhisperBridge(calls)
+        val ctx = bridge.load("/models/base.bin", threads = 4)
+        val worker = Thread { runCatching { bridge.transcribe(ctx, pcm, "en") } }.apply { start() }
+        calls.inside.await()
+
+        assertThrows<IllegalStateException> { bridge.transcribe(ctx, pcm, "en") }
+
+        bridge.free(ctx)
+        worker.join(5_000)
+        assertEquals(listOf(7L), calls.frees)
     }
 }

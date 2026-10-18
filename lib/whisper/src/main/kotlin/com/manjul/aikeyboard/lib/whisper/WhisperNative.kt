@@ -9,8 +9,9 @@ package com.manjul.aikeyboard.lib.whisper
  * On-device whisper.cpp speech-to-text. Batch only: the whole utterance goes in, the text comes out.
  * Callers (WhisperSpeechEngine) depend on this interface so tests can inject a fake.
  *
- * Handles are opaque; 0 is never a valid context. A context must not be used from two threads at once;
- * calls on one implementation are serialised, so [free] waits for a running [transcribe].
+ * Handles are opaque ids; 0 is never a valid context and a freed id never becomes valid again. One context
+ * runs one [transcribe] at a time. [free] never blocks on a running [transcribe]: it aborts it (that call then
+ * throws [WhisperException]), so it is safe from the main thread (onTrimMemory, idle unload).
  */
 interface WhisperApi {
     /**
@@ -24,11 +25,15 @@ interface WhisperApi {
      * [translate] translates to English. Empty [pcm16kMono] returns "" without running the model.
      *
      * @throws IllegalArgumentException if [ctx] is not a live handle from [load].
-     * @throws WhisperException if whisper.cpp fails (unknown language, decode error).
+     * @throws IllegalStateException if [ctx] is already transcribing on another thread.
+     * @throws WhisperException if whisper.cpp fails (unknown language, decode error) or [free] aborted the call.
      */
     fun transcribe(ctx: Long, pcm16kMono: FloatArray, lang: String, translate: Boolean = false): String
 
-    /** Releases a context. Safe for 0, for a failed [load] and for a handle that is already freed. */
+    /**
+     * Releases a context without waiting; a running [transcribe] on it is aborted and releases it on exit.
+     * Safe for 0, for a failed [load] and for a handle that is already freed.
+     */
     fun free(ctx: Long)
 }
 

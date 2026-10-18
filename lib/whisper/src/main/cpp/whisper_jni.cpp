@@ -3,12 +3,15 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-// JNI bridge for com.manjul.aikeyboard.lib.whisper.WhisperJni. Input guards (0 handles, empty PCM,
-// double free, concurrent use) are in Kotlin (WhisperBridge); this file only marshals and calls whisper.cpp.
+// JNI bridge for com.manjul.aikeyboard.lib.whisper.WhisperJni. Input guards (handle ids, empty PCM,
+// double free, free during a decode) are in Kotlin (WhisperBridge); this file only marshals and calls
+// whisper.cpp. Text goes back as raw UTF-8 bytes: whisper output can be malformed or contain 4-byte
+// sequences, which are not modified UTF-8 and would abort the process in NewStringUTF under CheckJNI.
 // Nothing here logs: whisper.cpp's log output is discarded so no transcript text reaches any log.
 
 #include <jni.h>
 
+#include <atomic>
 #include <cstdint>
 #include <new>
 #include <string>
@@ -21,7 +24,13 @@ namespace {
 struct Session {
     whisper_context *ctx;
     int threads;
+    // Set by nativeAbort from another thread, polled by whisper_full. Never reset: an aborted session is freed.
+    std::atomic<bool> abort_requested{false};
 };
+
+bool should_abort(void *user_data) {
+    return static_cast<Session *>(user_data)->abort_requested.load(std::memory_order_relaxed);
+}
 
 void discard_log(enum ggml_log_level, const char *, void *) {}
 
@@ -45,7 +54,11 @@ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeInit(
     env->ReleaseStringUTFChars(model_path, path);
     if (ctx == nullptr) return 0;
 
-    auto *session = new (std::nothrow) Session{ctx, threads};
+    auto *session = new (std::nothrow) Session;
+    if (session != nullptr) {
+        session->ctx = ctx;
+        session->threads = threads;
+    }
     if (session == nullptr) {
         whisper_free(ctx);
         return 0;
@@ -53,10 +66,15 @@ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeInit(
     return static_cast<jlong>(reinterpret_cast<intptr_t>(session));
 }
 
-extern "C" JNIEXPORT jstring JNICALL
+extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeTranscribe(
         JNIEnv *env, jclass, jlong handle, jfloatArray pcm, jstring lang, jboolean translate) {
     Session *session = to_session(handle);
+    if (session == nullptr) {
+        jclass ise = env->FindClass("java/lang/IllegalStateException");
+        if (ise != nullptr) env->ThrowNew(ise, "null whisper session");
+        return nullptr;
+    }
 
     const char *lang_chars = env->GetStringUTFChars(lang, nullptr);
     if (lang_chars == nullptr) return nullptr;
@@ -74,6 +92,10 @@ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeTranscribe(
     params.print_progress = false;
     params.print_realtime = false;
     params.print_timestamps = false;
+    // suppress_blank stays at its default (true); also drop non-speech tokens ("[BLANK_AUDIO]", "(music)").
+    params.suppress_nst = true;
+    params.abort_callback = should_abort;
+    params.abort_callback_user_data = session;
 
     // Not GetPrimitiveArrayCritical: whisper_full runs for seconds and must not block the GC.
     const jsize n_samples = env->GetArrayLength(pcm);
@@ -81,7 +103,7 @@ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeTranscribe(
     if (samples == nullptr) return nullptr;
     const int rc = whisper_full(session->ctx, params, samples, n_samples);
     env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
-    if (rc != 0) return nullptr;
+    if (rc != 0 || session->abort_requested.load()) return nullptr;
 
     std::string text;
     const int n_segments = whisper_full_n_segments(session->ctx);
@@ -89,7 +111,17 @@ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeTranscribe(
         const char *segment = whisper_full_get_segment_text(session->ctx, i);
         if (segment != nullptr) text += segment;
     }
-    return env->NewStringUTF(text.c_str());
+    jbyteArray bytes = env->NewByteArray(static_cast<jsize>(text.size()));
+    if (bytes == nullptr) return nullptr;  // OutOfMemoryError pending
+    env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(text.size()),
+                            reinterpret_cast<const jbyte *>(text.data()));
+    return bytes;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeAbort(JNIEnv *, jclass, jlong handle) {
+    Session *session = to_session(handle);
+    if (session != nullptr) session->abort_requested.store(true);
 }
 
 extern "C" JNIEXPORT void JNICALL

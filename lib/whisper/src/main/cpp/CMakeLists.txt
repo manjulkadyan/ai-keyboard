@@ -28,7 +28,8 @@ set(GGML_CPU_ARM_ARCH "" CACHE STRING "" FORCE)
 add_subdirectory(${WHISPER_DIR} whisper.cpp EXCLUDE_FROM_ALL)
 
 foreach(lib ggml ggml-base ggml-cpu whisper)
-    target_compile_options(${lib} PRIVATE -O3 -ffunction-sections -fdata-sections)
+    # -Wno-format: upstream printf-format warnings in code we do not edit.
+    target_compile_options(${lib} PRIVATE -O3 -ffunction-sections -fdata-sections -Wno-format)
 endforeach()
 
 add_library(aikb_whisper SHARED whisper_jni.cpp)
