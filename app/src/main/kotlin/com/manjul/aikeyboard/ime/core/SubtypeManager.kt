@@ -18,6 +18,7 @@ package com.manjul.aikeyboard.ime.core
 
 import android.content.Context
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.fork.subtypes.missingSubtypeTags // FORK(S1-subtypes)
 import com.manjul.aikeyboard.ime.keyboard.CurrencySet
 import com.manjul.aikeyboard.keyboardManager
 import com.manjul.aikeyboard.lib.FlorisLocale
@@ -107,6 +108,24 @@ class SubtypeManager(context: Context) {
         val newSubtypeList = subtypeList + subtypeToAdd
         persistNewSubtypeList(newSubtypeList)
         return true
+    }
+
+    // FORK(S1-subtypes): seeds the MVP subtypes from onboarding; never called on IME start, so it cannot reset user choices
+    /**
+     * Adds a subtype built from each tag's preset unless a subtype with that primary locale exists. Keeps the
+     * order of [languageTags], skips tags without a preset, and is idempotent. The new list is published and
+     * persisted once, so later calls (and [subtypes] readers) see it immediately.
+     */
+    fun ensureDefaultSubtypes(languageTags: List<String>) {
+        val current = subtypes
+        val baseId = System.currentTimeMillis()
+        val added = missingSubtypeTags(current.map { it.primaryLocale }, languageTags)
+            .mapNotNull { getSubtypePresetForLocale(FlorisLocale.fromTag(it))?.toSubtype() }
+            .mapIndexed { index, subtype -> subtype.copy(id = baseId + index) }
+        if (added.isEmpty()) return
+        val newList = current + added
+        subtypes = newList
+        persistNewSubtypeList(newList)
     }
 
     /**

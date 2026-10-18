@@ -18,4 +18,14 @@
 
     <!-- Crash dialog: label of the share button that replaces upstream's "Open issue tracker" button. -->
     <string name="crash_dialog__share" tools:ignore="MissingTranslation">Share</string>
+
+    <!-- System IME subtype labels (method.xml). Each language is named in itself. -->
+    <string name="subtype__en_us" tools:ignore="MissingTranslation">English (US)</string>
+    <string name="subtype__es_es" tools:ignore="MissingTranslation">Español (España)</string>
+    <string name="subtype__fr_fr" tools:ignore="MissingTranslation">Français (France)</string>
+    <string name="subtype__pt_br" tools:ignore="MissingTranslation">Português (Brasil)</string>
+    <string name="subtype__ar" tools:ignore="MissingTranslation">العربية</string>
+    <string name="subtype__ur_pk" tools:ignore="MissingTranslation">اردو</string>
+    <string name="subtype__id" tools:ignore="MissingTranslation">Bahasa Indonesia</string>
+    <string name="subtype__hi_in" tools:ignore="MissingTranslation">हिन्दी</string>
 </resources>

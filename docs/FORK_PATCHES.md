@@ -58,6 +58,7 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt` | S1-clipboard | `deleteUnpinnedOlderThan` DAO query; `fallbackToDestructiveMigration()` removed from both clipboard databases (schema versions unchanged, so no migration is needed) |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt` | S1-clipboard | `historyAutoCleanOldEnabled` default true, `historyAutoCleanOldAfter` default 1440 (minutes, 24 h) |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt` | S1-clipboard | Auto-clean slider max 120 -> 1440 minutes so the 24 h default is reachable |
+| `app/src/main/res/xml/method.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt` | S1-subtypes | `method.xml`: the single placeholder subtype is replaced by the 8 MVP subtypes (en-US, es-ES, fr-FR, pt-BR, ar, ur-PK, id, hi-IN; labels in `strings_fork.xml`). `SubtypeManager.ensureDefaultSubtypes(tags)` adds missing presets by primary locale, in order, idempotently; called from onboarding only, never on IME start |
 
 ## Marker-exempt files
 

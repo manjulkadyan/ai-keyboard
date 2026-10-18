@@ -7,13 +7,75 @@
     android:supportsSwitchingToNextInputMethod="true"
     tools:targetApi="r">
 
-    <!-- Add default system subtype so we can properly set the icon and label -->
+    <!-- FORK(S1-subtypes): the single upstream placeholder subtype is replaced by the 8 MVP subtypes (TRD FR-12) -->
+    <!-- FORK(S1-subtypes) -->
     <subtype
-        android:label="@string/floris_app_name"
+        android:imeSubtypeLocale="en_US"
+        android:languageTag="en-US"
+        android:label="@string/subtype__en_us"
         android:icon="@mipmap/floris_app_icon"
         android:imeSubtypeMode="keyboard"
-        android:imeSubtypeExtraValue="AsciiCapable"
         android:isAsciiCapable="true"
-        android:overridesImplicitlyEnabledSubtype="true"/>
+        android:imeSubtypeExtraValue="AsciiCapable" />
+    <!-- FORK(S1-subtypes) -->
+    <subtype
+        android:imeSubtypeLocale="es_ES"
+        android:languageTag="es-ES"
+        android:label="@string/subtype__es_es"
+        android:icon="@mipmap/floris_app_icon"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true"
+        android:imeSubtypeExtraValue="AsciiCapable" />
+    <!-- FORK(S1-subtypes) -->
+    <subtype
+        android:imeSubtypeLocale="fr_FR"
+        android:languageTag="fr-FR"
+        android:label="@string/subtype__fr_fr"
+        android:icon="@mipmap/floris_app_icon"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true"
+        android:imeSubtypeExtraValue="AsciiCapable" />
+    <!-- FORK(S1-subtypes) -->
+    <subtype
+        android:imeSubtypeLocale="pt_BR"
+        android:languageTag="pt-BR"
+        android:label="@string/subtype__pt_br"
+        android:icon="@mipmap/floris_app_icon"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true"
+        android:imeSubtypeExtraValue="AsciiCapable" />
+    <!-- FORK(S1-subtypes) -->
+    <subtype
+        android:imeSubtypeLocale="ar"
+        android:languageTag="ar"
+        android:label="@string/subtype__ar"
+        android:icon="@mipmap/floris_app_icon"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="false" />
+    <!-- FORK(S1-subtypes) -->
+    <subtype
+        android:imeSubtypeLocale="ur_PK"
+        android:languageTag="ur-PK"
+        android:label="@string/subtype__ur_pk"
+        android:icon="@mipmap/floris_app_icon"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="false" />
+    <!-- FORK(S1-subtypes) -->
+    <subtype
+        android:imeSubtypeLocale="id"
+        android:languageTag="id"
+        android:label="@string/subtype__id"
+        android:icon="@mipmap/floris_app_icon"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true"
+        android:imeSubtypeExtraValue="AsciiCapable" />
+    <!-- FORK(S1-subtypes) -->
+    <subtype
+        android:imeSubtypeLocale="hi_IN"
+        android:languageTag="hi-IN"
+        android:label="@string/subtype__hi_in"
+        android:icon="@mipmap/floris_app_icon"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="false" />
 
 </input-method>
