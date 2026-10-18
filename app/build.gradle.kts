@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2022-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -115,8 +116,9 @@ android {
 
             resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_debug")
             resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_debug_round")
-            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_debug_foreground")
-            resValue("string", "floris_app_name", "FlorisBoard Debug")
+            // FORK(S0-branding): placeholder app name and neutral launcher glyph instead of FlorisBoard branding
+            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_keyboard_foreground")
+            resValue("string", "floris_app_name", "AI Keyboard Debug")
         }
 
         create("beta") {
@@ -129,8 +131,9 @@ android {
 
             resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_beta")
             resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_beta_round")
-            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_beta_foreground")
-            resValue("string", "floris_app_name", "FlorisBoard Beta")
+            // FORK(S0-branding): placeholder app name and neutral launcher glyph instead of FlorisBoard branding
+            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_keyboard_foreground")
+            resValue("string", "floris_app_name", "AI Keyboard Beta")
         }
 
         named("release") {
@@ -142,7 +145,8 @@ android {
 
             resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_stable")
             resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_stable_round")
-            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_stable_foreground")
+            // FORK(S0-branding): placeholder app name and neutral launcher glyph instead of FlorisBoard branding
+            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_keyboard_foreground")
             resValue("string", "floris_app_name", "@string/app_name")
         }
 
@@ -170,6 +174,35 @@ android {
         unitTests.all {
             it.useJUnitPlatform()
         }
+    }
+}
+
+// FORK(S0-licences): ship the repo-root LICENSE and NOTICE inside the APK as
+// assets/licenses/{LICENSE,NOTICE}.txt (Apache-2.0 §4(a), (d)). Generated so there is one source of truth.
+abstract class CopyLicenseAssetsTask : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val licenseFiles: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copyFiles() {
+        val dir = outputDir.get().asFile.resolve("licenses")
+        dir.deleteRecursively()
+        dir.mkdirs()
+        licenseFiles.files.forEach { it.copyTo(dir.resolve("${it.name}.txt"), overwrite = true) }
+    }
+}
+
+val copyLicenseAssets = tasks.register<CopyLicenseAssetsTask>("copyLicenseAssets") {
+    licenseFiles.from(rootProject.file("LICENSE"), rootProject.file("NOTICE"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(copyLicenseAssets, CopyLicenseAssetsTask::outputDir)
     }
 }
 

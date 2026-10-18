@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- FORK(S0-settings): settingsActivity points at the exported FlorisAppActivity; the SettingsLauncherAlias is disabled when the user hides the launcher icon, which broke the IME gear -->
 <input-method xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:settingsActivity="com.manjul.aikeyboard.SettingsLauncherAlias"
+    android:settingsActivity="com.manjul.aikeyboard.app.FlorisAppActivity"
     android:supportsInlineSuggestions="true"
     android:supportsSwitchingToNextInputMethod="true"
     tools:targetApi="r">

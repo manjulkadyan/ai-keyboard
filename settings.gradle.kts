@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2022-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +15,8 @@
  * limitations under the License.
  */
 
-rootProject.name = "FlorisBoard"
+// FORK(S0-branding): fork project name (Apache-2.0 §6)
+rootProject.name = "AiKeyboard"
 
 pluginManagement {
     repositories {

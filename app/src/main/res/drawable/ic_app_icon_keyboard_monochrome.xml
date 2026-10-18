@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (C) 2026 AI Keyboard contributors
+  Licensed under the Apache License, Version 2.0
+-->
+<!-- Neutral placeholder launcher glyph: a keyboard outline, no text. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M31,36H77A5,5 0,0 1,82 41V67A5,5 0,0 1,77 72H31A5,5 0,0 1,26 67V41A5,5 0,0 1,31 36Z M31,41h6v6h-6z M39,41h6v6h-6z M47,41h6v6h-6z M55,41h6v6h-6z M63,41h6v6h-6z M71,41h6v6h-6z M35,50h6v6h-6z M43,50h6v6h-6z M51,50h6v6h-6z M59,50h6v6h-6z M67,50h6v6h-6z M39,60h30v6h-30z" />
+</vector>

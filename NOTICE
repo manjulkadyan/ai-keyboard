@@ -1,0 +1,23 @@
+AI Keyboard
+Copyright (C) 2026 AI Keyboard contributors
+
+This product includes software developed by The FlorisBoard Contributors:
+
+  FlorisBoard
+  Copyright (C) The FlorisBoard Contributors
+  Licensed under the Apache License, Version 2.0
+  https://github.com/florisboard/florisboard
+
+This product is a modified version of FlorisBoard v0.5.2. The modifications
+include a global package rename from dev.patrickgold.florisboard to
+com.manjul.aikeyboard, which changed the package declarations, imports and
+directory locations of the FlorisBoard source files. Files with changes beyond
+that rename carry a "Modified by AI Keyboard contributors" line in their
+header. The full list of modified upstream files is kept in
+docs/FORK_PATCHES.md in the source repository.
+
+"FlorisBoard" is the name of the upstream project. This product is not
+affiliated with or endorsed by The FlorisBoard Contributors, and the Apache
+License grants no rights to use their names or trademarks.
+
+The full text of the Apache License, Version 2.0 is in the LICENSE file.

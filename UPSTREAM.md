@@ -1,7 +1,9 @@
 # Upstream
 
 This project is a fork of [FlorisBoard](https://github.com/florisboard/florisboard) (Apache-2.0).
-The `LICENSE` file and upstream copyright headers are kept; see TRD §2.1 for the fork rules.
+The `LICENSE` file and upstream copyright headers are kept; `NOTICE` carries the FlorisBoard attribution
+and the statement of our changes (including the package rename `dev.patrickgold.florisboard` ->
+`com.manjul.aikeyboard`). See TRD §2.1 for the fork rules.
 
 | Field | Value |
 |---|---|

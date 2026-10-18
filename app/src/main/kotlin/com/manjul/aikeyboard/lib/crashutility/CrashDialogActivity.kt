@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,7 +86,8 @@ class CrashDialogActivity : ComponentActivity() {
         }
         errorReport.apply {
             appendLine("#### Environment information")
-            appendLine("- FlorisBoard $versionName (${BuildConfig.VERSION_CODE})")
+            // FORK(S0-branding): report our app name instead of the upstream product name
+            appendLine("- ${resources.getString(R.string.app_name)} $versionName (${BuildConfig.VERSION_CODE})")
             appendLine("- Device: ${Devtools.getDeviceName()}")
             appendLine("- Android: ${Devtools.getAndroidVersion()}")
             appendLine()

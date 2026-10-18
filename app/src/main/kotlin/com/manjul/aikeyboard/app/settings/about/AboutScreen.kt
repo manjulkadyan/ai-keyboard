@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,13 +70,20 @@ fun AboutScreen() = FlorisScreen {
             FlorisCanvasIcon(
                 modifier = Modifier.requiredSize(64.dp),
                 iconId = R.mipmap.floris_app_icon,
-                contentDescription = "FlorisBoard app icon",
+                // FORK(S0-branding): no hard-coded upstream product name
+                contentDescription = stringRes(R.string.about__app_icon_content_description),
             )
             Text(
                 text = stringRes(R.string.floris_app_name),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 16.dp),
+            )
+            // FORK(S0-licences): upstream attribution (Apache-2.0 §4(d)); the NOTICE text is under Project license
+            Text(
+                text = stringRes(R.string.about__based_on_florisboard),
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
         Preference(

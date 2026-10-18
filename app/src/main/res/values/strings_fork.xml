@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (C) 2026 AI Keyboard contributors
+  Licensed under the Apache License, Version 2.0
+-->
+<!-- Strings added by the fork. Kept in a separate file so upstream string merges stay clean. -->
+<resources>
+    <!-- Legal attribution (Apache-2.0 §4(d)); not translated on purpose. -->
+    <string name="about__based_on_florisboard" translatable="false">Based on FlorisBoard, Apache-2.0</string>
+</resources>

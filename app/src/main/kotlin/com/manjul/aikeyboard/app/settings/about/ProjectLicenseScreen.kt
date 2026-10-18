@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,10 +54,13 @@ fun ProjectLicenseScreen() = FlorisScreen {
                     .florisVerticalScroll()
                     .florisHorizontalScroll(),
             ) {
-                val licenseText = FlorisRef.assets("license/project_license.txt").loadTextAsset(
-                    context
-                ).getOrElse {
-                    stringRes(R.string.about__project_license__error_license_text_failed, "error_message" to (it.message ?: ""))
+                // FORK(S0-licences): show NOTICE then LICENSE, both copied from the repo root into
+                // assets/licenses/ at build time by the copyLicenseAssets task (Apache-2.0 §4(a), (d)).
+                val errorText = stringRes(R.string.about__project_license__error_license_text_failed, "error_message" to "{error_message}")
+                val licenseText = listOf("licenses/NOTICE.txt", "licenses/LICENSE.txt").joinToString("\n\n") { path ->
+                    FlorisRef.assets(path).loadTextAsset(context).getOrElse {
+                        errorText.replace("{error_message}", it.message ?: "")
+                    }
                 }
                 Text(
                     text = licenseText,

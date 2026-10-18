@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +40,8 @@ private val LocalResourcesContext = staticCompositionLocalOf<Context> {
 }
 
 private val LocalAppNameString = staticCompositionLocalOf {
-    "FlorisBoard"
+    // FORK(S0-branding): fallback app name is the fork placeholder name
+    "AI Keyboard"
 }
 
 val LocalLocalizedDateTimeFormatter = staticCompositionLocalOf {
