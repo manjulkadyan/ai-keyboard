@@ -274,6 +274,9 @@ dependencies {
     // FORK(S1-clipboard): clipboard sensitivity classifier used by the capture gate
     implementation(projects.core.privacy)
     implementation(projects.core.analytics) // FORK(S1-analytics): event catalog and relay
+    // FORK(S1-voice): speech session, platform engines and the in-keyboard voice UI
+    implementation(projects.core.voice)
+    implementation(projects.ime.voiceUi)
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)

@@ -480,4 +480,22 @@ class SpeechSessionTest {
             assertEquals(VoiceOutput.Commit("hello, world "), awaitItem())
         }
     }
+
+    @Test fun spokenPunctuationOffKeepsWordsAsSpoken() = runSession {
+        val engine = FakeSpeechEngine()
+        val session = SpeechSession(
+            engineFactory = { engine },
+            scope = this,
+            timings = VoiceTimings(),
+            punctuation = SpokenPunctuation,
+            clock = { currentTime },
+            punctuationEnabled = false,
+        )
+        session.output.test {
+            session.start("en", false)
+            runCurrent()
+            engine.listener!!.onFinal("hello comma world")
+            assertEquals(VoiceOutput.Commit("hello comma world "), awaitItem())
+        }
+    }
 }

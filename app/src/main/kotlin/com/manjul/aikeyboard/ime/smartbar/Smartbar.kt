@@ -57,6 +57,7 @@ import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.fork.smartbar.PrivateLockIndicator // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.smartbar.policyFilteredOrNull // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.voice.smartbarVoicePanel // FORK(S1-voice)
 import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
 import com.manjul.aikeyboard.ime.nlp.NlpInlineAutofill
 import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickActionButton
@@ -327,6 +328,7 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
             .height(FlorisImeSizing.smartbarHeight),
     ) {
         PrivateLockIndicator() // FORK(S1-smartbar): renders nothing unless the field is sensitive
+        if (smartbarVoicePanel()) return@SnyggRow // FORK(S1-voice): the voice panel replaces the row while active
         when (smartbarLayout) {
             SmartbarLayout.SUGGESTIONS_ONLY -> {
                 if (shouldShowInlineSuggestionsUi) {

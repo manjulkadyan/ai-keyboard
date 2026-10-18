@@ -33,6 +33,8 @@ class SpeechSession(
     private val timings: VoiceTimings,
     private val punctuation: SpokenPunctuation,
     private val clock: () -> Long,
+    /** The "spoken punctuation" setting: false commits the words as spoken ("comma" stays a word). */
+    private val punctuationEnabled: Boolean = true,
 ) {
     private val _state = MutableStateFlow<VoiceState>(VoiceState.Idle)
     val state: StateFlow<VoiceState> = _state.asStateFlow()
@@ -171,13 +173,15 @@ class SpeechSession(
     }
 
     private fun commit(raw: String) {
-        val text = punctuation.apply(raw, lang).trim(' ', '\t')
+        val text = punctuate(raw).trim(' ', '\t')
         if (text.isEmpty()) {
             channel.trySend(VoiceOutput.ClearComposing)
             return
         }
         channel.trySend(VoiceOutput.Commit(if (text.endsWith("\n")) text else "$text "))
     }
+
+    private fun punctuate(text: String) = if (punctuationEnabled) punctuation.apply(text, lang) else text
 
     private fun scheduleRestart(delayMs: Long) {
         // Keep what was heard so far instead of dropping it with the dead engine.
@@ -212,7 +216,7 @@ class SpeechSession(
             if (!current()) return
             silenceJob?.cancel()
             pendingPartial = text
-            channel.trySend(VoiceOutput.Composing(punctuation.apply(text, lang)))
+            channel.trySend(VoiceOutput.Composing(punctuate(text)))
         }
 
         override fun onSegment(text: String) {

@@ -753,8 +753,9 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             KeyCode.IME_UI_MODE_TEXT -> activeState.imeUiMode = ImeUiMode.TEXT
             KeyCode.IME_UI_MODE_MEDIA -> activeState.imeUiMode = ImeUiMode.MEDIA
             KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ImeUiMode.CLIPBOARD
-            // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires; Task 11 replaces this handler
-            KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.switchToVoiceInputMethod()
+            // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires
+            // FORK(S1-voice): in-keyboard voice typing instead of switching to another voice IME
+            KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.voiceSessionOrNull()?.controller?.toggle()
             KeyCode.KANA_SWITCHER -> handleKanaSwitch()
             KeyCode.KANA_HIRA -> handleKanaHira()
             KeyCode.KANA_KATA -> handleKanaKata()

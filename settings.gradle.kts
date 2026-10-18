@@ -68,6 +68,8 @@ include(":core:privacy")
 include(":core:analytics")
 // FORK(S1-voice): speech session state machine, error policy, spoken punctuation
 include(":core:voice")
+// FORK(S1-voice): voice typing inside the keyboard (controller, composing span, panel)
+include(":ime:voice-ui")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

@@ -8,6 +8,9 @@
     <!-- FORK(S1-onboarding): microphone for voice input; requested only after the voice notice, in onboarding or Task 11's trampoline -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
+    <!-- FORK(S1-voice): network state for the voice engine choice (a server recognizer needs a network) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <!-- Permission needed to create notifications on devices running Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
@@ -142,6 +145,15 @@
                 <data android:mimeType="image/*"/>
             </intent-filter>
         </activity>
+
+        <!-- FORK(S1-voice): microphone permission trampoline for the keyboard, opened only from the mic chip -->
+        <activity
+            android:name="com.manjul.aikeyboard.fork.voice.MicPermissionActivity"
+            android:theme="@style/FlorisAppTheme.Transparent"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:exported="false"/>
 
         <!-- Clipboard Media File Provider -->
         <provider

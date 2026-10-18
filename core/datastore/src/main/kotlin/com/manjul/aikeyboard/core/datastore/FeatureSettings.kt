@@ -29,4 +29,6 @@ data class FeatureSettings(
     val translatePair: LanguagePair? = null,
     val consentVoiceNoticeAt: Long = 0L,
     val analyticsOptOut: Boolean = false,
+    /** When the first dictation with words was logged (first_dictation is sent once per install); 0 = never. */
+    val firstDictationAt: Long = 0L,
 )

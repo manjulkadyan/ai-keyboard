@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 AI Keyboard contributors. Licensed under the Apache License, Version 2.0 -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="voice__listening" tools:ignore="MissingTranslation">Listening…</string>
+    <string name="voice__transcribing" tools:ignore="MissingTranslation">Transcribing…</string>
+    <string name="voice__stop" tools:ignore="MissingTranslation">Stop voice typing</string>
+    <string name="voice__close" tools:ignore="MissingTranslation">Close</string>
+    <string name="voice__allow_mic" tools:ignore="MissingTranslation">Allow microphone, then tap the mic again</string>
+    <string name="voice__tap_to_resume" tools:ignore="MissingTranslation">Didn\'t catch that. Tap to resume</string>
+    <string name="voice__msg_no_service" tools:ignore="MissingTranslation">This phone has no speech recognition service.</string>
+    <string name="voice__msg_lang_unsupported" tools:ignore="MissingTranslation">Voice typing is not available for this language yet.</string>
+    <string name="voice__msg_offline_no_model" tools:ignore="MissingTranslation">You are offline and this language has no offline speech model.</string>
+    <string name="voice__msg_network" tools:ignore="MissingTranslation">Voice typing needs a connection. Check your network and try again.</string>
+    <string name="voice__msg_mic_busy" tools:ignore="MissingTranslation">The microphone is in use. Try again in a moment.</string>
+    <string name="voice__msg_no_permission" tools:ignore="MissingTranslation">Microphone access is off.</string>
+    <string name="voice__msg_error" tools:ignore="MissingTranslation">Voice typing stopped. Tap the mic to try again.</string>
+    <string name="voice__download_system" tools:ignore="MissingTranslation">Download offline speech</string>
+</resources>

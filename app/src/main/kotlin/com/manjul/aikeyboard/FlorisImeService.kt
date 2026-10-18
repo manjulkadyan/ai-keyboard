@@ -115,6 +115,7 @@ import dev.patrickgold.jetpref.datastore.model.observeAsState
 // FORK(S1-policy): imports for the policy controller
 import android.app.KeyguardManager
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
+import com.manjul.aikeyboard.fork.voice.VoiceImeSession // FORK(S1-voice)
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.flow.update
 import org.florisboard.lib.android.AndroidInternalR
@@ -158,6 +159,12 @@ class FlorisImeService : LifecycleInputMethodService() {
         fun policyControllerOrNull(): ImePolicyController? {
             val service = FlorisImeServiceReference.get() ?: return null
             return if (service::policyController.isInitialized) service.policyController else null
+        }
+
+        // FORK(S1-voice): voice typing of the running service (mic key, smartbar panel)
+        fun voiceSessionOrNull(): VoiceImeSession? {
+            val service = FlorisImeServiceReference.get() ?: return null
+            return if (service::voiceSession.isInitialized) service.voiceSession else null
         }
 
         fun currentInputConnection(): InputConnection? {
@@ -288,6 +295,8 @@ class FlorisImeService : LifecycleInputMethodService() {
     // load and the settings collector start with the service. Keyguard state is read on each evaluation, never
     // cached. Remote-config forced packages arrive in S3.
     private lateinit var policyController: ImePolicyController
+    // FORK(S1-voice): in-keyboard voice typing; cancelled by every policy restriction and when the keyboard hides
+    private lateinit var voiceSession: VoiceImeSession
 
     init {
         setTheme(R.style.FlorisImeTheme)
@@ -306,6 +315,18 @@ class FlorisImeService : LifecycleInputMethodService() {
         )
         // Settings can arrive after the field started: recompute the editor state from the new decision.
         policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
+        // FORK(S1-voice): see the voiceSession declaration
+        voiceSession = VoiceImeSession(
+            context = this,
+            policy = policyController,
+            store = featureSettingsStore().value,
+            analytics = appContext().value.analytics.value::log,
+            connection = { currentInputConnection },
+            isRawInputEditor = { editorInstance.activeInfo.isRawInputEditor },
+            setOwnsComposing = { editorInstance.voiceOwnsComposing = it },
+            lang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
+            scope = lifecycleScope,
+        )
         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
         subtypeManager.activeSubtypeFlow.collectIn(lifecycleScope) { subtype ->
             val config = Configuration(resources.configuration)
@@ -371,6 +392,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         super.onDestroy()
         unregisterReceiver(wallpaperChangeReceiver)
         policyController.onFinishInput() // FORK(S1-policy): drop in-flight work for the closed field
+        voiceSession.destroy() // FORK(S1-voice)
         FlorisImeServiceReference = WeakReference(null)
         inputWindowView = null
     }
@@ -415,6 +437,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     ) {
         flogInfo { "old={start=$oldSelStart,end=$oldSelEnd} new={start=$newSelStart,end=$newSelEnd} composing={start=$candidatesStart,end=$candidatesEnd}" }
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        voiceSession.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd) // FORK(S1-voice)
         activeState.batchEdit {
             activeState.isSelectionMode = (newSelEnd - newSelStart) != 0
             editorInstance.handleSelectionUpdate(
@@ -429,6 +452,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         flogInfo { "finishing=$finishingInput" }
         super.onFinishInputView(finishingInput)
         policyController.onFinishInputView() // FORK(S1-policy)
+        voiceSession.onFinishInputView() // FORK(S1-voice): hiding the keyboard ends dictation
         editorInstance.handleFinishInputView()
     }
 

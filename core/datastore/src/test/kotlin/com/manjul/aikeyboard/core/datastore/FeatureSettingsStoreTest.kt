@@ -41,6 +41,7 @@ class FeatureSettingsStoreTest {
             voiceEnginePreference = VoiceEnginePreference.WHISPER,
             translatePair = LanguagePair("en", "de"),
             onboardingStep = 3,
+            firstDictationAt = 42L,
         )
         val store = FeatureSettingsStore(app)
         store.update { expected }

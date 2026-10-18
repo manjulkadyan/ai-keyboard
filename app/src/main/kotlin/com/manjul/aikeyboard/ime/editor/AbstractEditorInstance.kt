@@ -93,6 +93,8 @@ abstract class AbstractEditorInstance(context: Context) {
             _activeContentFlow.value = v
         }
     private val expectedContentQueue = ExpectedContentQueue()
+    // FORK(S1-voice): true while voice typing holds the composing region; selection updates must not move it
+    var voiceOwnsComposing = false
     private val _lastCommitPosition = LastCommitPosition()
     val lastCommitPosition
         get() = LastCommitPosition(_lastCommitPosition)
@@ -203,7 +205,7 @@ abstract class AbstractEditorInstance(context: Context) {
             activeCursorCapsMode = content.cursorCapsMode()
             activeContent = content
             keyboardManager.reevaluateInputShiftState()
-            if (content.composing != composing) {
+            if (content.composing != composing && !voiceOwnsComposing) { // FORK(S1-voice)
                 ic.setComposingRegion(content.composing)
             }
         }

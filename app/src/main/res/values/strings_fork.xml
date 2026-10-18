@@ -67,4 +67,8 @@
     <string name="onboarding__voice_notice_agree" tools:ignore="MissingTranslation">Agree</string>
     <string name="onboarding__voice_notice_not_now" tools:ignore="MissingTranslation">Not now</string>
     <string name="onboarding__home_select_card" tools:ignore="MissingTranslation">Select AI Keyboard as your keyboard</string>
+    <string name="voice__permission_denied_title" tools:ignore="MissingTranslation">Microphone is off</string>
+    <string name="voice__permission_denied_body" tools:ignore="MissingTranslation">Voice typing needs the microphone. You can allow it in the app settings, then tap the mic again.</string>
+    <string name="voice__permission_open_settings" tools:ignore="MissingTranslation">Open app settings</string>
+    <string name="voice__permission_not_now" tools:ignore="MissingTranslation">Not now</string>
 </resources>

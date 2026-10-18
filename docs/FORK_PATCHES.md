@@ -78,6 +78,13 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/AndroidManifest.xml` | S1-onboarding | `RECORD_AUDIO` permission (requested only after the voice notice) |
 | `app/build.gradle.kts`, `gradle/libs.versions.toml` | S1-onboarding | Turbine and Compose UI test (`ui-test-junit4`, `ui-test-manifest` as `debugImplementation`, versions from the BOM) for the onboarding tests; the commented `testImplementation(composeBom)` line is kept |
 | `app/src/main/AndroidManifest.xml` | S1-voice | `<queries>` entry for `android.speech.RecognitionService` so `SpeechRecognizer.isRecognitionAvailable` sees recognition services on API 30+ |
+| `settings.gradle.kts`, `app/build.gradle.kts` | S1-voice | `include(":ime:voice-ui")`; `implementation(projects.core.voice)`, `implementation(projects.ime.voiceUi)` |
+| `app/src/main/AndroidManifest.xml` | S1-voice | `ACCESS_NETWORK_STATE` permission (the engine choice needs to know whether a network is up); `fork.voice.MicPermissionActivity` (translucent, `excludeFromRecents`, `noHistory`, `taskAffinity=""`, not exported) |
+| `app/src/main/res/values/strings_fork.xml` | S1-voice | Permission-denied rationale strings for the mic trampoline |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-voice | Creates a `fork.voice.VoiceImeSession` in `onCreate` (after the policy controller); forwards `onUpdateSelection`, `onFinishInputView` (hiding the keyboard ends dictation) and `onDestroy`; companion `voiceSessionOrNull()` accessor |
+| `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-voice | `VOICE_INPUT` toggles in-keyboard voice typing instead of switching to another voice IME; the S1-smartbar policy gate is kept |
+| `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt` | S1-voice | `voiceOwnsComposing` flag: while voice owns the composing region, `handleSelectionUpdate` does not treat the region as a word the editor must re-sync |
+| `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-voice | After `PrivateLockIndicator`, `smartbarVoicePanel()` replaces the rest of the main row while the voice panel is open |
 
 ## Marker-exempt files
 
@@ -126,6 +133,7 @@ New code lives in our own modules (TRD §2.1, §2.2). These are new files, not u
 - `:core:common` (Android library): dispatcher qualifier/provider, `Outcome` result type.
 - `:ime:policy` (pure JVM): `SensitiveFieldPolicy` (Sprint 1).
 - `:core:datastore` (Android library, S1-policy): `FeatureSettings` and `FeatureSettingsStore` (multi-process DataStore, JSON).
+- `:ime:voice-ui` (Android library, Compose, S1-voice): `VoiceController`, `ComposingSpanController`, `VoicePanel`. No `:app` types; the IME wiring is in `:app` `fork/voice`.
 
 Layout decision: the upstream IME stays in `:app` (no `:ime` module split in Sprint 0).
 
