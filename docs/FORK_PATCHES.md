@@ -94,7 +94,7 @@ Layout decision: the upstream IME stays in `:app` (no `:ime` module split in Spr
 `aikeyboard.module-rules` (applied in the root `build.gradle.kts`) inspects every project-to-project
 dependency, in any configuration, after all projects are evaluated, and fails the build when:
 
-1. a project whose path starts with `:ime` reaches `:core:ads`, `:core:billing` or any `:feature:*`
+1. `:ime` or an `:ime:*` project (not a prefix-only sibling such as `:imeTools`) reaches `:core:ads`, `:core:billing` or any `:feature:*`
    project, directly or through other projects;
 2. a `:feature:*` project depends directly on another `:feature:*` project.
 
@@ -157,11 +157,20 @@ New files (no markers needed), TRD §2.2, §2.3, §4.11, §11.1:
   `com.google.android.libraries.ads` or `com.google.android.ump`. Because the IME also uses
   `com.manjul.aikeyboard.app.*` (preferences, routes), the rest of `:app` may only use ads from the
   allow-listed `com.manjul.aikeyboard.app.ads` package, which the IME code must not reference either.
+  Other `:app` code may not reference `app.ads` either (a preferences file importing it would hand ad code
+  to the IME transitively), except files on the `AD_HOST_CALLERS` allow-list of Activity-only callers
+  (empty in Sprint 0).
 - IME isolation, manifest level: `aikeyboard.ad-isolation` (build-logic, `AdIsolationPlugin`,
   `AdAutoInitRules`) registers `verify<Variant>NoAdAutoInit` on `:app` and wires it into `check`. It fails if
   the merged manifest contains `MobileAdsInitProvider` or any provider / `androidx.startup` initializer from
   the GMA, GMA next-gen, UMP or `:core:ads` packages. UMP 4.0.0 merges no provider (only the
   `com.google.android.gms.version` meta-data from `play-services-basement`).
+- Exported components, merged manifest: the same plugin registers `verify<Variant>ExportedComponents`
+  (also wired into `check`). It applies `ExportedComponentRules.ALLOW_LIST` (build-logic) to the merged
+  manifest, so components merged in from libraries are reviewed as well; `ManifestHardeningTest` only sees
+  the source manifest. Library entries: `androidx.profileinstaller.ProfileInstallReceiver` (must require
+  `android.permission.DUMP`) and `androidx.compose.ui.tooling.PreviewActivity` (debuggable builds only;
+  `ui-tooling` is a `debugImplementation`). Keep the `:app` entries in sync with `ManifestHardeningTest`.
 - These are static checks. The runtime proof (IME-only cold start, no `com.google.android.gms.ads` class
   loaded, TRD §11.1 1.1(c)) is an instrumented test for Sprint 4, when GMA is added.
 
@@ -173,7 +182,7 @@ New files (no markers needed), TRD §2.1, §7.2, §11.8:
   runs `scripts/check-fork-markers.sh`, installs JDK 17 (temurin), the Android SDK and the NDK / CMake /
   build-tools pinned in `gradle/tools.versions.toml`, the pinned Rust toolchain with the four Android targets,
   then `assembleDebug`, unit tests for every module (`testDebugUnitTest` plus `test` on the JVM modules and
-  `:build-logic:convention:test`), `:app:verify{Debug,Release}NoAdAutoInit`, `:app:lintDebug` and the 16 KB
+  `:build-logic:convention:test`), `:app:verify{Debug,Release}NoAdAutoInit`, `:app:verify{Debug,Release}ExportedComponents`, `:app:lintDebug` and the 16 KB
   alignment check on the debug APK. The IME isolation and manifest hardening tests run as `:app` unit tests.
 - `scripts/check-fork-markers.sh`: see "Marker-exempt files" above. Run it locally before opening a PR.
 - `scripts/check-16kb-alignment.sh <apk>...`: `zipalign -c -P 16 -v 4` on the APK and an ELF check that

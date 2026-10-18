@@ -24,7 +24,9 @@ import org.gradle.api.tasks.testing.Test
  * `aikeyboard.ad-isolation`: apply to the Android application module that hosts the IME (`:app`).
  * For each variant it registers `verify<Variant>NoAdAutoInit`, which fails when the merged manifest
  * declares an ad/consent SDK auto-init provider or `androidx.startup` initializer ([AdAutoInitRules]).
- * The tasks are wired into `check`. It also declares the module's sources as inputs of its unit tests,
+ * It also registers `verify<Variant>ExportedComponents`, which applies the exported-component allow-list
+ * ([ExportedComponentRules]) to the same merged manifest, so components merged in from libraries are
+ * reviewed too. The tasks are wired into `check`. It also declares the module's sources as inputs of its unit tests,
  * for the source scan in `ImeAdIsolationTest`.
  */
 class AdIsolationPlugin : Plugin<Project> {
@@ -32,14 +34,20 @@ class AdIsolationPlugin : Plugin<Project> {
         pluginManager.withPlugin("com.android.application") {
             val components = extensions.getByType(AndroidComponentsExtension::class.java)
             components.onVariants { variant ->
-                val name = "verify${variant.name.replaceFirstChar { it.uppercase() }}NoAdAutoInit"
-                val task = tasks.register(name, VerifyNoAdAutoInitTask::class.java) {
+                val variantName = variant.name.replaceFirstChar { it.uppercase() }
+                val task = tasks.register("verify${variantName}NoAdAutoInit", VerifyNoAdAutoInitTask::class.java) {
                     group = "verification"
                     description = "Fails if the ${variant.name} merged manifest auto-initialises an ad or consent SDK"
                     mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
                     report.set(layout.buildDirectory.file("reports/ad-isolation/${variant.name}.txt"))
                 }
-                tasks.named("check") { dependsOn(task) }
+                val exportedTask = tasks.register("verify${variantName}ExportedComponents", VerifyExportedComponentsTask::class.java) {
+                    group = "verification"
+                    description = "Fails if the ${variant.name} merged manifest exports a component that is not allow-listed"
+                    mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
+                    report.set(layout.buildDirectory.file("reports/exported-components/${variant.name}.txt"))
+                }
+                tasks.named("check") { dependsOn(task, exportedTask) }
             }
         }
         // ImeAdIsolationTest (a unit test in this module) reads source files directly. Declare them as
@@ -79,5 +87,35 @@ abstract class VerifyNoAdAutoInitTask : DefaultTask() {
             )
         }
         reportFile.writeText("OK: no ad/consent auto-init entries in ${manifest.name}\n")
+    }
+}
+
+@CacheableTask
+abstract class VerifyExportedComponentsTask : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val mergedManifest: RegularFileProperty
+
+    @get:OutputFile
+    abstract val report: RegularFileProperty
+
+    @TaskAction
+    fun verify() {
+        val manifest = mergedManifest.get().asFile
+        val violations = manifest.inputStream().use { ExportedComponentRules.findViolations(it) }
+        val reportFile = report.get().asFile
+        reportFile.parentFile.mkdirs()
+        if (violations.isNotEmpty()) {
+            reportFile.delete()
+            throw GradleException(
+                buildString {
+                    appendLine("Exported components must be reviewed (TRD §6.3, §7.1). Remove the export with")
+                    appendLine("tools:node=\"merge\" + android:exported=\"false\" in :app's manifest, or add a reasoned entry to")
+                    appendLine("ExportedComponentRules.ALLOW_LIST. Found in $manifest:")
+                    violations.forEach { appendLine("  - $it") }
+                },
+            )
+        }
+        reportFile.writeText("OK: every exported component in ${manifest.name} is allow-listed\n")
     }
 }

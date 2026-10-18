@@ -20,7 +20,9 @@ import kotlin.test.fail
  *    package of `:app`.
  * 2. Everywhere else in `:app`, ad code may only appear in [AD_HOST_PACKAGES]. The IME reaches into
  *    `com.manjul.aikeyboard.app.*` (preferences, routes), so app code outside those packages counts
- *    as reachable from the keyboard.
+ *    as reachable from the keyboard. That code must not reference the host packages either (otherwise
+ *    e.g. a preferences file importing `app.ads` would hand ad code to the IME transitively), except
+ *    the Activity-only callers on [AD_HOST_CALLERS].
  *
  * Both import statements and fully qualified references are caught; comments are ignored. This is a
  * source check: the runtime check (IME-only cold start, no `com.google.android.gms.ads` class loaded)
@@ -45,6 +47,14 @@ class ImeAdIsolationTest {
             "com.manjul.aikeyboard.app.ads",
         )
 
+        /**
+         * `:app` files outside [AD_HOST_PACKAGES] that may call into them, as paths relative to the
+         * `:app` Kotlin source root. Only Activity code that the IME never loads belongs here (e.g.
+         * `com/manjul/aikeyboard/app/FlorisAppActivity.kt` once it starts consent); each entry needs a
+         * reason. Empty in Sprint 0: nothing calls the ad host packages yet.
+         */
+        val AD_HOST_CALLERS: Map<String, String> = emptyMap()
+
         /** Root-package files that start with, or are part of, the IME process start. */
         val IME_ROOT_FILES = listOf("FlorisImeService.kt", "FlorisSpellCheckerService.kt", "FlorisApplication.kt")
 
@@ -66,6 +76,28 @@ class ImeAdIsolationTest {
                 .joinToString("\n")
             return referencePattern(packages).findAll(code).map { it.value }.toSet()
         }
+
+        /** A source file of `:app`: path relative to the Kotlin source root, package, and content. */
+        data class AppSource(val relativePath: String, val packageName: String, val text: String)
+
+        fun isInAdHost(packageName: String, hostPackages: List<String>): Boolean =
+            hostPackages.any { host -> packageName == host || packageName.startsWith("$host.") }
+
+        /**
+         * Rule 2 as a pure function. Files inside [hostPackages] are not checked; every other file must not
+         * reference [AD_PACKAGES], and must not reference [hostPackages] unless its path is in [allowedCallers].
+         */
+        fun appCodeViolations(
+            sources: List<AppSource>,
+            hostPackages: List<String> = AD_HOST_PACKAGES,
+            allowedCallers: Set<String> = AD_HOST_CALLERS.keys,
+        ): List<String> = sources
+            .filterNot { isInAdHost(it.packageName, hostPackages) }
+            .mapNotNull { source ->
+                val forbidden = if (source.relativePath in allowedCallers) AD_PACKAGES else AD_PACKAGES + hostPackages
+                val refs = findReferences(source.text, forbidden)
+                if (refs.isEmpty()) null else "${source.relativePath} -> ${refs.sorted().joinToString()}"
+            }
     }
 
     private val repoRoot: File = listOf(File("."), File(".."))
@@ -101,13 +133,63 @@ class ImeAdIsolationTest {
     }
 
     @Test
-    fun `app code outside the ad host packages does not reference ads or consent`() {
-        val files = appPackageRoot.kotlinAndJava().filter { file ->
-            AD_HOST_PACKAGES.none { host -> file.packageName() == host || file.packageName().startsWith("$host.") }
+    fun `app code outside the ad host packages does not reference ads, consent or the ad host packages`() {
+        val sources = appPackageRoot.kotlinAndJava().map { file ->
+            AppSource(file.relativeTo(appSourceRoot).invariantSeparatorsPath, file.packageName(), file.readText())
         }
-        assertTrue(files.size > 150, "Scanned only ${files.size} files")
-        val found = violations(files, AD_PACKAGES)
-        assertEquals(emptyList<String>(), found, "Ad code in :app belongs in $AD_HOST_PACKAGES only (TRD §11.1)")
+        val outsideHost = sources.count { !isInAdHost(it.packageName, AD_HOST_PACKAGES) }
+        assertTrue(outsideHost > 150, "Scanned only $outsideHost files")
+        val missingCallers = AD_HOST_CALLERS.keys - sources.map { it.relativePath }.toSet()
+        assertEquals(emptySet<String>(), missingCallers, "AD_HOST_CALLERS entries that no longer exist")
+        assertEquals(
+            emptyList<String>(),
+            appCodeViolations(sources),
+            "Ad code in :app belongs in $AD_HOST_PACKAGES, called only from $AD_HOST_CALLERS (TRD §11.1)",
+        )
+    }
+
+    @Test
+    fun `app code rule catches a prefs file that imports the ad host package`() {
+        val host = "com.manjul.aikeyboard.app.ads"
+        val sources = listOf(
+            AppSource(
+                "com/manjul/aikeyboard/app/AppPrefs.kt",
+                "com.manjul.aikeyboard.app",
+                "package com.manjul.aikeyboard.app\nimport com.manjul.aikeyboard.app.ads.AdsHost\n",
+            ),
+            AppSource(
+                "com/manjul/aikeyboard/app/settings/Screen.kt",
+                "com.manjul.aikeyboard.app.settings",
+                "package com.manjul.aikeyboard.app.settings\nfun f() = com.google.android.ump.UserMessagingPlatform.x()\n",
+            ),
+            AppSource(
+                "com/manjul/aikeyboard/app/FlorisAppActivity.kt",
+                "com.manjul.aikeyboard.app",
+                "package com.manjul.aikeyboard.app\nimport com.manjul.aikeyboard.app.ads.AdsHost\n",
+            ),
+            AppSource(
+                "com/manjul/aikeyboard/app/ads/AdsHost.kt",
+                host,
+                "package com.manjul.aikeyboard.app.ads\nimport com.manjul.aikeyboard.core.ads.AdsInitializer\n",
+            ),
+        )
+        // No allowed callers: the prefs file and the Activity leak the host package, the screen uses UMP.
+        assertEquals(
+            listOf(
+                "com/manjul/aikeyboard/app/AppPrefs.kt -> $host",
+                "com/manjul/aikeyboard/app/settings/Screen.kt -> com.google.android.ump",
+                "com/manjul/aikeyboard/app/FlorisAppActivity.kt -> $host",
+            ),
+            appCodeViolations(sources, listOf(host), allowedCallers = emptySet()),
+        )
+        // An allow-listed Activity may use the host package, but still not the SDKs directly.
+        assertEquals(
+            listOf(
+                "com/manjul/aikeyboard/app/AppPrefs.kt -> $host",
+                "com/manjul/aikeyboard/app/settings/Screen.kt -> com.google.android.ump",
+            ),
+            appCodeViolations(sources, listOf(host), allowedCallers = setOf("com/manjul/aikeyboard/app/FlorisAppActivity.kt")),
+        )
     }
 
     @Test

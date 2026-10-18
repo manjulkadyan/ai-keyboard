@@ -19,7 +19,7 @@ data class ModuleRuleViolation(
  * The module dependency rules from TRD §2.2, as a pure function over the project graph so they can be
  * unit-tested without Gradle.
  *
- * 1. A project whose path starts with `:ime` must not reach `:core:ads`, `:core:billing` or any
+ * 1. The `:ime` project and its sub-projects (`:ime:*`) must not reach `:core:ads`, `:core:billing` or any
  *    `:feature:*` project, directly or through other projects.
  * 2. A `:feature:*` project must not depend directly on another `:feature:*` project.
  */
@@ -29,9 +29,13 @@ object ModuleRules {
 
     private val imeForbidden = setOf(":core:ads", ":core:billing")
 
-    fun isIme(path: String): Boolean = path.startsWith(":ime")
+    /** `:ime` and `:ime:*`; a sibling that only shares the prefix (`:imeTools`) is not IME code. */
+    fun isIme(path: String): Boolean = isInGroup(path, ":ime")
 
+    /** `:feature:*` sub-projects; the `:feature` container itself and `:featureFlags`-like siblings are not. */
     fun isFeature(path: String): Boolean = path.startsWith(":feature:")
+
+    private fun isInGroup(path: String, group: String): Boolean = path == group || path.startsWith("$group:")
 
     fun isForbiddenForIme(path: String): Boolean = path in imeForbidden || isFeature(path)
 

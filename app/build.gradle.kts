@@ -24,7 +24,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.mikepenz.aboutlibraries)
-    // FORK(S0-ads): verify<Variant>NoAdAutoInit fails `check` if an ad/consent SDK provider is merged (TRD §11.1)
+    // FORK(S0-ads): verify<Variant>NoAdAutoInit fails `check` if an ad/consent SDK provider is merged (TRD §11.1);
+    // verify<Variant>ExportedComponents applies the exported-component allow-list to the merged manifest (TRD §6.3)
     alias(libs.plugins.aikeyboard.ad.isolation)
 }
 

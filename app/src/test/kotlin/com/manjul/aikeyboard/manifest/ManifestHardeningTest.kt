@@ -22,6 +22,8 @@ import kotlin.test.fail
  * and the network security config.
  *
  * Adding an exported component must be a reviewed change: extend [EXPORTED_ALLOW_LIST] with a reason.
+ * Components merged in from libraries are checked on the merged manifest by
+ * `verify<Variant>ExportedComponents` (build-logic `ExportedComponentRules`); keep both lists in sync.
  */
 class ManifestHardeningTest {
     private val androidNs = "http://schemas.android.com/apk/res/android"

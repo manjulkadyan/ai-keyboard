@@ -100,8 +100,11 @@ jobs:
           :lib:kotlin:test :ime:policy:test :lint-rules:test
           :build-logic:convention:test
 
-      - name: Ad-isolation manifest checks
-        run: ./gradlew --console=plain :app:verifyDebugNoAdAutoInit :app:verifyReleaseNoAdAutoInit
+      - name: Merged manifest checks (ad auto-init, exported components)
+        run: >
+          ./gradlew --console=plain
+          :app:verifyDebugNoAdAutoInit :app:verifyReleaseNoAdAutoInit
+          :app:verifyDebugExportedComponents :app:verifyReleaseExportedComponents
 
       - name: Android Lint
         run: ./gradlew --console=plain :app:lintDebug

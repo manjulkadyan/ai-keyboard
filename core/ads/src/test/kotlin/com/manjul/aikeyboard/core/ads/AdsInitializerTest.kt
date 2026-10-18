@@ -113,6 +113,49 @@ class AdsInitializerTest {
     }
 
     @Test
+    fun `a call while the sdk initialises and consent is refreshing never starts a second gather`() {
+        val sdk = FakeSdk(completeImmediately = false)
+        val initializer = AdsInitializer(consent, sdk)
+        initializer.initialize(activity)
+        consent.resolve(ConsentResult(canRequestAds = true, privacyOptionsRequired = false))
+        assertEquals(AdsStatus.Phase.INITIALIZING_SDK, initializer.status.value.phase)
+
+        // Second cold start of the Activity while the SDK is still initialising: refresh consent.
+        initializer.initialize(activity)
+        assertEquals(2, consent.calls)
+        assertEquals(AdsStatus.Phase.GATHERING_CONSENT, initializer.status.value.phase)
+
+        // The SDK finishes during the refresh. Before the fix this published READY, and the next call
+        // saw a non-gathering phase and started a second gather while the first was still pending.
+        sdk.complete!!()
+        assertEquals(AdsStatus.Phase.GATHERING_CONSENT, initializer.status.value.phase)
+        initializer.initialize(activity)
+        assertEquals(2, consent.calls)
+
+        consent.resolve(ConsentResult(canRequestAds = true, privacyOptionsRequired = false))
+        assertEquals(AdsStatus.Phase.READY, initializer.status.value.phase)
+        assertEquals(1, sdk.calls)
+
+        initializer.initialize(activity)
+        assertEquals(3, consent.calls)
+    }
+
+    @Test
+    fun `a synchronous consent result does not block later calls`() {
+        val immediate = object : ConsentManager by consent {
+            var calls = 0
+            override fun gatherConsent(activity: Activity, onResult: (ConsentResult) -> Unit) {
+                calls++
+                onResult(ConsentResult(canRequestAds = false, privacyOptionsRequired = false))
+            }
+        }
+        val initializer = AdsInitializer(immediate, FakeSdk())
+        repeat(2) { initializer.initialize(activity) }
+        assertEquals(2, immediate.calls)
+        assertEquals(AdsStatus.Phase.CONSENT_NOT_GRANTED, initializer.status.value.phase)
+    }
+
+    @Test
     fun `sdk failure is contained`() {
         val sdk = FakeSdk(fail = true)
         val initializer = AdsInitializer(consent, sdk)

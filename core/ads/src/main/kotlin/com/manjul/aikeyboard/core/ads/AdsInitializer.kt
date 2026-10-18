@@ -70,11 +70,20 @@ class AdsInitializer(
     private var sdkStarted = false
     private var sdkPhase = AdsStatus.Phase.NOT_STARTED
 
+    /**
+     * True from [ConsentManager.gatherConsent] until its callback. Tracked apart from the published
+     * phase: the SDK's completion callback can publish READY (or SDK_FAILED) while a refresh is still
+     * in flight, and the phase alone would then let another call start a second, concurrent gather.
+     */
+    private var gatheringConsent = false
+
     @MainThread
     fun initialize(activity: Activity) {
-        if (_status.value.phase == AdsStatus.Phase.GATHERING_CONSENT) return
-        _status.update { it.copy(phase = AdsStatus.Phase.GATHERING_CONSENT) }
+        if (gatheringConsent) return
+        gatheringConsent = true
+        setPhase(AdsStatus.Phase.GATHERING_CONSENT)
         consentManager.gatherConsent(activity) { result ->
+            gatheringConsent = false
             _status.update {
                 it.copy(privacyOptionsRequired = result.privacyOptionsRequired, lastConsentError = result.error)
             }
@@ -98,14 +107,16 @@ class AdsInitializer(
         setPhase(sdkPhase)
         // TRD §11.1 1.3: an SDK failure must not crash the shared app/IME process.
         runCatching {
-            adSdk.initialize(activity) {
-                sdkPhase = AdsStatus.Phase.READY
-                setPhase(sdkPhase)
-            }
+            adSdk.initialize(activity) { onSdkFinished(AdsStatus.Phase.READY) }
         }.onFailure {
-            sdkPhase = AdsStatus.Phase.SDK_FAILED
-            setPhase(sdkPhase)
+            onSdkFinished(AdsStatus.Phase.SDK_FAILED)
         }
+    }
+
+    /** While a consent refresh is in flight, its callback publishes [sdkPhase] instead. */
+    private fun onSdkFinished(phase: AdsStatus.Phase) {
+        sdkPhase = phase
+        if (!gatheringConsent) setPhase(phase)
     }
 
     private fun setPhase(phase: AdsStatus.Phase) = _status.update { it.copy(phase = phase) }

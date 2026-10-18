@@ -6,6 +6,7 @@
 package com.manjul.aikeyboard.buildlogic
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -73,5 +74,25 @@ class ModuleRulesTest {
     @Test
     fun `non ime modules may use ads and billing`() {
         assertTrue(ModuleRules.check(mapOf(":core:analytics" to setOf(":core:ads"))).isEmpty())
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = [":ime", ":ime:policy", ":ime:a:b"])
+    fun `ime and its sub-projects are ime modules`(path: String) {
+        assertTrue(ModuleRules.isIme(path))
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = [":imeTools", ":ime-bench", ":imex:policy", ":core:ime", ":app"])
+    fun `projects that only share the ime prefix are not ime modules`(path: String) {
+        assertFalse(ModuleRules.isIme(path))
+        assertTrue(ModuleRules.check(mapOf(path to setOf(":core:ads", ":feature:paywall"))).isEmpty())
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = [":feature", ":featureFlags", ":featureFlags:core", ":core:feature"])
+    fun `projects that only share the feature prefix are not feature modules`(path: String) {
+        assertFalse(ModuleRules.isFeature(path))
+        assertTrue(ModuleRules.check(mapOf(":ime:policy" to setOf(path))).isEmpty())
     }
 }
