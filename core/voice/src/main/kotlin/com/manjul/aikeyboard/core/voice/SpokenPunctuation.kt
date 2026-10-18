@@ -29,18 +29,30 @@ object SpokenPunctuation {
             // Lookarounds on letters/marks/digits instead of \b, which is ASCII-centric for Urdu, Hindi, Arabic.
             val trailing = if (symbol == NL) """[ \t]*""" else ""
             Rule(
-                Regex("""[ \t]*(?<![\p{L}\p{M}\p{N}])$phrase(?![\p{L}\p{M}\p{N}])$trailing""", setOf(RegexOption.IGNORE_CASE)),
+                Regex("""(?iu)[ \t]*(?<![\p{L}\p{M}\p{N}])$phrase(?![\p{L}\p{M}\p{N}])$trailing""", emptySet()),
                 symbol,
             )
         }
     }
+
+    // Arabic yeh/kaf to the Urdu code points; one char for one char so match ranges map back onto the original.
+    private fun normalize(text: String, key: String): String =
+        if (key != "ur") text else text.map { if (it == '\u064A') '\u06CC' else if (it == '\u0643') '\u06A9' else it }.joinToString("")
 
     fun apply(text: String, lang: String): String {
         val key = lang.substringBefore('-').substringBefore('_').lowercase()
         val langRules = rules[key] ?: return text
         var out = text
         for (rule in langRules) {
-            out = rule.regex.replace(out) { rule.replacement }
+            val matches = rule.regex.findAll(normalize(out, key)).toList()
+            if (matches.isEmpty()) continue
+            val sb = StringBuilder()
+            var last = 0
+            for (m in matches) {
+                sb.append(out, last, m.range.first).append(rule.replacement)
+                last = m.range.last + 1
+            }
+            out = sb.append(out, last, out.length).toString()
         }
         return out
     }

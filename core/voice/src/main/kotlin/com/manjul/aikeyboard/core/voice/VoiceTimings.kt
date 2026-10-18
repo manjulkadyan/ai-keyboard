@@ -12,4 +12,6 @@ data class VoiceTimings(
     val busyDelayMs: Long = 400,
     val maxBusyRetries: Int = 2,
     val sessionCapMs: Long = 60_000,
+    /** Upper bound for a Whisper transcription after the user stops (ruling R20). */
+    val transcribeTimeoutMs: Long = 45_000,
 )

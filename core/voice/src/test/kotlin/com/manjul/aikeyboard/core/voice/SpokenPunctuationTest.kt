@@ -35,5 +35,14 @@ class SpokenPunctuationTest {
         assertEquals("کاماتی", SpokenPunctuation.apply("کاماتی", "ur"))
     }
 
+    @Test fun caseInsensitiveForAccentedWords() {
+        sym("fr", "À la ligne", "\n"); sym("pt", "Vírgula", ",")
+    }
+
+    @Test fun urduMatchesArabicYehAndKafWithoutChangingOtherText() {
+        assertEquals("a\n" + "b", SpokenPunctuation.apply("a \u0646\u0626\u064A \u0644\u0627\u0626\u0646 b", "ur"))
+        assertEquals("\u0643\u062A\u0627\u0628\u060C b", SpokenPunctuation.apply("\u0643\u062A\u0627\u0628 \u0643\u0627\u0645\u0627 b", "ur"))
+    }
+
     @Test fun unknownLanguageIsUnchanged() = assertEquals("a comma b", SpokenPunctuation.apply("a comma b", "de"))
 }

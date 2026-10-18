@@ -7,13 +7,13 @@ package com.manjul.aikeyboard.core.voice
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -21,6 +21,11 @@ import kotlinx.coroutines.launch
  * [scope] runs on (the main thread in the IME). Transcript text is never logged.
  *
  * [endReason] values match the analytics EndReason values: "user", "silence", "error", "cap", "field_change".
+ * A non-continuous session that ends on its own final result reports "silence" (ruling R19).
+ *
+ * [output] is lossless (unbounded channel, single consumer): items emitted before a collector subscribes are
+ * delivered once it does. A [VoiceOutput.Commit] may start with punctuation; the consumer (Task 11) strips the
+ * trailing space of the previously committed text in that case, this class does not.
  */
 class SpeechSession(
     private val engineFactory: () -> SpeechEngine,
@@ -32,8 +37,8 @@ class SpeechSession(
     private val _state = MutableStateFlow<VoiceState>(VoiceState.Idle)
     val state: StateFlow<VoiceState> = _state.asStateFlow()
 
-    private val _output = MutableSharedFlow<VoiceOutput>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-    val output: Flow<VoiceOutput> = _output
+    private val channel = Channel<VoiceOutput>(Channel.UNLIMITED)
+    val output: Flow<VoiceOutput> = channel.receiveAsFlow()
 
     private val _tapToResume = MutableStateFlow(false)
 
@@ -53,6 +58,7 @@ class SpeechSession(
     private var engine: SpeechEngine? = null
     private var generation = 0
     private var stopping = false
+    private var stopReason = "user"
     private var pendingPartial: String? = null
     private var sawSegment = false
     private var restarts = 0
@@ -83,29 +89,39 @@ class SpeechSession(
         _state.value = VoiceState.Starting
         capJob = scope.launch {
             delay(timings.sessionCapMs)
-            finish("cap", commitPending = true)
+            val e = engine
+            // A recorder without partials holds the only copy of the audio: transcribe it instead of dropping it.
+            if (e != null && !e.supportsPartials && !stopping) beginStop("cap") else finish("cap", commitPending = true)
         }
         startEngine()
     }
 
     fun stopByUser() {
         if (!active || stopping) return
+        beginStop("user")
+    }
+
+    private fun beginStop(reason: String) {
         stopping = true
+        stopReason = reason
         capJob?.cancel()
         silenceJob?.cancel()
         restartJob?.cancel()
         val e = engine
         if (e == null) {
             // Between restarts: nothing is recording.
-            finish("user", commitPending = true)
+            finish(reason, commitPending = true)
             return
         }
         _state.value = if (e.supportsPartials) VoiceState.Finalizing else VoiceState.Transcribing
         e.stop()
-        if (e.supportsPartials) {
-            finalizeJob = scope.launch {
+        finalizeJob = scope.launch {
+            if (e.supportsPartials) {
                 delay(FINALIZE_TIMEOUT_MS)
-                finish("user", commitPending = true)
+                finish(reason, commitPending = true)
+            } else {
+                delay(timings.transcribeTimeoutMs)
+                fail(VoiceErrorKind.OTHER)
             }
         }
     }
@@ -144,7 +160,7 @@ class SpeechSession(
         if (commitPending && pending != null) {
             commit(pending)
         } else if (clearComposing) {
-            _output.tryEmit(VoiceOutput.ClearComposing)
+            channel.trySend(VoiceOutput.ClearComposing)
         }
         _state.value = VoiceState.Idle
     }
@@ -157,10 +173,10 @@ class SpeechSession(
     private fun commit(raw: String) {
         val text = punctuation.apply(raw, lang).trim(' ', '\t')
         if (text.isEmpty()) {
-            _output.tryEmit(VoiceOutput.ClearComposing)
+            channel.trySend(VoiceOutput.ClearComposing)
             return
         }
-        _output.tryEmit(VoiceOutput.Commit(if (text.endsWith("\n")) text else "$text "))
+        channel.trySend(VoiceOutput.Commit(if (text.endsWith("\n")) text else "$text "))
     }
 
     private fun scheduleRestart(delayMs: Long) {
@@ -188,19 +204,22 @@ class SpeechSession(
         override fun onRms(db: Float) {
             if (!current() || stopping) return
             _state.value = VoiceState.Listening(db)
+            // Still hearing speech: measure the silence window from now.
+            if (db > SPEECH_RMS_DB && silenceJob?.isActive == true) armSilence()
         }
 
         override fun onPartial(text: String) {
             if (!current()) return
             silenceJob?.cancel()
             pendingPartial = text
-            _output.tryEmit(VoiceOutput.Composing(punctuation.apply(text, lang)))
+            channel.trySend(VoiceOutput.Composing(punctuation.apply(text, lang)))
         }
 
         override fun onSegment(text: String) {
             if (!current()) return
             silenceJob?.cancel()
             sawSegment = true
+            restarts = 0
             pendingPartial = null
             commit(text)
         }
@@ -208,12 +227,12 @@ class SpeechSession(
         override fun onFinal(text: String) {
             if (!current()) return
             val kind = engine?.kind
-            if (kind != null && !sawSegment) segmentedSupported[segKey(kind, lang)] = false
+            if (kind != null && continuous && engine?.supportsPartials == true && !sawSegment) segmentedSupported[segKey(kind, lang)] = false
             pendingPartial = null
             restarts = 0
             commit(text)
             if (stopping) {
-                finish("user", commitPending = false)
+                finish(stopReason, commitPending = false)
             } else if (continuous) {
                 restartAfterFinal()
             } else {
@@ -232,19 +251,33 @@ class SpeechSession(
     }
 
     private fun restartAfterFinal() {
+        armSilence()
+        scheduleRestart(timings.restartDelayMs)
+    }
+
+    private fun armSilence() {
         silenceJob?.cancel()
         silenceJob = scope.launch {
             delay(timings.silenceMs)
             finish("silence", commitPending = true)
         }
-        scheduleRestart(timings.restartDelayMs)
     }
 
     private fun handleError(code: Int) {
+        if (stopping && code != ERROR_SPEECH_TIMEOUT && code != ERROR_NO_MATCH) {
+            // Includes BUSY: restarting while stopping would leave the session stuck.
+            val e = engine
+            if (pendingPartial != null || e?.supportsPartials != false) {
+                finish(stopReason, commitPending = true)
+            } else {
+                fail(errorKind(code)) // Whisper: the recording is lost, tell the user.
+            }
+            return
+        }
         when (code) {
             ERROR_SPEECH_TIMEOUT, ERROR_NO_MATCH -> {
                 if (stopping) {
-                    finish("user", commitPending = true)
+                    finish(stopReason, commitPending = true)
                 } else if (restarts >= timings.maxRestarts) {
                     finish("error", commitPending = true)
                     _tapToResume.value = true
@@ -261,12 +294,17 @@ class SpeechSession(
                     scheduleRestart(timings.busyDelayMs)
                 }
             }
-            ERROR_INSUFFICIENT_PERMISSIONS -> fail(VoiceErrorKind.NO_PERMISSION)
-            ERROR_NETWORK_TIMEOUT, ERROR_NETWORK, ERROR_SERVER, ERROR_TOO_MANY_REQUESTS, ERROR_SERVER_DISCONNECTED ->
-                fail(VoiceErrorKind.NETWORK)
-            ERROR_LANGUAGE_NOT_SUPPORTED, ERROR_LANGUAGE_UNAVAILABLE -> fail(VoiceErrorKind.LANGUAGE_UNAVAILABLE)
-            else -> fail(VoiceErrorKind.OTHER)
+            else -> fail(errorKind(code))
         }
+    }
+
+    private fun errorKind(code: Int) = when (code) {
+        ERROR_RECOGNIZER_BUSY -> VoiceErrorKind.BUSY
+        ERROR_INSUFFICIENT_PERMISSIONS -> VoiceErrorKind.NO_PERMISSION
+        ERROR_NETWORK_TIMEOUT, ERROR_NETWORK, ERROR_SERVER, ERROR_TOO_MANY_REQUESTS, ERROR_SERVER_DISCONNECTED ->
+            VoiceErrorKind.NETWORK
+        ERROR_LANGUAGE_NOT_SUPPORTED, ERROR_LANGUAGE_UNAVAILABLE -> VoiceErrorKind.LANGUAGE_UNAVAILABLE
+        else -> VoiceErrorKind.OTHER
     }
 
     private fun segKey(kind: EngineKind, lang: String) = "${kind.analytics}|$lang"
@@ -287,5 +325,8 @@ class SpeechSession(
 
         /** Upper bound for waiting on the final result after the user stops a partial-capable engine. */
         const val FINALIZE_TIMEOUT_MS = 3000L
+
+        /** onRms level (dB) above which the microphone is hearing speech; the recognizer noise floor sits near 0. */
+        const val SPEECH_RMS_DB = 3f
     }
 }

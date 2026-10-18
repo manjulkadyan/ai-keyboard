@@ -234,6 +234,7 @@ class SpeechSessionTest {
         val old = r.l
         r.session.cancel()
         r.session.output.test {
+            assertEquals(VoiceOutput.ClearComposing, awaitItem())
             old.onFinal("late")
             expectNoEvents()
         }
@@ -256,15 +257,17 @@ class SpeechSessionTest {
         }
     }
 
+    private fun whisper() = FakeSpeechEngine(EngineKind.WHISPER, supportsPartials = false)
+
     @Test fun whisperStopShowsTranscribingUntilFinal() = runSession {
-        val r = rig { FakeSpeechEngine(EngineKind.WHISPER, supportsPartials = false) }
+        val r = rig { whisper() }
         r.session.output.test {
             r.session.start("en", false)
             runCurrent()
             r.l.onReady()
             r.session.stopByUser()
             assertEquals(VoiceState.Transcribing, r.session.state.value)
-            advanceTimeBy(30_000)
+            advanceTimeBy(44_000)
             assertEquals(VoiceState.Transcribing, r.session.state.value)
             r.l.onFinal("transcribed")
             assertEquals(VoiceOutput.Commit("transcribed "), awaitItem())
@@ -273,10 +276,173 @@ class SpeechSessionTest {
         }
     }
 
+    @Test fun transcribeTimeoutBoundaries() = runSession {
+        val r = rig { whisper() }
+        r.session.start("en", false)
+        runCurrent()
+        r.session.stopByUser()
+        advanceTimeBy(44_999)
+        assertEquals(VoiceState.Transcribing, r.session.state.value)
+        advanceTimeBy(2)
+        assertEquals(VoiceState.Error(VoiceErrorKind.OTHER), r.session.state.value)
+        assertEquals("error", r.session.endReason)
+        assertTrue(r.engine.destroyed)
+        r.session.output.test { assertEquals(VoiceOutput.ClearComposing, awaitItem()); expectNoEvents() }
+    }
+
+    @Test fun capWithWhisperTranscribesInsteadOfDiscarding() = runSession {
+        val r = rig { whisper() }
+        r.session.output.test {
+            r.session.start("en", false)
+            runCurrent()
+            advanceTimeBy(60_001)
+            assertEquals(VoiceState.Transcribing, r.session.state.value)
+            assertEquals(1, r.engine.stopCount)
+            assertFalse(r.engine.destroyed)
+            r.l.onFinal("long speech")
+            assertEquals(VoiceOutput.Commit("long speech "), awaitItem())
+            assertEquals("cap", r.session.endReason)
+            assertEquals(VoiceState.Idle, r.session.state.value)
+        }
+    }
+
+    @Test fun outputIsLosslessBeforeCollectorSubscribes() = runSession {
+        val r = rig()
+        r.session.start("en", false)
+        runCurrent()
+        r.l.onFinal("early")
+        r.session.output.test { assertEquals(VoiceOutput.Commit("early "), awaitItem()) }
+    }
+
+    @Test fun fatalErrorWhileStoppingCommitsPendingPartial() = runSession {
+        val r = rig()
+        r.session.output.test {
+            r.session.start("en", true)
+            runCurrent()
+            r.l.onPartial("keep")
+            awaitItem()
+            r.session.stopByUser()
+            r.l.onError(2)
+            assertEquals(VoiceOutput.Commit("keep "), awaitItem())
+            assertEquals("user", r.session.endReason)
+            assertEquals(VoiceState.Idle, r.session.state.value)
+        }
+    }
+
+    @Test fun fatalErrorWhileStoppingWithoutTextJustFinishes() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        r.session.stopByUser()
+        r.l.onError(3)
+        assertEquals("user", r.session.endReason)
+        assertEquals(VoiceState.Idle, r.session.state.value)
+        assertTrue(r.engine.destroyed)
+    }
+
+    @Test fun busyWhileStoppingDoesNotGetStuck() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        r.session.stopByUser()
+        r.l.onError(8)
+        advanceTimeBy(2000)
+        assertEquals("user", r.session.endReason)
+        assertEquals(VoiceState.Idle, r.session.state.value)
+        assertEquals(1, r.engines.size)
+    }
+
+    @Test fun whisperErrorWhileTranscribingSurfacesError() = runSession {
+        val r = rig { whisper() }
+        r.session.start("en", false)
+        runCurrent()
+        r.session.stopByUser()
+        r.l.onError(2)
+        assertEquals(VoiceState.Error(VoiceErrorKind.NETWORK), r.session.state.value)
+        assertEquals("error", r.session.endReason)
+    }
+
+    @Test fun staleCallbackAfterRestartIsIgnored() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        val old = r.l
+        r.l.onError(6)
+        advanceTimeBy(251)
+        assertEquals(2, r.engines.size)
+        r.session.output.test {
+            old.onFinal("ghost")
+            old.onPartial("ghost")
+            expectNoEvents()
+        }
+        assertNull(r.session.endReason)
+    }
+
+    @Test fun cancelDuringRestartGapStopsRestart() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        r.l.onError(6)
+        r.session.cancel()
+        advanceTimeBy(1000)
+        assertEquals(1, r.engines.size)
+        assertEquals("field_change", r.session.endReason)
+        assertEquals(VoiceState.Idle, r.session.state.value)
+    }
+
+    @Test fun capHoldsAcrossRestarts() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        advanceTimeBy(20_000); r.l.onError(6)
+        advanceTimeBy(20_000); r.l.onError(7)
+        advanceTimeBy(19_000)
+        assertNull(r.session.endReason)
+        advanceTimeBy(1_100)
+        assertEquals("cap", r.session.endReason)
+    }
+
+    @Test fun segmentResetsRestartCounter() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        repeat(3) { r.l.onError(6); advanceTimeBy(251) }
+        r.l.onSegment("x")
+        r.l.onError(6)
+        assertNull(r.session.endReason)
+    }
+
+    @Test fun loudRmsRestartsSilenceWindow() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        r.l.onFinal("hi")
+        advanceTimeBy(300) // restarted engine
+        advanceTimeBy(1500)
+        r.l.onRms(5f)
+        advanceTimeBy(1500)
+        assertNull(r.session.endReason)
+        advanceTimeBy(600)
+        assertEquals("silence", r.session.endReason)
+    }
+
+    @Test fun segmentDetectionOnlyForContinuousPartialEngines() = runSession {
+        val r1 = rig()
+        r1.session.start("en", false)
+        runCurrent()
+        r1.l.onFinal("x")
+        assertTrue(r1.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
+        val r2 = rig { whisper() }
+        r2.session.start("en", true)
+        runCurrent()
+        r2.l.onFinal("x")
+        assertTrue(r2.session.isSegmentedSupported(EngineKind.WHISPER, "en"))
+    }
+
     @Test fun finalWithoutSegmentsMarksSegmentedUnsupported() = runSession {
         val r = rig()
         assertTrue(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
-        r.session.start("en", false)
+        r.session.start("en", true)
         runCurrent()
         r.l.onFinal("hello")
         assertFalse(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
