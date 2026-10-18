@@ -43,6 +43,12 @@ class ClipboardCaptureGate(
             return extras.getBoolean(EXTRA_IS_SENSITIVE_KEY)
         }
 
+        /** Oldest-first unpinned items beyond [limit]; [unpinnedNewestFirst] is ordered newest first. */
+        fun <T> itemsOverLimit(unpinnedNewestFirst: List<T>, limit: Int): List<T> {
+            val nToRemove = unpinnedNewestFirst.size - limit
+            return if (nToRemove > 0) unpinnedNewestFirst.asReversed().take(nToRemove) else emptyList()
+        }
+
         fun expiryCutoffMs(nowMs: Long, afterMinutes: Int): Long = nowMs - afterMinutes * 60_000L
     }
 }

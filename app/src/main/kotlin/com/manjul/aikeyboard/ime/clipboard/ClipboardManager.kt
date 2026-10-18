@@ -208,7 +208,10 @@ class ClipboardManager(
                 val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true
                 if (!isEqual) {
                     // FORK(S1-clipboard): sensitive or policy-blocked clips are neither stored nor cloned
-                    if (!captureGate.mayCapture(systemPrimaryClip)) return@launch
+                    if (!captureGate.mayCapture(systemPrimaryClip)) {
+                        primaryClip = null // FORK(S1-clipboard): do not keep offering the previous clip
+                        return@launch
+                    }
                     val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
                     primaryClip = item
                     insertOrMoveBeginning(item)
@@ -260,9 +263,8 @@ class ClipboardManager(
     private fun enforceHistoryLimit(clipHistory: ClipboardHistory) {
         if (prefs.clipboard.historySizeLimitEnabled.get()) {
             val nonPinnedItems = clipHistory.recent + clipHistory.other
-            val nToRemove = nonPinnedItems.size - prefs.clipboard.historySizeLimit.get()
-            if (nToRemove > 0) {
-                val itemsToRemove = nonPinnedItems.asReversed().filterIndexed { n, _ -> n < nToRemove }
+            val itemsToRemove = ClipboardCaptureGate.itemsOverLimit(nonPinnedItems, prefs.clipboard.historySizeLimit.get()) // FORK(S1-clipboard): testable trim
+            if (itemsToRemove.isNotEmpty()) {
                 ioScope.launch {
                     clipHistoryDao?.delete(itemsToRemove)
                 }

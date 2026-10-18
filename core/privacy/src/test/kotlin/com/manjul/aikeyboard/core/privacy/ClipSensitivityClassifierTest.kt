@@ -19,7 +19,8 @@ class ClipSensitivityClassifierTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ["482913", "Your code is 482913", "G-482913", "1234", "12345678", "  482913\n"])
+    @ValueSource(strings = ["482913", "Your code is 482913", "G-482913", "1234", "12345678", "  482913\n",
+        "482913 is your verification code. Do not share it with anyone.", "Your code: 482 913", "OTP 482-913"])
     fun `otp-like text is sensitive`(text: String) {
         assertTrue(ClipSensitivityClassifier.isSensitive(text, false), text)
     }
@@ -35,7 +36,9 @@ class ClipSensitivityClassifierTest {
         strings = [
             "hello world", "call me at 5", "https://example.com", "2026-10-18", "123", "123456789",
             "https://example.com/a?b=C3d&e=F!", "Hello, World 2026!", "meet at 10:30 on 18.10.2026",
-            "short1A!", "",
+            "short1A!", "", "482 913",
+            "The code review for the 2026 release went on for a long time because the team argued about naming, " +
+                "structure and tests, and nobody wanted to merge anything before the end of the quarter came around.",
         ],
     )
     fun `ordinary text is not sensitive`(text: String) {

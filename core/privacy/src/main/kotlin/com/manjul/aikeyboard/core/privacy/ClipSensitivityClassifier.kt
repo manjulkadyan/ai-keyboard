@@ -10,12 +10,13 @@ package com.manjul.aikeyboard.core.privacy
  * source app flagged as sensitive. Never logs or retains the text.
  */
 object ClipSensitivityClassifier {
-    private const val MAX_OTP_SENTENCE_LENGTH = 60
+    private const val MAX_OTP_SENTENCE_LENGTH = 160 // one SMS
     private const val MIN_PASSWORD_LENGTH = 10
 
     /** Bare code, optionally with a short alphabetic prefix such as `G-482913`. */
     private val bareOtp = Regex("""^(?:[A-Za-z]{1,4}[- ])?\d{4,8}$""")
     private val digitRun = Regex("""(?<![\d.:/-])\d{4,8}(?![\d.:/-])""")
+    private val splitCode = Regex("""(?<![\d.:/-])\d{3}[ -]\d{3}(?![\d.:/-])""")
     private val otpKeyword = Regex("""(?i)\b(code|otp|pin|passcode|password|verification|one-time|token)\b""")
 
     fun isSensitive(text: String?, flaggedSensitive: Boolean): Boolean {
@@ -27,7 +28,8 @@ object ClipSensitivityClassifier {
 
     private fun looksLikeOtp(text: String): Boolean {
         if (bareOtp.matches(text)) return true
-        return text.length <= MAX_OTP_SENTENCE_LENGTH && otpKeyword.containsMatchIn(text) && digitRun.containsMatchIn(text)
+        if (text.length > MAX_OTP_SENTENCE_LENGTH || !otpKeyword.containsMatchIn(text)) return false
+        return digitRun.containsMatchIn(text) || splitCode.containsMatchIn(text)
     }
 
     private fun looksLikePassword(text: String): Boolean {

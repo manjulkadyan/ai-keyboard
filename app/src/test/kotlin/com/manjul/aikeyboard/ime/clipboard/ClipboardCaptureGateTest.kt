@@ -107,4 +107,13 @@ class ClipboardCaptureGateTest {
     fun `expiry cutoff is minutes before now`() {
         assertEquals(1_000_000L - 24 * 3_600_000L, ClipboardCaptureGate.expiryCutoffMs(1_000_000L, 1440))
     }
+
+    @Test
+    fun `history trim keeps the newest items up to the limit`() {
+        val newestFirst = (1..25).toList()
+        val removed = ClipboardCaptureGate.itemsOverLimit(newestFirst, 20)
+        assertEquals(listOf(25, 24, 23, 22, 21), removed)
+        assertEquals(20, newestFirst.size - removed.size)
+        assertTrue(ClipboardCaptureGate.itemsOverLimit((1..20).toList(), 20).isEmpty())
+    }
 }
