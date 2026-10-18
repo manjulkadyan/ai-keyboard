@@ -5,6 +5,7 @@
 
 package com.manjul.aikeyboard.fork.subtypes
 
+import com.manjul.aikeyboard.ime.core.Subtype
 import com.manjul.aikeyboard.ime.core.SubtypeJsonConfig
 import com.manjul.aikeyboard.ime.core.SubtypePreset
 import com.manjul.aikeyboard.lib.FlorisLocale
@@ -33,10 +34,8 @@ class DefaultSubtypesTest {
         SubtypeJsonConfig.decodeFromJsonElement(ListSerializer(SubtypePreset.serializer()), array)
     }
 
-    private fun presetFor(tag: String): SubtypePreset? {
-        val locale = FlorisLocale.fromTag(tag)
-        return presets.find { it.locale == locale } ?: presets.find { it.locale.language == locale.language }
-    }
+    private fun seed(current: List<Subtype>, vararg tags: String, baseId: Long = 1000) =
+        buildSeededList(current, presets, tags.toList(), baseId)
 
     private fun locales(vararg tags: String) = tags.map { FlorisLocale.fromTag(it) }
 
@@ -65,11 +64,33 @@ class DefaultSubtypesTest {
 
     @Test
     fun `every MVP tag has a preset`() {
-        for (tag in MVP_LANGUAGE_TAGS) assertNotNull(presetFor(tag), "no preset for $tag")
+        for (tag in MVP_LANGUAGE_TAGS) assertNotNull(findPreset(presets, FlorisLocale.fromTag(tag)), "no preset for $tag")
     }
 
     @Test
     fun `urdu preset uses the phonetic layout`() {
-        assertEquals("org.florisboard.layouts:urdu_phonetic", presetFor("ur-PK")!!.preferred.characters.toString())
+        assertEquals("org.florisboard.layouts:urdu_phonetic", seed(emptyList(), "ur-PK").single().layoutMap.characters.toString())
+    }
+
+    @Test
+    fun `seeding twice yields two subtypes with unique ids in tag order`() {
+        val first = seed(emptyList(), "en-US", "ur-PK")
+        val second = seed(first, "en-US", "ur-PK", baseId = 5000)
+        assertEquals(second, first)
+        assertEquals(listOf("en-US", "ur-PK"), first.map { it.primaryLocale.languageTag() })
+        assertEquals(2, first.map { it.id }.toSet().size)
+    }
+
+    @Test
+    fun `seeding keeps existing subtypes and appends only the missing ones`() {
+        val existing = seed(emptyList(), "fr-FR")
+        val result = seed(existing, "en-US", "fr-FR", "id", baseId = 7000)
+        assertEquals(listOf("fr-FR", "en-US", "id"), result.map { it.primaryLocale.languageTag() })
+        assertEquals(existing.single(), result.first())
+    }
+
+    @Test
+    fun `tags without a preset are skipped`() {
+        assertEquals(emptyList(), seed(emptyList(), "xx-YY"))
     }
 }

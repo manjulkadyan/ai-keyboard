@@ -8,7 +8,6 @@
     tools:targetApi="r">
 
     <!-- FORK(S1-subtypes): the single upstream placeholder subtype is replaced by the 8 MVP subtypes (TRD FR-12) -->
-    <!-- FORK(S1-subtypes) -->
     <subtype
         android:imeSubtypeLocale="en_US"
         android:languageTag="en-US"

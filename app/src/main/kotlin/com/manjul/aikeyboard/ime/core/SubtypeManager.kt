@@ -18,7 +18,8 @@ package com.manjul.aikeyboard.ime.core
 
 import android.content.Context
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
-import com.manjul.aikeyboard.fork.subtypes.missingSubtypeTags // FORK(S1-subtypes)
+import com.manjul.aikeyboard.fork.subtypes.buildSeededList // FORK(S1-subtypes)
+import com.manjul.aikeyboard.fork.subtypes.findPreset // FORK(S1-subtypes)
 import com.manjul.aikeyboard.ime.keyboard.CurrencySet
 import com.manjul.aikeyboard.keyboardManager
 import com.manjul.aikeyboard.lib.FlorisLocale
@@ -27,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update // FORK(S1-subtypes)
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.florisboard.lib.kotlin.collectLatestIn
@@ -117,15 +119,13 @@ class SubtypeManager(context: Context) {
      * persisted once, so later calls (and [subtypes] readers) see it immediately.
      */
     fun ensureDefaultSubtypes(languageTags: List<String>) {
-        val current = subtypes
+        val presets = keyboardManager.resources.subtypePresets.value
         val baseId = System.currentTimeMillis()
-        val added = missingSubtypeTags(current.map { it.primaryLocale }, languageTags)
-            .mapNotNull { getSubtypePresetForLocale(FlorisLocale.fromTag(it))?.toSubtype() }
-            .mapIndexed { index, subtype -> subtype.copy(id = baseId + index) }
-        if (added.isEmpty()) return
-        val newList = current + added
-        subtypes = newList
-        persistNewSubtypeList(newList)
+        var seeded: List<Subtype>? = null
+        _subtypesFlow.update { current ->
+            buildSeededList(current, presets, languageTags, baseId).also { seeded = it.takeIf { l -> l !== current } }
+        }
+        seeded?.let { persistNewSubtypeList(it) }
     }
 
     /**
@@ -157,8 +157,8 @@ class SubtypeManager(context: Context) {
      *  found.
      */
     fun getSubtypePresetForLocale(locale: FlorisLocale): SubtypePreset? {
-        val presets = keyboardManager.resources.subtypePresets.value
-        return presets?.find { it.locale == locale } ?: presets?.find { it.locale.language == locale.language }
+        // FORK(S1-subtypes): lookup extracted to a pure function so it can be unit tested
+        return findPreset(keyboardManager.resources.subtypePresets.value, locale)
     }
 
     /**

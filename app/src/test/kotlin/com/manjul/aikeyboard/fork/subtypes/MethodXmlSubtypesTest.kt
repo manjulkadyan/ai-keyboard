@@ -57,10 +57,16 @@ class MethodXmlSubtypesTest {
 
     @Test
     fun `label strings exist in strings_fork`() {
-        val strings = File(mainDir, "res/values/strings_fork.xml").readText()
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(File(mainDir, "res/values/strings_fork.xml"))
+        val nodes = doc.getElementsByTagName("string")
+        val strings = (0 until nodes.length).associate {
+            val e = nodes.item(it) as Element
+            e.getAttribute("name") to e.textContent
+        }
         for (subtype in subtypes()) {
             val name = subtype.attr("label").removePrefix("@string/")
-            assertTrue(strings.contains("name=\"$name\""), "missing string $name")
+            assertTrue(!strings[name].isNullOrBlank(), "missing or empty string $name")
         }
     }
 }
