@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2025 The FlorisBoard Contributors
- * Modified by AI Keyboard contributors, 2026
+ * Modified by AI Keyboard contributors, 2026. FORK(S0-licences): Apache-2.0 §4(b) change notice
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+// FORK(S0-branding): BuildConfig import dropped with the Addons Store button
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
@@ -49,6 +50,7 @@ private const val ADDONS_STORE_ENABLED = false
 
 @Composable
 fun ImportExtensionBox(navController: NavController) {
+    // FORK(S0-branding): no LocalContext here any more; it only served the removed store button
     FlorisOutlinedBox(
         modifier = Modifier.defaultFlorisOutlinedBox(),
     ) {

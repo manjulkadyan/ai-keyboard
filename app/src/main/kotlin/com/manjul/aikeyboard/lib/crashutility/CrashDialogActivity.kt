@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020-2025 The FlorisBoard Contributors
- * Modified by AI Keyboard contributors, 2026
+ * Modified by AI Keyboard contributors, 2026. FORK(S0-licences): Apache-2.0 §4(b) change notice
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+// FORK(S0-branding): Uri (issue-tracker link) out, View (hidden report instructions) in
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -33,6 +34,7 @@ import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceModel
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+// FORK(S0-branding): stringRes import dropped with the upstream commit/changelog links
 import com.manjul.aikeyboard.lib.devtools.Devtools
 import com.manjul.aikeyboard.lib.devtools.LogTopic
 import com.manjul.aikeyboard.lib.devtools.flogWarning
@@ -120,10 +122,10 @@ class CrashDialogActivity : ComponentActivity() {
             Toast.makeText(this, toastMessage, Toast.LENGTH_SHORT).show()
         }
 
-        // FORK(S0-branding): the "open issue tracker" button (FlorisBoard's GitHub issues) becomes a plain
-        // share-sheet for the crash text; nothing is sent anywhere unless the user picks a target
+        // FORK(S0-branding): the "open issue tracker" button (FlorisBoard's GitHub issues) becomes a share button
         openBugReportForm.text = resources.getString(R.string.crash_dialog__share)
         openBugReportForm.setOnClickListener {
+            // FORK(S0-branding): share-sheet for the crash text; nothing is sent unless the user picks a target
             val sendIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, errorReport.toString())

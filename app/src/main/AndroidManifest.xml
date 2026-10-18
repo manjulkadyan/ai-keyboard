@@ -21,15 +21,15 @@
         </intent>
     </queries>
 
-    <!-- FORK(S0-hardening): dataExtractionRules (API 31+) gets its own file in the
-         <data-extraction-rules> format (upstream pointed it at the API 26-30 full-backup file);
-         networkSecurityConfig blocks cleartext and user CAs in release (TRD §6.3). -->
-    <application
-        android:name="com.manjul.aikeyboard.FlorisApplication"
+    <!-- dataExtractionRules (API 31+) gets its own file in the <data-extraction-rules> format (upstream
+         pointed it at the API 26-30 full-backup file); networkSecurityConfig blocks cleartext and user
+         CAs in release (TRD §6.3).
+         FORK(S0-hardening): as above; android:name shares the <application line to keep this marker in reach -->
+    <application android:name="com.manjul.aikeyboard.FlorisApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/floris_app_icon"
         android:label="@string/floris_app_name"
         android:enableOnBackInvokedCallback="true"

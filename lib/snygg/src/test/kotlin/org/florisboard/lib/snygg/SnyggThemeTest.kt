@@ -5,6 +5,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+// FORK(S0-ci): yellow{Light,Dark}Scheme do not exist in :lib:color at v0.5.2; defined below instead
 import org.florisboard.lib.color.neutralDynamicColorScheme
 import org.florisboard.lib.snygg.value.SnyggCircleShapeValue
 import org.florisboard.lib.snygg.value.SnyggDpSizeValue

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
- * Modified by AI Keyboard contributors, 2026
+ * Modified by AI Keyboard contributors, 2026. FORK(S0-licences): Apache-2.0 §4(b) change notice
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,6 +58,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.florisboard.lib.android.AndroidVersion
+// FORK(S0-branding): FlorisBulletSpacer import dropped with the Repository link
 import org.florisboard.lib.compose.FlorisStep
 import org.florisboard.lib.compose.FlorisStepLayout
 import org.florisboard.lib.compose.FlorisStepState
@@ -183,12 +184,12 @@ private fun footer(context: Context) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        // FORK(S0-branding): our privacy policy (placeholder URL, TODO(OD-01)) instead of upstream's; the
-        // upstream "Repository" link (FlorisBoard GitHub) and its bullet separator are removed
+        // FORK(S0-branding): our privacy policy (placeholder URL, TODO(OD-01)) instead of upstream's
         val privacyPolicyUrl = stringRes(R.string.privacy_policy_url)
         TextButton(onClick = { context.launchUrl(privacyPolicyUrl) }) {
             Text(text = stringRes(R.string.setup__footer__privacy_policy))
         }
+        // FORK(S0-branding): upstream's "Repository" link (FlorisBoard GitHub) and its bullet separator are removed
     }
 }
 

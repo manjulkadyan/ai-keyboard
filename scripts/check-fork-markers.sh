@@ -9,8 +9,12 @@
 # in the upstream tag:
 #   - unchanged, or changed only by the global package rename
 #     (dev.patrickgold.florisboard -> com.manjul.aikeyboard, in content and in the path): OK;
-#   - modified: must be listed in docs/FORK_PATCHES.md (exact path or glob) AND contain a
-#     "FORK(" marker, unless it matches a row of the "Marker-exempt files" table;
+#   - modified: must be listed in docs/FORK_PATCHES.md (exact path or glob) AND every changed hunk
+#     must carry a "FORK(" marker, unless the file matches a row of the "Marker-exempt files" table.
+#     Hunks come from a zero-context diff of the normalised (rename-mapped) upstream file against
+#     HEAD. A hunk that adds or changes lines needs a marker on one of those lines or on one of the
+#     3 lines before it; a hunk that only deletes lines needs a marker within 3 lines of the deletion
+#     point in the HEAD file. Binary files that differ need a marker-exempt row;
 #   - deleted: must be listed in docs/FORK_PATCHES.md.
 # Files we added are not checked.
 #
@@ -23,7 +27,7 @@
 # Usage: scripts/check-fork-markers.sh            (run from anywhere inside the repo)
 # The upstream tag must be available locally. In CI:
 #   git fetch --no-tags --depth=1 https://github.com/florisboard/florisboard.git tag <tag>
-# Requires: bash 3.2+, git, sed, grep, cmp (Linux and macOS).
+# Requires: bash 3.2+, git, sed, grep, awk, cmp (Linux and macOS).
 
 set -euo pipefail
 
@@ -135,6 +139,50 @@ normalise() {
     sed -e "s#${OLD_DIR}#${NEW_DIR}#g" -e "s#${OLD_PKG//./\\.}#${NEW_PKG}#g"
 }
 
+# Lines (in the HEAD file) a FORK( marker may sit on to cover a hunk, before the hunk's first line.
+MARKER_LOOKBACK=3
+
+# Checks every changed hunk between $TMP/up (normalised upstream) and $TMP/head for a FORK( marker.
+# Prints one FAIL line per uncovered hunk. $1 = HEAD path (for messages).
+check_hunks() {
+    local path="$1" rc=0 bad line
+    git diff --no-index --no-color --no-ext-diff -U0 -- "$TMP/up" "$TMP/head" > "$TMP/diff" || rc=$?
+    if [ "$rc" -gt 1 ]; then
+        fail "$path: git diff failed (exit $rc)"
+        return
+    fi
+    if ! grep -q '^@@ ' "$TMP/diff"; then
+        # No text hunks although the contents differ: binary file (or a diff we cannot read).
+        fail "$path: modified upstream file has no text hunks (binary?); add a marker-exempt row"
+        return
+    fi
+    # Pass 1 reads the hunk headers ("@@ -a[,b] +c[,d] @@"), pass 2 the HEAD file.
+    bad="$(grep '^@@ ' "$TMP/diff" | awk -v back="$MARKER_LOOKBACK" '
+        FNR == NR {
+            split($3, n, ",")
+            c = substr(n[1], 2) + 0
+            d = (2 in n) ? n[2] + 0 : 1
+            h++
+            if (d > 0) { lo[h] = c - back; hi[h] = c + d - 1; what[h] = "lines " c "-" (c + d - 1) }
+            else       { lo[h] = c - back + 1; hi[h] = c + back; what[h] = "deletion after line " c }
+            next
+        }
+        index($0, "FORK(") { m[FNR] = 1 }
+        END {
+            for (i = 1; i <= h; i++) {
+                ok = 0
+                for (l = lo[i]; l <= hi[i]; l++) if (l in m) { ok = 1; break }
+                if (!ok) print what[i]
+            }
+        }' - "$TMP/head")"
+    [ -n "$bad" ] || return 0
+    while IFS= read -r line; do
+        fail "$path: changed hunk without a FORK(<ticket>) marker ($line)"
+    done <<EOF
+$bad
+EOF
+}
+
 git ls-tree -r --name-only "$TAG" > "$TMP/upstream_files"
 # Paths that differ between the tag and HEAD (no rename detection: we map paths ourselves).
 git diff --name-only --no-renames "$TAG" HEAD > "$TMP/changed"
@@ -183,9 +231,7 @@ while IFS= read -r up; do
     if ! matches_any "$TMP/listed" "$up" "$head_path"; then
         fail "$head_path: modified upstream file is not listed in $PATCHES_DOC"
     fi
-    if ! grep -q 'FORK(' "$TMP/head"; then
-        fail "$head_path: modified upstream file has no FORK(<ticket>) marker"
-    fi
+    check_hunks "$head_path"
 done < "$TMP/upstream_files"
 
 echo "check-fork-markers: upstream $TAG; $n_modified modified ($n_exempt marker-exempt), $n_rename_only rename-only, $n_deleted deleted"

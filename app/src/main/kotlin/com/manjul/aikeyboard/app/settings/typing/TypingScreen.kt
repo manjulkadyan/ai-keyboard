@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
- * Modified by AI Keyboard contributors, 2026
+ * Modified by AI Keyboard contributors, 2026. FORK(S0-licences): Apache-2.0 §4(b) change notice
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.app.enumDisplayEntriesOf
 import com.manjul.aikeyboard.ime.keyboard.IncognitoMode
 import com.manjul.aikeyboard.ime.nlp.SpellingLanguageMode
+// FORK(S0-branding): FlorisHyperlinkText import dropped with the GitHub feedback link
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import dev.patrickgold.jetpref.datastore.model.observeAsState
 import dev.patrickgold.jetpref.datastore.ui.ExperimentalJetPrefDatastoreUi
@@ -111,14 +112,14 @@ fun TypingScreen() = FlorisScreen {
             if (isAutoSpacePunctuationEnabled) {
                 Card(modifier = Modifier.padding(8.dp)) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        // FORK(S0-branding): the request for feedback and the link to upstream's GitHub
-                        // discussion thread are removed; the experimental-feature warning stays
                         Text(
+                            // FORK(S0-branding): the request for feedback is removed; the warning stays
                             text = """
                                 Auto-space after punctuation is an experimental feature which may break or behave
                                 unexpectedly.
                             """.trimIndent().replace('\n', ' '),
                         )
+                        // FORK(S0-branding): the link to upstream's GitHub feedback discussion thread is removed
                     }
                 }
             }
