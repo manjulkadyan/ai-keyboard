@@ -19,6 +19,8 @@
 rootProject.name = "AiKeyboard"
 
 pluginManagement {
+    // FORK(S0-modules): convention plugins (aikeyboard.*) live in the build-logic included build
+    includeBuild("build-logic")
     repositories {
         gradlePluginPortal()
         google()
@@ -52,3 +54,7 @@ include(":lib:compose")
 include(":lib:kotlin")
 include(":lib:native")
 include(":lib:snygg")
+
+// FORK(S0-modules): AI Keyboard modules (TRD §2.2). The upstream IME stays in :app for now.
+include(":core:common")
+include(":ime:policy")

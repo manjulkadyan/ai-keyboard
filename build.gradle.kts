@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2022-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,4 +26,6 @@ plugins {
     alias(libs.plugins.kotlinx.kover) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.mikepenz.aboutlibraries) apply false
+    // FORK(S0-modules): fail the build on forbidden module dependencies (TRD §2.2 "Dependency rules")
+    alias(libs.plugins.aikeyboard.module.rules)
 }

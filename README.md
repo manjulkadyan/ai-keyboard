@@ -17,10 +17,25 @@ FlorisBoard project.
 Our own code lives in separate Gradle modules so that most upstream files stay unedited. Edits to
 upstream files carry a `FORK(<ticket>): reason` marker.
 
+## Modules
+
+- `build-logic/`: convention plugins (`aikeyboard.android.library`, `aikeyboard.android.library.compose`,
+  `aikeyboard.jvm.library`, `aikeyboard.module-rules`).
+- `:app`: upstream FlorisBoard app and IME (the keyboard is not split into its own module yet).
+- `:core:common`: dispatchers and the `Outcome` result type.
+- `:ime:policy`: `SensitiveFieldPolicy` contract (pure Kotlin).
+- `:lib:*`: upstream FlorisBoard libraries.
+
+The build fails if an `:ime*` module depends on `:core:ads`, `:core:billing` or a `:feature:*` module,
+or if one `:feature:*` module depends on another. Because the IME still lives in `:app`, that rule does
+not by itself keep ads out of the keyboard; a class-reference test added with `:core:ads` covers that.
+See [`docs/FORK_PATCHES.md`](docs/FORK_PATCHES.md#module-dependency-rules).
+
 ## Building
 
 ```
 ./gradlew :app:assembleDebug
+./gradlew :build-logic:convention:test :core:common:testDebugUnitTest :ime:policy:test
 ```
 
 The native library needs the Rust Android targets (for example `aarch64-linux-android`) installed

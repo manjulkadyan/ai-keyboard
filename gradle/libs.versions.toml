@@ -32,6 +32,10 @@ androidx-test-uiautomator = "2.3.0"
 junit-jupiter-params = "5.13.3"
 kotlinx-kover = "0.9.1"
 
+# --- AI Keyboard ---
+# FORK(S0-modules): entries below were added by the fork (see docs/FORK_PATCHES.md). Keep them in this block.
+javax-inject = "1"
+
 
 
 [libraries]
@@ -79,6 +83,18 @@ androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", 
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter-params" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
 
+# --- AI Keyboard ---
+# FORK(S0-modules): entries below were added by the fork (see docs/FORK_PATCHES.md). Keep them in this block.
+javax-inject = { module = "javax.inject:javax.inject", version.ref = "javax-inject" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit-jupiter-params" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+# build-logic (convention plugins) compile-time classpath
+android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "android-gradle-plugin" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+
 
 
 [plugins]
@@ -95,3 +111,11 @@ mikepenz-aboutlibraries = { id = "com.mikepenz.aboutlibraries.plugin.android", v
 
 # Testing
 kotlinx-kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kotlinx-kover" }
+
+# --- AI Keyboard ---
+# FORK(S0-modules): entries below were added by the fork (see docs/FORK_PATCHES.md). Keep them in this block.
+# Convention plugins from build-logic/ (no version: resolved from the included build)
+aikeyboard-android-library = { id = "aikeyboard.android.library" }
+aikeyboard-android-library-compose = { id = "aikeyboard.android.library.compose" }
+aikeyboard-jvm-library = { id = "aikeyboard.jvm.library" }
+aikeyboard-module-rules = { id = "aikeyboard.module-rules" }
