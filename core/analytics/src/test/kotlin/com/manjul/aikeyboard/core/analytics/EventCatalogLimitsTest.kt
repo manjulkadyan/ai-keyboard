@@ -11,22 +11,43 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class EventCatalogLimitsTest {
+    private val big = "x".repeat(500)
+
     private val all = listOf(
-        EventCatalog.onboardingStart("launcher"),
-        EventCatalog.onboardingStepView("try"),
-        EventCatalog.imeEnabled("5-15"),
-        EventCatalog.imeSelected("60-300"),
-        EventCatalog.languagesSet(3, true),
+        EventCatalog.onboardingStart(OnboardingSource.LAUNCHER),
+        EventCatalog.onboardingStepView(OnboardingStep.TRY),
+        EventCatalog.imeEnabled(Long.MAX_VALUE),
+        EventCatalog.imeSelected(-5),
+        EventCatalog.languagesSet(Int.MAX_VALUE, true),
         EventCatalog.onboardingComplete(false),
-        EventCatalog.imeSessionStart("en-US", false),
-        EventCatalog.firstDictation("ur"),
-        EventCatalog.voiceSessionStart("hi", "whisper"),
-        EventCatalog.voiceSessionEnd("5-15", "6-20", "error", 7),
-        EventCatalog.voiceSessionEnd("5-15", "6-20", "user", null),
+        EventCatalog.imeSessionStart(big, false),
+        EventCatalog.imeSessionStart("en-US", true),
+        EventCatalog.firstDictation(big),
+        EventCatalog.voiceSessionStart(big, VoiceEngine.WHISPER),
+        EventCatalog.voiceSessionEnd(Long.MAX_VALUE, Int.MAX_VALUE, EndReason.FIELD_CHANGE, Int.MAX_VALUE),
+        EventCatalog.voiceSessionEnd(0, 0, EndReason.USER, null),
         EventCatalog.voicePermissionResult(true),
-        EventCatalog.voiceUnavailable("no_recognizer"),
+        EventCatalog.voiceUnavailable(UnavailableReason.OFFLINE_NO_MODEL),
         EventCatalog.privacyPrivateAppAdd(),
     )
+
+    @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
+        for ((name, keys) in EventCatalog.paramRegistry) {
+            val produced = all.filter { it.name == name }.flatMap { it.params.keys }.toSet()
+            assertEquals(keys, produced, name)
+        }
+    }
+
+    @Test fun nonLanguageStringsBecomeOther() {
+        for (bad in listOf("com.bank.app", "hello world", "", big, "QWERTY layout", "en-US; DROP")) {
+            assertEquals("other", EventCatalog.imeSessionStart(bad, false).params["subtype"], bad)
+            assertEquals("other", EventCatalog.firstDictation(bad).params["lang"], bad)
+            assertEquals("other", EventCatalog.voiceSessionStart(bad, VoiceEngine.WHISPER).params["lang"], bad)
+        }
+        assertEquals("ur", EventCatalog.firstDictation("ur").params["lang"])
+        assertEquals("en-US", EventCatalog.imeSessionStart("en-US", false).params["subtype"])
+        assertEquals("zh_Hans_CN", EventCatalog.firstDictation("zh_Hans_CN").params["lang"])
+    }
 
     @Test fun limitsHold() {
         val nameRe = Regex("^[a-z][a-z0-9_]{0,39}$")
@@ -42,12 +63,8 @@ class EventCatalogLimitsTest {
         }
     }
 
-    @Test fun longStringValuesAreClamped() {
-        assertEquals(100, EventCatalog.firstDictation("x".repeat(500)).params["lang"].toString().length)
-    }
-
     @Test fun nullErrorCodeIsOmitted() {
-        assertFalse("error_code" in EventCatalog.voiceSessionEnd("0-5", "0", "user", null).params)
+        assertFalse("error_code" in EventCatalog.voiceSessionEnd(0, 0, EndReason.USER, null).params)
     }
 
     @Test fun namesMatchPrd() {

@@ -15,6 +15,11 @@ object EventCatalog {
     const val MAX_KEY = 40
     const val MAX_VALUE = 100
 
+    private val LANG_TAG = Regex("^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8}){0,3}\$")
+
+    /** Free strings never reach an event: anything that is not a BCP-47-shaped tag becomes "other". */
+    private fun tag(s: String) = if (LANG_TAG.matches(s)) s else "other"
+
     const val ONBOARDING_START = "onboarding_start"
     const val ONBOARDING_STEP_VIEW = "onboarding_step_view"
     const val IME_ENABLED = "ime_enabled"
@@ -57,42 +62,43 @@ object EventCatalog {
         return AnalyticsEvent(name, map)
     }
 
-    fun onboardingStart(source: String) = event(ONBOARDING_START, "source" to source)
+    fun onboardingStart(source: OnboardingSource) = event(ONBOARDING_START, "source" to source.value)
 
-    /** [step] is "1", "2", "3" or "try". */
-    fun onboardingStepView(step: String) = event(ONBOARDING_STEP_VIEW, "step" to step)
+    fun onboardingStepView(step: OnboardingStep) = event(ONBOARDING_STEP_VIEW, "step" to step.value)
 
-    fun imeEnabled(secondsBucket: String) = event(IME_ENABLED, "seconds_since_start_bucket" to secondsBucket)
+    fun imeEnabled(secondsSinceStart: Long) =
+        event(IME_ENABLED, "seconds_since_start_bucket" to Buckets.seconds(secondsSinceStart))
 
-    fun imeSelected(secondsBucket: String) = event(IME_SELECTED, "seconds_since_start_bucket" to secondsBucket)
+    fun imeSelected(secondsSinceStart: Long) =
+        event(IME_SELECTED, "seconds_since_start_bucket" to Buckets.seconds(secondsSinceStart))
 
     fun languagesSet(count: Int, hasRtl: Boolean) = event(LANGUAGES_SET, "count" to count, "has_rtl" to hasRtl)
 
     fun onboardingComplete(skipped: Boolean) = event(ONBOARDING_COMPLETE, "skipped" to skipped)
 
+    /** [subtype] is the subtype's primary language tag (e.g. "en-US"), never a display or layout name. */
     fun imeSessionStart(subtype: String, isSensitive: Boolean) =
-        event(IME_SESSION_START, "subtype" to subtype, "is_sensitive" to isSensitive)
+        event(IME_SESSION_START, "subtype" to tag(subtype), "is_sensitive" to isSensitive)
 
-    fun firstDictation(lang: String) = event(FIRST_DICTATION, "lang" to lang)
+    /** [lang] is a BCP-47 language tag. */
+    fun firstDictation(lang: String) = event(FIRST_DICTATION, "lang" to tag(lang))
 
-    /** [engine] is system_on_device, system_default or whisper. */
-    fun voiceSessionStart(lang: String, engine: String) =
-        event(VOICE_SESSION_START, "lang" to lang, "engine" to engine)
+    fun voiceSessionStart(lang: String, engine: VoiceEngine) =
+        event(VOICE_SESSION_START, "lang" to tag(lang), "engine" to engine.value)
 
-    /** [endReason] is user, silence, error, cap or field_change. */
-    fun voiceSessionEnd(durationBucket: String, wordsBucket: String, endReason: String, errorCode: Int?): AnalyticsEvent {
-        val base = arrayListOf<Pair<String, Any>>(
-            "duration_bucket" to durationBucket,
-            "words_bucket" to wordsBucket,
-            "end_reason" to endReason,
+    fun voiceSessionEnd(durationMs: Long, words: Int, endReason: EndReason, errorCode: Int?): AnalyticsEvent {
+        val params = arrayListOf<Pair<String, Any>>(
+            "duration_bucket" to Buckets.duration(durationMs),
+            "words_bucket" to Buckets.words(words),
+            "end_reason" to endReason.value,
         )
-        if (errorCode != null) base += "error_code" to errorCode
-        return event(VOICE_SESSION_END, *base.toTypedArray())
+        if (errorCode != null) params += "error_code" to errorCode
+        return event(VOICE_SESSION_END, *params.toTypedArray())
     }
 
     fun voicePermissionResult(granted: Boolean) = event(VOICE_PERMISSION_RESULT, "granted" to granted)
 
-    fun voiceUnavailable(reason: String) = event(VOICE_UNAVAILABLE, "reason" to reason)
+    fun voiceUnavailable(reason: UnavailableReason) = event(VOICE_UNAVAILABLE, "reason" to reason.value)
 
     fun privacyPrivateAppAdd() = event(PRIVACY_PRIVATE_APP_ADD)
 }

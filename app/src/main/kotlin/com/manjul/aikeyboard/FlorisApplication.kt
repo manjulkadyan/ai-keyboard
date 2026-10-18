@@ -97,6 +97,7 @@ class FlorisApplication : Application() {
             clock = System::currentTimeMillis,
             scope = scope,
             optOut = { featureSettingsStore.value.current.analyticsOptOut },
+            // null policy = no IME field context (app-side events): not minimal, by design
             policy = { FlorisImeService.policyControllerOrNull()?.decision?.value },
         )
     }

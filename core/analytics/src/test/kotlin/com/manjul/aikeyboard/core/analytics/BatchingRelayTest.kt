@@ -30,11 +30,11 @@ class BatchingRelayTest {
     @Test fun batchesIntoOneFlushAtSixtySeconds() = runTest {
         val sink = Recorder()
         val relay = relay(sink)
-        relay.log(EventCatalog.onboardingStart("launcher"))
+        relay.log(EventCatalog.onboardingStart(OnboardingSource.LAUNCHER))
         advanceTimeBy(5_000)
-        relay.log(EventCatalog.onboardingStepView("1"))
+        relay.log(EventCatalog.onboardingStepView(OnboardingStep.ONE))
         advanceTimeBy(5_000)
-        relay.log(EventCatalog.onboardingStepView("2"))
+        relay.log(EventCatalog.onboardingStepView(OnboardingStep.TWO))
         advanceTimeBy(49_000) // t = 59 s
         assertEquals(0, sink.flushed.size)
         advanceTimeBy(1_001)
@@ -73,7 +73,7 @@ class BatchingRelayTest {
         val sink = Recorder()
         val relay = relay(sink, policy = { PolicyDecision.Locked })
         relay.log(EventCatalog.imeSessionStart("en", false))
-        relay.log(EventCatalog.voiceSessionStart("en", "whisper"))
+        relay.log(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER))
         relay.log(EventCatalog.imeSessionStart("en", true))
         advanceTimeBy(61_000)
         assertEquals(listOf(EventCatalog.imeSessionStart("en", true)), sink.flushed)
@@ -87,5 +87,28 @@ class BatchingRelayTest {
         assertEquals(1, sink.flushed.size)
         advanceTimeBy(61_000)
         assertEquals(1, sink.flushed.size)
+    }
+
+    @Test fun manualFlushDoesNotOpenSubMinuteWindow() = runTest {
+        val sink = Recorder()
+        val relay = relay(sink)
+        relay.log(EventCatalog.privacyPrivateAppAdd())
+        relay.flushNow() // t = 0
+        advanceTimeBy(10_000)
+        relay.log(EventCatalog.privacyPrivateAppAdd())
+        advanceTimeBy(59_000) // t = 69 s
+        assertEquals(1, sink.flushed.size)
+        advanceTimeBy(1_100)
+        assertEquals(2, sink.flushed.size)
+    }
+
+    @Test fun policyIsReappliedAtFlush() = runTest {
+        val sink = Recorder()
+        var minimal = false
+        val relay = relay(sink, policy = { if (minimal) PolicyDecision.Locked else null })
+        relay.log(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER))
+        minimal = true
+        advanceTimeBy(61_000)
+        assertEquals(0, sink.flushed.size)
     }
 }
