@@ -4,7 +4,8 @@
 #
 # Fork-marker check (TRD §2.1 "Edits to upstream files", §7.2).
 #
-# Compares HEAD with the upstream FlorisBoard tag named in UPSTREAM.md. For every file that exists
+# Compares HEAD with the upstream FlorisBoard tag named in UPSTREAM.md (UPSTREAM.md, docs/FORK_PATCHES.md
+# and all file contents are read from HEAD, so commit before running). For every file that exists
 # in the upstream tag:
 #   - unchanged, or changed only by the global package rename
 #     (dev.patrickgold.florisboard -> com.manjul.aikeyboard, in content and in the path): OK;
@@ -36,7 +37,7 @@ NEW_PKG="com.manjul.aikeyboard"
 OLD_DIR="dev/patrickgold/florisboard"
 NEW_DIR="com/manjul/aikeyboard"
 
-TAG="$(sed -n 's/^| *Tag *| *`\([^`]*\)` *|.*$/\1/p' UPSTREAM.md | head -n 1)"
+TAG="$(git show HEAD:UPSTREAM.md | sed -n 's/^| *Tag *| *`\([^`]*\)` *|.*$/\1/p' | head -n 1)"
 if [ -z "$TAG" ]; then
     echo "check-fork-markers: could not read the upstream tag from UPSTREAM.md" >&2
     exit 2
@@ -46,10 +47,11 @@ if ! git rev-parse -q --verify "refs/tags/$TAG^{commit}" >/dev/null; then
     echo "  git fetch --no-tags --depth=1 https://github.com/florisboard/florisboard.git tag $TAG" >&2
     exit 2
 fi
-[ -f "$PATCHES_DOC" ] || { echo "check-fork-markers: $PATCHES_DOC is missing" >&2; exit 2; }
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/fork-markers.XXXXXX")"
 trap 'rm -f "$TMP"/*; rmdir "$TMP"' EXIT
+git show "HEAD:$PATCHES_DOC" > "$TMP/patches.md" 2>/dev/null \
+    || { echo "check-fork-markers: $PATCHES_DOC is missing at HEAD" >&2; exit 2; }
 
 # Expands {a,b} alternatives (not nested), one result per line.
 expand_braces() {
@@ -98,7 +100,7 @@ extract_patterns() {
         { printf '%s\n' "$cell" | grep -o '`[^`]*`' || true; } | tr -d '`' | while IFS= read -r tok; do
             if [ -n "$tok" ]; then expand_braces "$tok"; fi
         done
-    done < "$PATCHES_DOC"
+    done < "$TMP/patches.md"
 }
 
 extract_patterns main > "$TMP/listed"
