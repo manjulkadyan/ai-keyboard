@@ -27,6 +27,10 @@
             <action android:name="android.intent.action.MAIN"/>
             <category android:name="android.intent.category.LAUNCHER"/>
         </intent>
+        <!-- FORK(S1-voice): recognition services, for SpeechRecognizer.isRecognitionAvailable on API 30+ -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
     </queries>
 
     <!-- dataExtractionRules (API 31+) gets its own file in the <data-extraction-rules> format (upstream

@@ -216,4 +216,10 @@ class ManifestHardeningTest {
             assertNotEquals("true", service.attr("directBootAware"), "$name must not be directBootAware")
         }
     }
+
+    @Test
+    fun `manifest queries the speech recognition service`() {
+        val actions = manifest.elements("queries").single().children("action").map { it.attr("name") }
+        assertTrue("android.speech.RecognitionService" in actions)
+    }
 }

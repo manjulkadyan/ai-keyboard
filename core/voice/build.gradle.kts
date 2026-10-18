@@ -10,8 +10,14 @@ plugins {
     alias(libs.plugins.aikeyboard.android.library)
 }
 
+apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
+
 android {
     namespace = "com.manjul.aikeyboard.core.voice"
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -20,5 +26,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.junit4)
     testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
     testRuntimeOnly(libs.junit.vintage.engine)
 }

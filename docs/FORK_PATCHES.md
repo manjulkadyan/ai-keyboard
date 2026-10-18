@@ -77,6 +77,7 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-onboarding | Start destination is onboarding unless `onboardingDone` and the keyboard is enabled and selected (read once before `setContent`, 1 s cap); splash held at most 1 s; `Setup.Screen` route renders `fork/onboarding/OnboardingScreen` (upstream `SetupScreen.kt` is kept, unused, untouched); Home card text "Select AI Keyboard as your keyboard" |
 | `app/src/main/AndroidManifest.xml` | S1-onboarding | `RECORD_AUDIO` permission (requested only after the voice notice) |
 | `app/build.gradle.kts`, `gradle/libs.versions.toml` | S1-onboarding | Turbine and Compose UI test (`ui-test-junit4`, `ui-test-manifest` as `debugImplementation`, versions from the BOM) for the onboarding tests; the commented `testImplementation(composeBom)` line is kept |
+| `app/src/main/AndroidManifest.xml` | S1-voice | `<queries>` entry for `android.speech.RecognitionService` so `SpeechRecognizer.isRecognitionAvailable` sees recognition services on API 30+ |
 
 ## Marker-exempt files
 
