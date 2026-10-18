@@ -7,14 +7,16 @@ package com.manjul.aikeyboard.core.voice.platform
 
 import android.content.Context
 import android.media.AudioManager
-import org.robolectric.RuntimeEnvironment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
@@ -39,7 +41,15 @@ class AudioFocusHolderTest {
         val holder = AudioFocusHolder(audioManager)
         holder.acquire()
         holder.release()
+        val first = shadowOf(audioManager).lastAbandonedAudioFocusRequest
+        // Another holder abandons in between; a second abandon by the first would overwrite this.
+        val other = AudioFocusHolder(audioManager)
+        other.acquire()
+        other.release()
+        val second = shadowOf(audioManager).lastAbandonedAudioFocusRequest
+        assertNotSame(first, second)
         holder.release()
+        assertSame(second, shadowOf(audioManager).lastAbandonedAudioFocusRequest)
         assertFalse(holder.isHeld)
     }
 }

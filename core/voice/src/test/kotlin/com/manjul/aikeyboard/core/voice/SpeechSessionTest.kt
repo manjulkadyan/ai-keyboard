@@ -450,6 +450,14 @@ class SpeechSessionTest {
         assertTrue(r.session.isSegmentedSupported(EngineKind.WHISPER, "en"))
     }
 
+    @Test fun blankFinalWithoutSegmentsKeepsSegmentedSupported() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        r.l.onFinal("")
+        assertTrue(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
+    }
+
     @Test fun segmentsCommitAndKeepSegmentedSupported() = runSession {
         val r = rig()
         r.session.output.test {

@@ -17,6 +17,9 @@ import android.speech.SpeechRecognizer
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.SpeechEngine
 
+/** createOnDeviceSpeechRecognizer exists from API 31 (S). */
+internal fun useOnDeviceFactory(onDevice: Boolean, sdkInt: Int): Boolean = onDevice && sdkInt >= Build.VERSION_CODES.S
+
 /**
  * Recognizer extras. [sdkInt] is a parameter so the API 30 / 33 differences are testable.
  * Formatting and segmented sessions exist from API 33; [segmented] is decided by the caller
@@ -56,7 +59,7 @@ class PlatformSpeechEngine(
     override fun start(lang: String, listener: SpeechEngine.Listener) = onMain {
         if (destroyed) return@onMain
         recognizer?.destroy()
-        val r = if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val r = if (useOnDeviceFactory(onDevice, Build.VERSION.SDK_INT)) {
             SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         } else {
             SpeechRecognizer.createSpeechRecognizer(context)

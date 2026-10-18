@@ -62,6 +62,17 @@ class SpeechEngineSelectorTest {
                 EngineChoice.Unavailable("offline_no_model", offerSystemDownload = false, offerWhisperDownload = false),
             ),
             Case(
+                "sdk 30 offline with onDevice flag set",
+                Caps(sdkInt = 30, onDevice = true), false, false,
+                EngineChoice.Unavailable("offline_no_model", offerSystemDownload = false, offerWhisperDownload = false),
+            ),
+            Case(
+                "whisper ready but not enabled, offline",
+                Caps(onDevice = false, modelReady = true, whisperEnabled = false), false, false,
+                EngineChoice.Unavailable("offline_no_model", offerSystemDownload = true, offerWhisperDownload = false),
+            ),
+            Case("preferWhisper, model ready, lang not enabled", Caps(modelReady = true, whisperEnabled = false), true, true, use(EngineKind.WHISPER)),
+            Case(
                 "offline, on-device lacks lang",
                 Caps(supports = false), false, false,
                 EngineChoice.Unavailable("lang_unsupported", offerSystemDownload = true, offerWhisperDownload = false),

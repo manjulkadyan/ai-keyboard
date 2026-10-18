@@ -10,7 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import org.robolectric.RuntimeEnvironment
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.SpeechEngine
 import org.junit.Assert.assertEquals
@@ -19,6 +18,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
@@ -69,6 +69,22 @@ class PlatformSpeechEngineTest {
         assertFalse(intent.hasExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING))
         assertFalse(intent.hasExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION))
         assertTrue(intent.getBooleanExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false))
+    }
+
+    @Test
+    fun onDeviceFactoryFromApi31() {
+        assertFalse(useOnDeviceFactory(onDevice = true, sdkInt = 30))
+        assertTrue(useOnDeviceFactory(onDevice = true, sdkInt = 31))
+        assertTrue(useOnDeviceFactory(onDevice = true, sdkInt = 33))
+        assertFalse(useOnDeviceFactory(onDevice = false, sdkInt = 34))
+    }
+
+    @Test
+    fun onDeviceEngineStartsOnDeviceRecognizer() {
+        val engine = PlatformSpeechEngine(context, onDevice = true, segmented = false, mainHandler = Handler(Looper.getMainLooper()))
+        engine.start("en-US", Recorder())
+        assertEquals(EngineKind.SYSTEM_ON_DEVICE, engine.kind)
+        assertEquals("en-US", latest().lastRecognizerIntent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE))
     }
 
     private fun latest() = shadowOf(org.robolectric.shadows.ShadowSpeechRecognizer.getLatestSpeechRecognizer())

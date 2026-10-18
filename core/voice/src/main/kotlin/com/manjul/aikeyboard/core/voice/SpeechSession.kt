@@ -227,7 +227,7 @@ class SpeechSession(
         override fun onFinal(text: String) {
             if (!current()) return
             val kind = engine?.kind
-            if (kind != null && continuous && engine?.supportsPartials == true && !sawSegment) segmentedSupported[segKey(kind, lang)] = false
+            if (kind != null && continuous && engine?.supportsPartials == true && !sawSegment && text.isNotBlank()) segmentedSupported[segKey(kind, lang)] = false
             pendingPartial = null
             restarts = 0
             commit(text)
