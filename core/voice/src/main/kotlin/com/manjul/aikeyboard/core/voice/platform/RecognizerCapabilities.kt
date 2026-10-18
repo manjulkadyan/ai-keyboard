@@ -57,28 +57,28 @@ class PlatformRecognizerCapabilities(
                 mainHandler.post {
                     var recognizer: SpeechRecognizer? = null
                     runCatching {
-                        recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context).also { r ->
-                            cont.invokeOnCancellation { mainHandler.post { r.destroy() } }
-                            val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
-                            r.checkRecognitionSupport(
-                                intent,
-                                context.mainExecutor,
-                                object : RecognitionSupportCallback {
-                                    override fun onSupportResult(recognitionSupport: RecognitionSupport) {
-                                        val ok = languageInstalled(lang, recognitionSupport.installedOnDeviceLanguages)
-                                        r.destroy()
-                                        if (cont.isActive) cont.resume(ok)
-                                    }
+                        val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                        recognizer = r
+                        cont.invokeOnCancellation { mainHandler.post { r.destroy() } }
+                        val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+                        r.checkRecognitionSupport(
+                            intent,
+                            context.mainExecutor,
+                            object : RecognitionSupportCallback {
+                                override fun onSupportResult(recognitionSupport: RecognitionSupport) {
+                                    val ok = languageInstalled(lang, recognitionSupport.installedOnDeviceLanguages)
+                                    r.destroy()
+                                    if (cont.isActive) cont.resume(ok)
+                                }
 
-                                    override fun onError(error: Int) {
-                                        r.destroy()
-                                        if (cont.isActive) cont.resume(null)
-                                    }
-                                },
-                            )
-                        }
+                                override fun onError(error: Int) {
+                                    r.destroy()
+                                    if (cont.isActive) cont.resume(null)
+                                }
+                            },
+                        )
                     }.onFailure {
                         runCatching { recognizer?.destroy() }
                         if (cont.isActive) cont.resume(null)

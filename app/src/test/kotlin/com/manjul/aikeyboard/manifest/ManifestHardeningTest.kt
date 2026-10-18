@@ -7,8 +7,6 @@ package com.manjul.aikeyboard.manifest
 
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
-import org.w3c.dom.Document
-import org.w3c.dom.Element
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -16,6 +14,8 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import org.w3c.dom.Document
+import org.w3c.dom.Element
 
 /**
  * TRD §6.3 / §7.1 "Manifest/config tests" over the source manifest and XML config of :app:
