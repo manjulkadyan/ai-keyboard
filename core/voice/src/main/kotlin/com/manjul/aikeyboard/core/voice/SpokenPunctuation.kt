@@ -5,6 +5,8 @@
 
 package com.manjul.aikeyboard.core.voice
 
+import java.util.regex.Pattern
+
 /** Replaces spoken punctuation words ("comma") with the symbol. Whole words only, Unicode aware. */
 object SpokenPunctuation {
     private const val NL = "\n"
@@ -29,7 +31,11 @@ object SpokenPunctuation {
             // Lookarounds on letters/marks/digits instead of \b, which is ASCII-centric for Urdu, Hindi, Arabic.
             val trailing = if (symbol == NL) """[ \t]*""" else ""
             Rule(
-                Regex("""(?iu)[ \t]*(?<![\p{L}\p{M}\p{N}])$phrase(?![\p{L}\p{M}\p{N}])$trailing""", emptySet()),
+                Pattern.compile(
+                    """[ \t]*(?<![\p{L}\p{M}\p{N}])$phrase(?![\p{L}\p{M}\p{N}])$trailing""",
+                    // Explicit flags: inline (?u) is not valid in Android's ICU regex.
+                    Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE,
+                ).toRegex(),
                 symbol,
             )
         }
