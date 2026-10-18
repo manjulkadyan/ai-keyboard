@@ -18,7 +18,7 @@ import os
 import subprocess
 
 PULL_CMD = "adb shell".encode("utf-8")
-PULL_CMD_INPUT = """run-as dev.patrickgold.florisboard.debug
+PULL_CMD_INPUT = """run-as com.manjul.aikeyboard.debug
 cat no_backup/devtools/system_locales.tsv
 exit""".encode("utf-8")
 
@@ -33,7 +33,7 @@ XML_CONFIG_HEADER = \
 <!-- Last update: {timestamp} -->
 <spell-checker xmlns:android="http://schemas.android.com/apk/res/android"
     android:label="@string/floris_app_name"
-    android:settingsActivity="dev.patrickgold.florisboard.SettingsLauncherAlias">
+    android:settingsActivity="com.manjul.aikeyboard.SettingsLauncherAlias">
 """
 
 XML_CONFIG_SUBTYPE = \

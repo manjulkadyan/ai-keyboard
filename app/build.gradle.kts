@@ -50,7 +50,7 @@ kotlin {
 }
 
 android {
-    namespace = "dev.patrickgold.florisboard"
+    namespace = "com.manjul.aikeyboard"
     compileSdk = projectCompileSdk.toInt()
     buildToolsVersion = tools.versions.buildTools.get()
     ndkVersion = tools.versions.ndk.get()
@@ -67,7 +67,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.patrickgold.florisboard"
+        applicationId = "com.manjul.aikeyboard"
         minSdk = projectMinSdk.toInt()
         targetSdk = projectTargetSdk.toInt()
         versionCode = projectVersionCode.toInt()
