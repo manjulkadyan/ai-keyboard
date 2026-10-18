@@ -7,11 +7,15 @@ package com.manjul.aikeyboard.fork.onboarding
 
 import android.content.Context
 import com.manjul.aikeyboard.lib.util.InputMethodUtils
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Whether our IME is enabled in system settings and whether it is the selected one. */
@@ -23,10 +27,11 @@ interface ImeStatusSource {
 private const val POLL_MS = 500L
 
 /**
- * Production [ImeStatusSource] over [InputMethodUtils]. Polls every [POLL_MS] while collected and re-checks
- * at once on [recheck] (called from the activity's onResume, when the user returns from system settings).
+ * Production [ImeStatusSource] over [InputMethodUtils]. One poll every [POLL_MS] feeds both flows (shared in
+ * [scope] while collected); [recheck] re-reads at once (called from onResume, when the user returns from
+ * system settings).
  */
-class InputMethodImeStatus(context: Context) : ImeStatusSource {
+class InputMethodImeStatus(context: Context, scope: CoroutineScope) : ImeStatusSource {
     private val appContext = context.applicationContext
     private val trigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -34,13 +39,13 @@ class InputMethodImeStatus(context: Context) : ImeStatusSource {
         trigger.tryEmit(Unit)
     }
 
-    override val enabled: Flow<Boolean> = polled { InputMethodUtils.isFlorisboardEnabled(appContext) }
-    override val selected: Flow<Boolean> = polled { InputMethodUtils.isFlorisboardSelected(appContext) }
-
-    private fun polled(read: () -> Boolean): Flow<Boolean> = flow {
+    private val status: Flow<Pair<Boolean, Boolean>> = flow {
         while (true) {
-            emit(read())
+            emit(InputMethodUtils.isFlorisboardEnabled(appContext) to InputMethodUtils.isFlorisboardSelected(appContext))
             withTimeoutOrNull(POLL_MS) { trigger.first() }
         }
-    }.distinctUntilChanged()
+    }.distinctUntilChanged().shareIn(scope, SharingStarted.WhileSubscribed(), replay = 1)
+
+    override val enabled: Flow<Boolean> = status.map { it.first }.distinctUntilChanged()
+    override val selected: Flow<Boolean> = status.map { it.second }.distinctUntilChanged()
 }

@@ -279,7 +279,8 @@ object Routes {
                 ) + fadeOut(spring(stiffness = Spring.StiffnessMedium))
             },
         ) {
-            // FORK(S1-onboarding): the setup route shows the new onboarding flow; upstream SetupScreen stays, unused
+            // FORK(S1-onboarding): the setup route shows the new onboarding flow; upstream SetupScreen stays, unused;
+            // its notification-permission step is deferred (ruling R17)
             composable<Setup.Screen> { OnboardingScreen() }
 
             composableWithDeepLink(Settings.Home::class) { HomeScreen() }

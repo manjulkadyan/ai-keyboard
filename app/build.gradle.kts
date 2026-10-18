@@ -224,6 +224,7 @@ apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
 dependencies {
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
+    // testImplementation(composeBom)
     // androidTestImplementation(composeBom)
 
     implementation(libs.androidx.activity.compose)
@@ -284,8 +285,11 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testRuntimeOnly(libs.junit.vintage.engine)
-    // FORK(S1-onboarding): onboarding view model tests
+    // FORK(S1-onboarding): onboarding view model and screen tests
     testImplementation(libs.turbine)
+    testImplementation(platform(composeBom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }

@@ -115,7 +115,7 @@ google-ump = { module = "com.google.android.ump:user-messaging-platform", versio
 androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "androidx-datastore" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine" }
-# FORK(S1-onboarding): onboarding view model tests (Turbine)
+# FORK(S1-onboarding): onboarding tests (Turbine, Compose UI test; versions from the Compose BOM)
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }

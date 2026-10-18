@@ -69,7 +69,7 @@ class OnboardingViewModel(
     val state: StateFlow<OnboardingUiState> = _state.asStateFlow()
 
     private var startedAt = 0L
-    /** Already onboarded once, but the IME got disabled or deselected: set up again, skipping the language step. */
+    /** Already onboarded once, but the IME got disabled or deselected: set up again, skipping the language step; no funnel events. */
     private var reentry = false
     private var lastEnabled = false
     private var lastSelected = false
@@ -112,11 +112,11 @@ class OnboardingViewModel(
         lastEnabled = enabled
         lastSelected = selected
         if (_state.value.step == OnboardingStep.ENABLE && enabled) {
-            analytics(EventCatalog.imeEnabled(secondsSinceStart()))
+            if (!reentry) analytics(EventCatalog.imeEnabled(secondsSinceStart()))
             goTo(OnboardingStep.SELECT)
         }
         if (_state.value.step == OnboardingStep.SELECT && selected) {
-            analytics(EventCatalog.imeSelected(secondsSinceStart()))
+            if (!reentry) analytics(EventCatalog.imeSelected(secondsSinceStart()))
             if (reentry) finish(skipped = false) else goTo(OnboardingStep.LANGUAGES)
         }
     }
@@ -164,12 +164,14 @@ class OnboardingViewModel(
     private fun finish(skipped: Boolean) {
         _state.update { it.copy(step = OnboardingStep.DONE) }
         scope.launch { store.update { it.copy(onboardingDone = true, onboardingStep = OnboardingStep.DONE.ordinal) } }
-        analytics(EventCatalog.onboardingComplete(skipped))
+        if (!reentry) analytics(EventCatalog.onboardingComplete(skipped))
     }
 
+    /** Funnel timing is measured from `firstOpenAt` (ruling R16), not from the current session. */
     private fun secondsSinceStart() = ((clock() - startedAt) / 1000).coerceAtLeast(0)
 
     private fun logStepView(step: OnboardingStep) {
+        if (reentry) return // a user who finished onboarding once must not re-enter the funnel
         val event = when (step) {
             OnboardingStep.WELCOME -> StepEvent.ONE
             OnboardingStep.ENABLE -> StepEvent.TWO

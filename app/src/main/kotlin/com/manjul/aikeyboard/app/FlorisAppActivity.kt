@@ -50,15 +50,12 @@ import com.manjul.aikeyboard.app.setup.NotificationPermissionState
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.cacheManager
 import com.manjul.aikeyboard.featureSettingsStore // FORK(S1-onboarding)
-import com.manjul.aikeyboard.lib.util.InputMethodUtils // FORK(S1-onboarding)
-import kotlinx.coroutines.flow.first // FORK(S1-onboarding)
-import kotlinx.coroutines.withTimeoutOrNull // FORK(S1-onboarding)
 import com.manjul.aikeyboard.lib.FlorisLocale
 import com.manjul.aikeyboard.lib.compose.LocalPreviewFieldController
 import com.manjul.aikeyboard.lib.compose.PreviewKeyboardField
 import com.manjul.aikeyboard.lib.compose.rememberPreviewFieldController
 import com.manjul.aikeyboard.lib.util.AppVersionUtils
-import dev.patrickgold.jetpref.datastore.model.observeAsState
+import com.manjul.aikeyboard.lib.util.InputMethodUtils // FORK(S1-onboarding)
 import dev.patrickgold.jetpref.datastore.ui.ProvideDefaultDialogPrefStrings
 import org.florisboard.lib.android.AndroidVersion
 import org.florisboard.lib.android.hideAppIcon
@@ -67,6 +64,8 @@ import org.florisboard.lib.compose.ProvideLocalizedResources
 import org.florisboard.lib.compose.conditional
 import org.florisboard.lib.compose.stringRes
 import org.florisboard.lib.kotlin.collectIn
+import kotlinx.coroutines.flow.first // FORK(S1-onboarding)
+import kotlinx.coroutines.withTimeoutOrNull // FORK(S1-onboarding)
 import java.util.concurrent.atomic.AtomicBoolean
 
 // FORK(S1-onboarding)
@@ -95,11 +94,12 @@ class FlorisAppActivity : ComponentActivity() {
     // FORK(S1-onboarding)
     private val featureSettingsStore by featureSettingsStore()
     private var startAtHome = false
+    private var splashStart = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Splash screen should be installed before calling super.onCreate()
         // FORK(S1-onboarding): splash is held at most 1 s, even if the stores are slow to load
-        val splashStart = SystemClock.uptimeMillis()
+        splashStart = SystemClock.uptimeMillis()
         installSplashScreen().apply {
             setKeepOnScreenCondition {
                 !appContext.preferenceStoreLoaded.value && SystemClock.uptimeMillis() - splashStart < SPLASH_MAX_MS
@@ -136,7 +136,9 @@ class FlorisAppActivity : ComponentActivity() {
             }
             AppVersionUtils.updateVersionOnInstallAndLastUse(this, prefs)
             // FORK(S1-onboarding): Home only for a finished onboarding with the keyboard enabled and selected
-            val settings = withTimeoutOrNull(SPLASH_MAX_MS) { featureSettingsStore.flow.first() }
+            // On timeout we fall back to onboarding (it sends a finished user on to Home), never a blank window.
+            val remainingMs = (SPLASH_MAX_MS - (SystemClock.uptimeMillis() - splashStart)).coerceAtLeast(0)
+            val settings = withTimeoutOrNull(remainingMs) { featureSettingsStore.flow.first() }
             startAtHome = settings?.onboardingDone == true &&
                 InputMethodUtils.isFlorisboardEnabled(this) && InputMethodUtils.isFlorisboardSelected(this)
             setContent {
@@ -193,7 +195,7 @@ class FlorisAppActivity : ComponentActivity() {
         val navController = rememberNavController()
         val previewFieldController = rememberPreviewFieldController()
 
-
+        // FORK(S1-onboarding): isImeSetUp no longer decides the start destination (see startAtHome)
         CompositionLocalProvider(
             LocalNavController provides navController,
             LocalPreviewFieldController provides previewFieldController,

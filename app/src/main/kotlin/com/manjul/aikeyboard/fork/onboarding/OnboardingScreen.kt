@@ -33,14 +33,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
@@ -50,6 +52,10 @@ import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.fork.subtypes.MVP_LANGUAGE_TAGS
 import com.manjul.aikeyboard.lib.util.InputMethodUtils
 import com.manjul.aikeyboard.subtypeManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.florisboard.lib.compose.stringRes
 import java.util.Locale
 
@@ -61,27 +67,34 @@ fun systemDisclosureEngineKind(context: Context): DisclosureEngineKind =
         DisclosureEngineKind.SYSTEM_SERVICE
     }
 
+/** Keeps the view model across rotation, so a configuration change does not log the step view again. */
+internal class OnboardingHolder(context: Context) : ViewModel() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val imeStatus = InputMethodImeStatus(context, scope)
+    val vm = OnboardingViewModel(
+        store = context.featureSettingsStore().value,
+        imeStatus = imeStatus,
+        analytics = context.appContext().value.analytics.value::log,
+        ensureSubtypes = context.subtypeManager().value::ensureDefaultSubtypes,
+        clock = System::currentTimeMillis,
+        scope = scope,
+        systemLocaleTags = context.resources.configuration.locales.let { l -> List(l.size()) { l[it].toLanguageTag() } },
+    )
+
+    override fun onCleared() {
+        scope.cancel()
+    }
+}
+
 /** O1-O5 route content: builds the view model on the app singletons and leaves for Home when it reaches DONE. */
 @Composable
 fun OnboardingScreen(navController: NavController = LocalNavController.current) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val context = LocalContext.current.applicationContext
+    val activityContext = LocalContext.current
     val store = context.featureSettingsStore().value
-    val analytics = context.appContext().value.analytics.value
-    val subtypeManager = context.subtypeManager().value
-    val localeList = LocalConfiguration.current.locales
-    val imeStatus = remember { InputMethodImeStatus(context) }
-    val vm = remember {
-        OnboardingViewModel(
-            store = store,
-            imeStatus = imeStatus,
-            analytics = analytics::log,
-            ensureSubtypes = subtypeManager::ensureDefaultSubtypes,
-            clock = System::currentTimeMillis,
-            scope = scope,
-            systemLocaleTags = localeList.let { l -> List(l.size()) { l[it].toLanguageTag() } },
-        )
-    }
+    val holder = viewModel<OnboardingHolder>(factory = viewModelFactory { initializer { OnboardingHolder(context) } })
+    val vm = holder.vm
+    val imeStatus = holder.imeStatus
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { imeStatus.recheck() }
 
     val state by vm.state.collectAsState()
@@ -106,13 +119,13 @@ fun OnboardingScreen(navController: NavController = LocalNavController.current) 
                 title = R.string.onboarding__enable_title,
                 body = R.string.onboarding__enable_body,
                 button = R.string.onboarding__enable_button,
-                onButton = { InputMethodUtils.showImeEnablerActivity(context) },
+                onButton = { InputMethodUtils.showImeEnablerActivity(activityContext) },
             )
             OnboardingStep.SELECT -> InfoStep(
                 title = R.string.onboarding__select_title,
                 body = R.string.onboarding__select_body,
                 button = R.string.onboarding__select_button,
-                onButton = { InputMethodUtils.showImePicker(context) },
+                onButton = { InputMethodUtils.showImePicker(activityContext) },
             )
             OnboardingStep.LANGUAGES -> LanguagesStep(
                 preselected = state.defaultLanguageTags,
@@ -120,7 +133,7 @@ fun OnboardingScreen(navController: NavController = LocalNavController.current) 
                 onSkip = vm::skip,
             )
             OnboardingStep.TRY_IT -> TryItStep(
-                engineKind = { systemDisclosureEngineKind(context) },
+                engineKind = { systemDisclosureEngineKind(activityContext) },
                 store = store,
                 clock = System::currentTimeMillis,
                 micGranted = state.micGranted,

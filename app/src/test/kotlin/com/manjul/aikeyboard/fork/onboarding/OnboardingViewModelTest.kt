@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -84,7 +85,7 @@ class OnboardingViewModelTest {
             assertEquals(OnboardingStep.LANGUAGES, awaitItem().step)
         }
         assertEquals("5-15", named("ime_enabled").single().params["seconds_since_start_bucket"])
-        assertEquals(1, named("ime_selected").size)
+        assertEquals("15-30", named("ime_selected").single().params["seconds_since_start_bucket"])
     }
 
     @Test
@@ -166,6 +167,28 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingStep.SELECT, vm.state.value.step)
         ime.selected.value = true
         assertEquals(OnboardingStep.DONE, vm.state.value.step)
+    }
+
+    @Test
+    fun reentryLogsNoFunnelEvents() = runTest {
+        store.update { it.copy(onboardingDone = true, firstOpenAt = 5L) }
+        val ime = FakeIme(enabled = false, selected = false)
+        val vm = vm(ime)
+        assertEquals(OnboardingStep.ENABLE, vm.state.value.step)
+        ime.enabled.value = true
+        assertEquals(OnboardingStep.SELECT, vm.state.value.step)
+        ime.selected.value = true
+        assertEquals(OnboardingStep.DONE, vm.state.value.step)
+        assertEquals(emptyList(), events.filter {
+            it.name in setOf("onboarding_step_view", "ime_enabled", "ime_selected", "onboarding_complete", "onboarding_start")
+        })
+    }
+
+    @Test
+    fun recordVoiceConsentPersistsEvenWhenCallerIsCancelled() = runTest {
+        val job = scope.launch { recordVoiceConsent(store, 4242L) }
+        job.cancel()
+        assertEquals(4242L, store.flow.first { it.consentVoiceNoticeAt != 0L }.consentVoiceNoticeAt)
     }
 
     @Test

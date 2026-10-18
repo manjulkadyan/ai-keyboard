@@ -23,8 +23,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.florisboard.lib.compose.stringRes
+
+/** Records that the voice notice was agreed to; not cancellable, so dismissing the sheet cannot lose it. */
+suspend fun recordVoiceConsent(store: FeatureSettingsStore, now: Long) {
+    withContext(NonCancellable) { store.update { it.copy(consentVoiceNoticeAt = now) } }
+}
 
 /**
  * Voice notice shown before the first microphone request. It names the recognizer that will be used
@@ -55,8 +62,10 @@ fun VoiceDisclosureSheet(
                 TextButton(onClick = onDismiss) { Text(stringRes(R.string.onboarding__voice_notice_not_now)) }
                 Spacer(Modifier.weight(1f))
                 Button(onClick = {
-                    scope.launch { store.update { it.copy(consentVoiceNoticeAt = clock()) } }
-                    onAgree()
+                    scope.launch {
+                        recordVoiceConsent(store, clock())
+                        onAgree()
+                    }
                 }) { Text(stringRes(R.string.onboarding__voice_notice_agree)) }
             }
         }
