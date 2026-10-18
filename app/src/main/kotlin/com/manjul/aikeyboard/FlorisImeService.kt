@@ -112,6 +112,9 @@ import com.manjul.aikeyboard.lib.util.ViewUtils
 import com.manjul.aikeyboard.lib.util.debugSummarize
 import com.manjul.aikeyboard.lib.util.launchActivity
 import dev.patrickgold.jetpref.datastore.model.observeAsState
+// FORK(S1-policy): imports for the policy controller
+import android.app.KeyguardManager
+import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.flow.update
 import org.florisboard.lib.android.AndroidInternalR
@@ -146,6 +149,11 @@ class FlorisImeService : LifecycleInputMethodService() {
     companion object {
         private val InlineSuggestionUiSmallestSize = Size(0, 0)
         private val InlineSuggestionUiBiggestSize = Size(Int.MAX_VALUE, Int.MAX_VALUE)
+
+        // FORK(S1-policy): policy controller accessor for features (voice, smartbar, ...)
+        fun policyController(): ImePolicyController {
+            return checkNotNull(FlorisImeServiceReference.get()) { "IME service is not running" }.policyController
+        }
 
         fun currentInputConnection(): InputConnection? {
             return FlorisImeServiceReference.get()?.currentInputConnection
@@ -271,6 +279,17 @@ class FlorisImeService : LifecycleInputMethodService() {
 
     private val wallpaperChangeReceiver = WallpaperChangeReceiver()
 
+    // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. The keyguard state is read
+    // on each evaluation, never cached. Remote-config forced packages arrive in S3.
+    private val policyController by lazy {
+        val keyguardManager = getSystemService(KeyguardManager::class.java)
+        ImePolicyController(
+            store = featureSettingsStore().value,
+            keyguard = { keyguardManager?.isDeviceLocked ?: true },
+            forcedPackages = { emptySet() },
+        )
+    }
+
     init {
         setTheme(R.style.FlorisImeTheme)
     }
@@ -342,6 +361,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(wallpaperChangeReceiver)
+        policyController.onFinishInput() // FORK(S1-policy): drop in-flight work for the closed field
         FlorisImeServiceReference = WeakReference(null)
         inputWindowView = null
     }
@@ -349,6 +369,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     override fun onStartInput(info: EditorInfo?, restarting: Boolean) {
         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
         super.onStartInput(info, restarting)
+        policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
         editorInstance.handleStartInput(editorInfo)
@@ -398,12 +419,14 @@ class FlorisImeService : LifecycleInputMethodService() {
     override fun onFinishInputView(finishingInput: Boolean) {
         flogInfo { "finishing=$finishingInput" }
         super.onFinishInputView(finishingInput)
+        policyController.onFinishInputView() // FORK(S1-policy)
         editorInstance.handleFinishInputView()
     }
 
     override fun onFinishInput() {
         flogInfo { "(no args)" }
         super.onFinishInput()
+        policyController.onFinishInput() // FORK(S1-policy)
         editorInstance.handleFinishInput()
         NlpInlineAutofill.clearInlineSuggestions()
     }

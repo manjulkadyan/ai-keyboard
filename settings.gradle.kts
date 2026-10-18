@@ -60,6 +60,8 @@ include(":core:common")
 // FORK(S0-ads): app-process-only ads module (consent, placement registry, caps); never used by the IME
 include(":core:ads")
 include(":ime:policy")
+// FORK(S1-policy): feature settings store (DataStore)
+include(":core:datastore")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

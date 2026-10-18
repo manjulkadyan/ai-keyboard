@@ -50,6 +50,8 @@ import kotlinx.coroutines.launch
 import org.florisboard.lib.kotlin.io.deleteContentsRecursively
 import org.florisboard.lib.kotlin.tryOrNull
 import org.florisboard.libnative.dummyAdd
+// FORK(S1-policy): import for the fork settings store
+import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import java.lang.ref.WeakReference
 
 /**
@@ -82,6 +84,8 @@ class FlorisApplication : Application() {
     val nlpManager = lazy { NlpManager(this) }
     val subtypeManager = lazy { SubtypeManager(this) }
     val themeManager = lazy { ThemeManager(this) }
+    // FORK(S1-policy): fork-owned settings (DataStore), read by the policy controller
+    val featureSettingsStore = lazy { FeatureSettingsStore(this) }
 
     override fun onCreate() {
         super.onCreate()
@@ -172,3 +176,6 @@ fun Context.nlpManager() = this.florisApplication().nlpManager
 fun Context.subtypeManager() = this.florisApplication().subtypeManager
 
 fun Context.themeManager() = this.florisApplication().themeManager
+
+// FORK(S1-policy): accessor for the fork settings store
+fun Context.featureSettingsStore() = this.florisApplication().featureSettingsStore

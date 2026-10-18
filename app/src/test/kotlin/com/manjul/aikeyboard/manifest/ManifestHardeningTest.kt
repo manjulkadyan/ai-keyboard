@@ -12,6 +12,7 @@ import org.w3c.dom.Element
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -206,5 +207,13 @@ class ManifestHardeningTest {
             assertEquals("debug-overrides", (cert.parentNode.parentNode as Element).tagName, "User CAs are allowed only in debug-overrides")
         }
         assertTrue(manifest.elements("application").single().attr("usesCleartextTraffic") != "true")
+    }
+
+    @Test
+    fun `IME and spell checker services are not direct boot aware`() {
+        for (name in listOf(IME_SERVICE, SPELL_CHECKER_SERVICE)) {
+            val service = manifest.elements("service").single { qualify(it.attr("name")) == name }
+            assertNotEquals("true", service.attr("directBootAware"), "$name must not be directBootAware")
+        }
     }
 }

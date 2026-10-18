@@ -114,11 +114,14 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
             KeyboardMode.PHONE2,
             -> false
             else -> activeState.keyVariation != KeyVariation.PASSWORD &&
+                // FORK(S1-policy): no suggestions in sensitive fields
+                FlorisImeService.policyController().decision.value.allowSuggestionStrip &&
                 prefs.suggestion.enabled.get()// &&
             //!instance.inputAttributes.flagTextAutoComplete &&
             //!instance.inputAttributes.flagTextNoSuggestions
         }
-        activeState.isIncognitoMode = when (prefs.suggestion.incognitoMode.get()) {
+        val policyIncognito = !FlorisImeService.policyController().decision.value.allowLearning // FORK(S1-policy): sensitive fields never learn
+        activeState.isIncognitoMode = policyIncognito || when (prefs.suggestion.incognitoMode.get()) {
             IncognitoMode.FORCE_OFF -> false
             IncognitoMode.FORCE_ON -> true
             IncognitoMode.DYNAMIC_ON_OFF -> {

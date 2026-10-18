@@ -218,6 +218,9 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+// FORK(S1-policy): offline android-all jar for Robolectric (see the script header)
+apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
+
 dependencies {
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
@@ -265,10 +268,20 @@ dependencies {
     // (ImeAdIsolationTest; TRD §2.2, §11.1). Nothing calls it yet.
     implementation(projects.core.ads)
 
+    // FORK(S1-policy): fork settings store and the sensitive-field policy that FlorisImeService evaluates
+    implementation(projects.core.datastore)
+    implementation(projects.ime.policy)
+
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)
 
     testImplementation(libs.kotlin.test.junit5)
+    // FORK(S1-policy): Robolectric (JUnit 4) tests run on the JUnit 5 platform through the vintage engine
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testRuntimeOnly(libs.junit.vintage.engine)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }

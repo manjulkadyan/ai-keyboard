@@ -42,11 +42,12 @@
         <profileable android:shell="true"/>
 
         <!-- IME service -->
+        <!-- FORK(S1-policy): directBootAware="false" on the IME and spell checker; the policy and settings store need credential-encrypted storage -->
         <service
             android:name="com.manjul.aikeyboard.FlorisImeService"
             android:label="@string/floris_app_name"
             android:permission="android.permission.BIND_INPUT_METHOD"
-            android:directBootAware="true"
+            android:directBootAware="false"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.view.InputMethod"/>
@@ -55,10 +56,12 @@
         </service>
 
         <!-- Spellchecker service -->
+        <!-- FORK(S1-policy): directBootAware="false", see the IME service above -->
         <service
             android:name="com.manjul.aikeyboard.FlorisSpellCheckerService"
             android:label="@string/floris_app_name"
             android:permission="android.permission.BIND_TEXT_SERVICE"
+            android:directBootAware="false"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.service.textservice.SpellCheckerService"/>
