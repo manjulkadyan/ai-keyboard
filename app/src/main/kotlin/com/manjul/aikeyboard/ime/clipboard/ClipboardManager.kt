@@ -21,6 +21,7 @@ import android.content.Context
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.editorInstance
+import com.manjul.aikeyboard.fork.clipboard.ClipboardCaptureGate // FORK(S1-clipboard)
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDao
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
@@ -56,6 +57,8 @@ import java.io.Closeable
  */
 class ClipboardManager(
     context: Context,
+    // FORK(S1-clipboard): fail-closed capture gate (policy + sensitivity); injectable for tests
+    private val captureGate: ClipboardCaptureGate = ClipboardCaptureGate(),
 ) : AndroidClipboardManager_OnPrimaryClipChangedListener, Closeable {
     companion object {
         // 1 minute
@@ -204,6 +207,8 @@ class ClipboardManager(
 
                 val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true
                 if (!isEqual) {
+                    // FORK(S1-clipboard): sensitive or policy-blocked clips are neither stored nor cloned
+                    if (!captureGate.mayCapture(systemPrimaryClip)) return@launch
                     val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
                     primaryClip = item
                     insertOrMoveBeginning(item)
@@ -232,7 +237,10 @@ class ClipboardManager(
      * Adds a new item to the clipboard history (if enabled).
      */
     private fun insertOrMoveBeginning(newItem: ClipboardItem) {
-        if (prefs.clipboard.historyEnabled.get()) {
+        // FORK(S1-clipboard): fail-closed policy gate and sensitivity check
+        if (prefs.clipboard.historyEnabled.get() && captureGate.allowsHistory() &&
+            !captureGate.isSensitive(newItem.text, newItem.isSensitive)
+        ) {
             val historyElement = currentHistory.all.firstOrNull { it.type == ItemType.TEXT && it.text == newItem.text }
             if (historyElement != null) {
                 moveToTheBeginning(
@@ -265,9 +273,17 @@ class ClipboardManager(
     private fun enforceExpiryDate(clipHistory: ClipboardHistory) {
         val itemsToRemove = mutableSetOf<ClipboardItem>()
         if (prefs.clipboard.historyAutoCleanOldEnabled.get()) {
-            val nonPinnedItems = clipHistory.recent + clipHistory.other
-            val expiryTime = System.currentTimeMillis() - (prefs.clipboard.historyAutoCleanOldAfter.get() * 60 * 1000)
-            itemsToRemove.addAll(nonPinnedItems.filter { it.creationTimestampMs < expiryTime })
+            // FORK(S1-clipboard): TTL delete in the DAO; unpinned items only
+            val cutoff = ClipboardCaptureGate.expiryCutoffMs(
+                System.currentTimeMillis(), prefs.clipboard.historyAutoCleanOldAfter.get(),
+            )
+            val expired = clipHistory.all.filter { !it.isPinned && it.creationTimestampMs < cutoff }
+            ioScope.launch {
+                for (item in expired) {
+                    item.close(appContext)
+                }
+                clipHistoryDao?.deleteUnpinnedOlderThan(cutoff)
+            }
         }
         if (prefs.clipboard.historyAutoCleanSensitiveEnabled.get()) {
             val sensitiveData = clipHistory.all.filter { it.isSensitive }

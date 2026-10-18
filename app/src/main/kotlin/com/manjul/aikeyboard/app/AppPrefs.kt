@@ -125,11 +125,11 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         }
         val historyAutoCleanOldEnabled = boolean(
             key = "clipboard__history_auto_clean_old_enabled",
-            default = false,
+            default = true, // FORK(S1-clipboard): history expires by default
         )
         val historyAutoCleanOldAfter = int(
             key = "clipboard__history_auto_clean_old_after",
-            default = 20,
+            default = 1440, // FORK(S1-clipboard): minutes, 24 h
         )
         val historyAutoCleanSensitiveEnabled = boolean(
             key = "clipboard__history_auto_clean_sensitive_enabled",

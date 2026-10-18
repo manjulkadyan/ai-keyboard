@@ -271,6 +271,8 @@ dependencies {
     // FORK(S1-policy): fork settings store and the sensitive-field policy that FlorisImeService evaluates
     implementation(projects.core.datastore)
     implementation(projects.ime.policy)
+    // FORK(S1-clipboard): clipboard sensitivity classifier used by the capture gate
+    implementation(projects.core.privacy)
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)

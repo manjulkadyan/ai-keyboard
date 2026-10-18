@@ -310,6 +310,10 @@ interface ClipboardHistoryDao {
 
     @Query("DELETE FROM $CLIPBOARD_HISTORY_TABLE WHERE NOT isPinned")
     fun deleteAllUnpinned()
+
+    // FORK(S1-clipboard): TTL expiry; pinned items are never removed
+    @Query("DELETE FROM $CLIPBOARD_HISTORY_TABLE WHERE isPinned = 0 AND creationTimestampMs < :cutoff")
+    fun deleteUnpinnedOlderThan(cutoff: Long)
 }
 
 @Database(
@@ -342,7 +346,7 @@ abstract class ClipboardHistoryDatabase : RoomDatabase() {
                 .databaseBuilder(
                     context, ClipboardHistoryDatabase::class.java, CLIPBOARD_HISTORY_TABLE,
                 )
-                .fallbackToDestructiveMigration()
+                // FORK(S1-clipboard): no destructive fallback; a missing migration must fail loudly, not wipe data
                 .build()
         }
     }
@@ -390,7 +394,7 @@ abstract class ClipboardFilesDatabase : RoomDatabase() {
                 .databaseBuilder(
                     context, ClipboardFilesDatabase::class.java, CLIPBOARD_FILES_TABLE,
                 )
-                .fallbackToDestructiveMigration()
+                // FORK(S1-clipboard): no destructive fallback; a missing migration must fail loudly, not wipe data
                 .build()
         }
     }

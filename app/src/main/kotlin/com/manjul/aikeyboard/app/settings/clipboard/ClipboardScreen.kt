@@ -107,7 +107,7 @@ fun ClipboardScreen() = FlorisScreen {
                 title = stringRes(R.string.pref__clipboard__clean_up_after__label),
                 valueLabel = { pluralsRes(R.plurals.unit__minutes__written, it, "v" to it) },
                 min = 0,
-                max = 120,
+                max = 1440, // FORK(S1-clipboard): slider must reach the 24 h default
                 stepIncrement = 5,
                 enabledIf = { prefs.clipboard.historyEnabled isEqualTo true && prefs.clipboard.historyAutoCleanOldEnabled isEqualTo true },
             )
