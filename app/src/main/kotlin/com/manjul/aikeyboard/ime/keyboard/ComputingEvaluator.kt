@@ -18,6 +18,7 @@ package com.manjul.aikeyboard.ime.keyboard
 
 import android.content.Context
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock // FORK(S1-smartbar)
 import androidx.compose.material.icons.automirrored.filled.ArrowRightAlt
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -254,6 +255,7 @@ fun ComputingEvaluator.computeImageVector(data: KeyData): ImageVector? {
         KeyCode.SETTINGS -> {
             Icons.Default.Settings
         }
+        KeyCode.TOGGLE_PRIVATE_APP -> Icons.Default.Lock // FORK(S1-smartbar)
         KeyCode.SHIFT -> {
             when (evaluator.state.inputShiftState != InputShiftState.UNSHIFTED) {
                 true -> Icons.Default.KeyboardCapslock

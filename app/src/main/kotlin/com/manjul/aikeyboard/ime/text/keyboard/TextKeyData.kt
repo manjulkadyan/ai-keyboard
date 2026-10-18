@@ -149,6 +149,7 @@ data class TextKeyData(
                 TOGGLE_ACTIONS_EDITOR,
                 TOGGLE_INCOGNITO_MODE,
                 TOGGLE_AUTOCORRECT,
+                TOGGLE_PRIVATE_APP, // FORK(S1-smartbar)
             )
         }
 
@@ -512,6 +513,12 @@ data class TextKeyData(
             type = KeyType.FUNCTION,
             code = KeyCode.TOGGLE_INCOGNITO_MODE,
             label = "toggle_incognito_mode",
+        )
+        // FORK(S1-smartbar): predefined key data for [KeyCode.TOGGLE_PRIVATE_APP]
+        val TOGGLE_PRIVATE_APP = TextKeyData(
+            type = KeyType.FUNCTION,
+            code = KeyCode.TOGGLE_PRIVATE_APP,
+            label = "toggle_private_app",
         )
         /** Predefined key data for [KeyCode.TOGGLE_AUTOCORRECT] */
         val TOGGLE_AUTOCORRECT = TextKeyData(

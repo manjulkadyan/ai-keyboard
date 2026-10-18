@@ -71,6 +71,7 @@ import com.manjul.aikeyboard.app.settings.localization.SelectLocaleScreen
 import com.manjul.aikeyboard.app.settings.localization.SubtypeEditorScreen
 import com.manjul.aikeyboard.app.settings.media.MediaScreen
 import com.manjul.aikeyboard.app.settings.smartbar.SmartbarScreen
+import com.manjul.aikeyboard.fork.privacy.PrivateAppsScreen // FORK(S1-smartbar)
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
 import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
@@ -147,6 +148,11 @@ object Routes {
         @Serializable
         @Deeplink("settings/smartbar")
         object Smartbar
+
+        // FORK(S1-smartbar): Privacy > Private apps
+        @Serializable
+        @Deeplink("settings/privacy/private-apps")
+        object PrivateApps
 
         @Serializable
         @Deeplink("settings/typing")
@@ -299,6 +305,8 @@ object Routes {
             composableWithDeepLink(Settings.InputFeedback::class) { InputFeedbackScreen() }
 
             composableWithDeepLink(Settings.Smartbar::class) { SmartbarScreen() }
+
+            composableWithDeepLink(Settings.PrivateApps::class) { PrivateAppsScreen() } // FORK(S1-smartbar)
 
             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
 

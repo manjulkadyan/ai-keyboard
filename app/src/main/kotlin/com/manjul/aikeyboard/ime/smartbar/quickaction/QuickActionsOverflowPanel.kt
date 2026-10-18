@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.fork.smartbar.policyFiltered // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
 import com.manjul.aikeyboard.ime.theme.FlorisImeUi
 import com.manjul.aikeyboard.keyboardManager
@@ -49,15 +50,15 @@ fun QuickActionsOverflowPanel() {
     val actionArrangement by prefs.smartbar.actionArrangement.observeAsState()
     val evaluator by keyboardManager.activeSmartbarEvaluator.collectAsState()
 
-    val dynamicActions = actionArrangement.dynamicActions
+    val dynamicActions = actionArrangement.dynamicActions.policyFiltered() // FORK(S1-smartbar)
     val dynamicActionsCountToShow = when {
         dynamicActions.isEmpty() -> 0
         else -> {
             (dynamicActions.size - keyboardManager.smartbarVisibleDynamicActionsCount).coerceIn(dynamicActions.indices)
         }
     }
-    val visibleActions = remember(actionArrangement, dynamicActionsCountToShow) {
-        actionArrangement.dynamicActions.takeLast(dynamicActionsCountToShow)
+    val visibleActions = remember(dynamicActions, dynamicActionsCountToShow) {
+        dynamicActions.takeLast(dynamicActionsCountToShow) // FORK(S1-smartbar): same filtered list as the row
     }
 
     SnyggBox(

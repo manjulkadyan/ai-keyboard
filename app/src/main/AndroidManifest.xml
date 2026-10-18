@@ -19,6 +19,11 @@
         <intent>
             <action android:name="android.service.textservice.SpellCheckerService"/>
         </intent>
+        <!-- FORK(S1-smartbar): launcher apps, listed in Settings > Privacy > Private apps -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
     </queries>
 
     <!-- dataExtractionRules (API 31+) gets its own file in the <data-extraction-rules> format (upstream

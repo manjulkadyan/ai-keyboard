@@ -55,6 +55,8 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.fork.smartbar.PrivateLockIndicator // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.smartbar.policyFilteredOrNull // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
 import com.manjul.aikeyboard.ime.nlp.NlpInlineAutofill
 import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickActionButton
@@ -282,9 +284,11 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
         val actionArrangement by prefs.smartbar.actionArrangement.observeAsState()
         val evaluator by keyboardManager.activeSmartbarEvaluator.collectAsState()
 
+        // FORK(S1-smartbar): a sticky action the policy disallows (mic in a password field) is removed
+        val stickyAction = actionArrangement.stickyAction.policyFilteredOrNull()
         val action = when {
-            actionArrangement.stickyAction != null -> {
-                actionArrangement.stickyAction
+            stickyAction != null -> {
+                stickyAction
             }
 
             smartbarLayout == SmartbarLayout.SUGGESTIONS_ACTIONS_SHARED && sharedActionsExpanded -> {
@@ -322,6 +326,7 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .height(FlorisImeSizing.smartbarHeight),
     ) {
+        PrivateLockIndicator() // FORK(S1-smartbar): renders nothing unless the field is sensitive
         when (smartbarLayout) {
             SmartbarLayout.SUGGESTIONS_ONLY -> {
                 if (shouldShowInlineSuggestionsUi) {

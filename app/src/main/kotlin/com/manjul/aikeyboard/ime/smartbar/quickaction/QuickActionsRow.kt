@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.fork.smartbar.policyFiltered // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.smartbar.SmartbarLayout
 import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
 import com.manjul.aikeyboard.keyboardManager
@@ -54,6 +55,7 @@ fun QuickActionsRow(
     val actionArrangement by prefs.smartbar.actionArrangement.observeAsState()
     val sharedActionsExpanded by prefs.smartbar.sharedActionsExpanded.observeAsState()
 
+    // FORK(S1-smartbar): actions the policy decision disallows are removed, not greyed out
     val dynamicActions = remember(smartbarLayout, actionArrangement) {
         if (smartbarLayout == SmartbarLayout.ACTIONS_ONLY && actionArrangement.stickyAction != null) {
             buildList {
@@ -63,7 +65,7 @@ fun QuickActionsRow(
         } else {
             actionArrangement.dynamicActions
         }
-    }
+    }.policyFiltered() // FORK(S1-smartbar)
     val showOverflowAction = actionArrangement.stickyAction != null ||
         smartbarLayout != SmartbarLayout.SUGGESTIONS_ACTIONS_SHARED || !sharedActionsExpanded
 

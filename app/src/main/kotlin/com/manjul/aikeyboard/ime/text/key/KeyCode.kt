@@ -107,6 +107,7 @@ object KeyCode {
     const val TOGGLE_ACTIONS_EDITOR =       -243
     const val TOGGLE_INCOGNITO_MODE =       -244
     const val TOGGLE_AUTOCORRECT =          -245
+    const val TOGGLE_PRIVATE_APP =          -246 // FORK(S1-smartbar): makes the focused editor's app private
 
     const val URI_COMPONENT_TLD =           -255
 

@@ -25,6 +25,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.MutableLiveData
 import com.manjul.aikeyboard.FlorisImeService
+import com.manjul.aikeyboard.fork.privacy.makeAppPrivate // FORK(S1-smartbar)
+import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
@@ -94,6 +96,11 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     private val subtypeManager by context.subtypeManager()
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    // FORK(S1-smartbar): fail closed when the IME service (and with it the policy controller) is not running
+    private fun policyDecision(): PolicyDecision =
+        FlorisImeService.policyControllerOrNull()?.decision?.value ?: PolicyDecision.Locked
+
     val layoutManager = LayoutManager(context)
     private val keyboardCache = TextKeyboardCache()
 
@@ -745,7 +752,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             KeyCode.IME_UI_MODE_TEXT -> activeState.imeUiMode = ImeUiMode.TEXT
             KeyCode.IME_UI_MODE_MEDIA -> activeState.imeUiMode = ImeUiMode.MEDIA
             KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ImeUiMode.CLIPBOARD
-            KeyCode.VOICE_INPUT -> FlorisImeService.switchToVoiceInputMethod()
+            // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires; Task 11 replaces this handler
+            KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.switchToVoiceInputMethod()
             KeyCode.KANA_SWITCHER -> handleKanaSwitch()
             KeyCode.KANA_HIRA -> handleKanaHira()
             KeyCode.KANA_KATA -> handleKanaKata()
@@ -772,6 +780,10 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             }
             KeyCode.TOGGLE_INCOGNITO_MODE -> scope.launch { handleToggleIncognitoMode() }
             KeyCode.TOGGLE_AUTOCORRECT -> handleToggleAutocorrect()
+            // FORK(S1-smartbar): the package is read here (main thread) and never logged
+            KeyCode.TOGGLE_PRIVATE_APP -> editorInstance.activeInfo.packageName.let { pkg ->
+                scope.launch { appContext.makeAppPrivate(pkg) }
+            }
             KeyCode.UNDO -> editorInstance.performUndo()
             KeyCode.VIEW_CHARACTERS -> activeState.keyboardMode = KeyboardMode.CHARACTERS
             KeyCode.VIEW_NUMERIC -> activeState.keyboardMode = KeyboardMode.NUMERIC
@@ -992,6 +1004,9 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 KeyCode.CLIPBOARD_SELECT_ALL -> {
                     editorInfo.isRichInputEditor
                 }
+                // FORK(S1-smartbar): chips follow the policy decision (fail closed without a service)
+                KeyCode.VOICE_INPUT -> policyDecision().allowVoice
+                KeyCode.IME_UI_MODE_CLIPBOARD -> policyDecision().allowClipboardHistory
                 KeyCode.TOGGLE_INCOGNITO_MODE -> when (prefs.suggestion.incognitoMode.get()) {
                     IncognitoMode.FORCE_OFF, IncognitoMode.FORCE_ON -> false
                     IncognitoMode.DYNAMIC_ON_OFF -> !editorInfo.imeOptions.flagNoPersonalizedLearning

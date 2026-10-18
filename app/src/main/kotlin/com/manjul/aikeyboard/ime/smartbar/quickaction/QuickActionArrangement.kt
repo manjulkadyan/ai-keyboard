@@ -65,15 +65,21 @@ data class QuickActionArrangement(
     }
 
     companion object {
+        // FORK(S1-smartbar): Mic sticky, then Emoji, Clipboard and Settings (Translate and AI have no handler yet).
+        // The private-app action is last so it lands in the overflow panel. Upstream's other actions stay
+        // available through the actions editor.
         val Default = QuickActionArrangement(
             stickyAction = QuickAction.InsertKey(TextKeyData.VOICE_INPUT),
             dynamicActions = listOf(
-                QuickAction.InsertKey(TextKeyData.UNDO),
-                QuickAction.InsertKey(TextKeyData.REDO),
-                QuickAction.InsertKey(TextKeyData.SETTINGS),
-                QuickAction.InsertKey(TextKeyData.TOGGLE_INCOGNITO_MODE),
+                QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA), // FORK(S1-smartbar)
                 QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
-                QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA),
+                QuickAction.InsertKey(TextKeyData.SETTINGS),
+                QuickAction.InsertKey(TextKeyData.TOGGLE_PRIVATE_APP),
+            ),
+            hiddenActions = listOf( // FORK(S1-smartbar)
+                QuickAction.InsertKey(TextKeyData.UNDO),
+                QuickAction.InsertKey(TextKeyData.REDO), // FORK(S1-smartbar)
+                QuickAction.InsertKey(TextKeyData.TOGGLE_INCOGNITO_MODE),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_COMPACT_LAYOUT),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_AUTOCORRECT),
                 QuickAction.InsertKey(TextKeyData.ARROW_UP),
@@ -87,9 +93,7 @@ data class QuickActionArrangement(
                 QuickAction.InsertKey(TextKeyData.CLIPBOARD_SELECT_ALL),
                 QuickAction.InsertKey(TextKeyData.LANGUAGE_SWITCH),
                 QuickAction.InsertKey(TextKeyData.FORWARD_DELETE),
-                QuickAction.InsertKey(TextKeyData.IME_HIDE_UI),
-            ),
-            hiddenActions = listOf(
+                QuickAction.InsertKey(TextKeyData.IME_HIDE_UI), // FORK(S1-smartbar)
             ),
         )
     }

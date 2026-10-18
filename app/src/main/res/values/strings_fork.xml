@@ -28,4 +28,16 @@
     <string name="subtype__ur_pk" tools:ignore="MissingTranslation">اردو</string>
     <string name="subtype__id" tools:ignore="MissingTranslation">Bahasa Indonesia</string>
     <string name="subtype__hi_in" tools:ignore="MissingTranslation">हिन्दी</string>
+
+    <!-- Smartbar private lock indicator and the "Make this app private" quick action. -->
+    <string name="private_lock__description" tools:ignore="MissingTranslation">Private field</string>
+    <string name="private_lock__make_private" tools:ignore="MissingTranslation">Make this app private</string>
+    <string name="quick_action__toggle_private_app" tools:ignore="MissingTranslation">Make private</string>
+    <string name="quick_action__toggle_private_app__tooltip" tools:ignore="MissingTranslation">Make this app private</string>
+
+    <!-- Settings > Privacy > Private apps. -->
+    <string name="private_apps__title" tools:ignore="MissingTranslation">Private apps</string>
+    <string name="private_apps__summary" tools:ignore="MissingTranslation">In private apps the keyboard does not learn, suggest, or save anything.</string>
+    <string name="private_apps__suggested" tools:ignore="MissingTranslation">Suggested</string>
+    <string name="private_apps__all_apps" tools:ignore="MissingTranslation">All apps</string>
 </resources>

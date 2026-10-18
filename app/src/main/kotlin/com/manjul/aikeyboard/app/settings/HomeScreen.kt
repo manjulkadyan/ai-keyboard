@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock // FORK(S1-smartbar)
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.SmartButton
 import androidx.compose.material.icons.filled.Spellcheck
@@ -124,6 +125,12 @@ fun HomeScreen() = FlorisScreen {
             icon = Icons.Default.SmartButton,
             title = stringRes(R.string.settings__smartbar__title),
             onClick = { navController.navigate(Routes.Settings.Smartbar) },
+        )
+        // FORK(S1-smartbar): Privacy > Private apps
+        Preference(
+            icon = Icons.Default.Lock,
+            title = stringRes(R.string.private_apps__title),
+            onClick = { navController.navigate(Routes.Settings.PrivateApps) },
         )
         Preference(
             icon = Icons.Default.Spellcheck,
