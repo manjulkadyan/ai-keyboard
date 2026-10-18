@@ -70,6 +70,8 @@ include(":core:analytics")
 include(":core:voice")
 // FORK(S1-voice): voice typing inside the keyboard (controller, composing span, panel)
 include(":ime:voice-ui")
+// FORK(S1-whisper): vendored whisper.cpp + JNI bridge for on-device speech-to-text
+include(":lib:whisper")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

@@ -85,6 +85,7 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-voice | `VOICE_INPUT` toggles in-keyboard voice typing instead of switching to another voice IME; the S1-smartbar policy gate is kept |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt` | S1-voice | `voiceOwnsComposing` flag: while voice owns the composing region, `handleSelectionUpdate` does not treat the region as a word the editor must re-sync |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-voice | After `PrivateLockIndicator`, `smartbarVoicePanel()` replaces the rest of the main row while the voice panel is open |
+| `settings.gradle.kts`, `app/build.gradle.kts` | S1-whisper | `include(":lib:whisper")` (vendored whisper.cpp v1.9.5 + JNI bridge `libaikb_whisper.so`); `implementation(projects.lib.whisper)` |
 
 ## Marker-exempt files
 

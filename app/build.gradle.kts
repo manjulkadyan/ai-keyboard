@@ -277,6 +277,8 @@ dependencies {
     // FORK(S1-voice): speech session, platform engines and the in-keyboard voice UI
     implementation(projects.core.voice)
     implementation(projects.ime.voiceUi)
+    // FORK(S1-whisper): on-device whisper.cpp (libaikb_whisper.so); WhisperSpeechEngine builds on it
+    implementation(projects.lib.whisper)
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)
