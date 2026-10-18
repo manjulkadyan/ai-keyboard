@@ -561,8 +561,9 @@
     <string name="setup__select_ime__description">Aplikacja {app_name} jest teraz włączona w Twoim systemie. Aby aktywnie z niej korzystać, przełącz się na {app_name}, wybierając ją w oknie selektora danych wejściowych!</string>
     <string name="setup__select_ime__switch_keyboard_btn">Przełącz Klawiaturę</string>
     <string name="setup__grant_notification_permission__title">Zezwolenie na powiadomienia dotyczące raportów o awariach</string>
+    <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->
     <string name="setup__grant_notification_permission__description">Od Androida 13+ aplikacje muszą prosić o pozwolenie na
-        wysyłanie powiadomień. We Florisboard jest to używane tylko do otwierania ekranu raportu o awarii, w przypadku awarii.
+        wysyłanie powiadomień. W {app_name} jest to używane tylko do otwierania ekranu raportu o awarii, w przypadku awarii.
         Zezwolenie to można zmienić w dowolnym momencie w ustawieniach systemu.
     </string>
     <string name="setup__grant_notification_permission__btn">Przyznaj uprawnienie</string>

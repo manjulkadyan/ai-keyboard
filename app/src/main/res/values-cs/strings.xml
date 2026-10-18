@@ -608,7 +608,8 @@
     <string name="backup_and_restore__restore__success">Data úspěšně obnovena!</string>
     <string name="backup_and_restore__restore__failure">Nepodařilo se obnovit data: {error_message}</string>
     <!-- Crash Dialog strings -->
-    <string name="crash_dialog__title" comment="Title of crash dialog">Zpráva o chybě florisboardu</string>
+    <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->
+    <string name="crash_dialog__title" comment="Title of crash dialog">Zpráva o chybě AI Keyboard</string>
     <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->
     <string name="crash_dialog__description" comment="Description of crash dialog">Omlouváme se za potíže, ale aplikace AI Keyboard spadla kvůli neočekávané chybě.</string>
     <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->

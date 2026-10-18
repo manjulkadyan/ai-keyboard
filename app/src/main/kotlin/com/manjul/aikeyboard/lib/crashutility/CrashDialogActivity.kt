@@ -22,8 +22,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -33,7 +33,6 @@ import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceModel
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
-import org.florisboard.lib.android.stringRes
 import com.manjul.aikeyboard.lib.devtools.Devtools
 import com.manjul.aikeyboard.lib.devtools.LogTopic
 import com.manjul.aikeyboard.lib.devtools.flogWarning
@@ -73,16 +72,12 @@ class CrashDialogActivity : ComponentActivity() {
         setActionBar(toolbar)
 
         stacktraces = CrashUtility.getUnhandledStacktraces(this)
-        val versionName = buildString {
-            append("[")
-            append(BuildConfig.VERSION_NAME)
-            append("](")
-            if (BuildConfig.DEBUG) {
-                append(stringRes(R.string.florisboard__commit_by_hash_url, "hash" to BuildConfig.BUILD_COMMIT_HASH))
-            } else {
-                append(stringRes(R.string.florisboard__changelog_url, "version" to BuildConfig.VERSION_NAME))
-            }
-            append(")")
+        // FORK(S0-branding): plain version (plus commit hash in debug builds) instead of a markdown link to
+        // upstream's GitHub commit/release page, which does not describe our builds
+        val versionName = if (BuildConfig.DEBUG) {
+            "${BuildConfig.VERSION_NAME} [${BuildConfig.BUILD_COMMIT_HASH}]"
+        } else {
+            BuildConfig.VERSION_NAME
         }
         errorReport.apply {
             appendLine("#### Environment information")
@@ -110,10 +105,9 @@ class CrashDialogActivity : ComponentActivity() {
         }
         stacktrace.text = errorReport
 
-        reportInstructions.text =
-            reportInstructions.text.toString().format(
-                resources.getString(R.string.crash_dialog__bug_report_template)
-            )
+        // FORK(S0-branding): upstream's instructions tell the user to file the crash on FlorisBoard's GitHub
+        // issue tracker. We have no public tracker yet, so hide them; copy and share stay available.
+        reportInstructions.visibility = View.GONE
 
         copyToClipboard.setOnClickListener {
             val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE)
@@ -126,12 +120,15 @@ class CrashDialogActivity : ComponentActivity() {
             Toast.makeText(this, toastMessage, Toast.LENGTH_SHORT).show()
         }
 
+        // FORK(S0-branding): the "open issue tracker" button (FlorisBoard's GitHub issues) becomes a plain
+        // share-sheet for the crash text; nothing is sent anywhere unless the user picks a target
+        openBugReportForm.text = resources.getString(R.string.crash_dialog__share)
         openBugReportForm.setOnClickListener {
-            val browserIntent = Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse(resources.getString(R.string.florisboard__issue_tracker_url))
-            )
-            startActivity(browserIntent)
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, errorReport.toString())
+            }
+            startActivity(Intent.createChooser(sendIntent, null))
         }
 
         close.setOnClickListener {

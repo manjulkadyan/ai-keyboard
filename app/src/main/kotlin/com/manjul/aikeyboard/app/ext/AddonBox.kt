@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
@@ -44,15 +44,18 @@ import org.florisboard.lib.compose.defaultFlorisOutlinedBox
 import org.florisboard.lib.compose.stringRes
 import org.florisboard.lib.kotlin.curlyFormat
 
+// FORK(S0-branding): we have no add-ons store of our own; keep upstream's store UI switched off
+private const val ADDONS_STORE_ENABLED = false
+
 @Composable
 fun ImportExtensionBox(navController: NavController) {
-    val context = LocalContext.current
     FlorisOutlinedBox(
         modifier = Modifier.defaultFlorisOutlinedBox(),
     ) {
         Text(
             modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp),
-            text = stringRes(id = R.string.ext__home__info),
+            // FORK(S0-branding): info text without the (hidden) FlorisBoard Addons Store
+            text = stringRes(id = R.string.ext__home__info_import_only),
             style = MaterialTheme.typography.bodySmall,
         )
         Row(
@@ -60,13 +63,8 @@ fun ImportExtensionBox(navController: NavController) {
                 .fillMaxWidth()
                 .padding(horizontal = 6.dp),
         ) {
-            FlorisTextButton(
-                onClick = {
-                    context.launchUrl("https://${BuildConfig.FLADDONS_STORE_URL}/")
-                },
-                icon = Icons.Default.Shop,
-                text = stringRes(id = R.string.ext__home__visit_store),
-            )
+            // FORK(S0-branding): "Visit Addons Store" button removed; it opened upstream's store
+            // (BuildConfig.FLADDONS_STORE_URL, beta.addons.florisboard.org). Local import stays.
             Spacer(modifier = Modifier.weight(1f))
             FlorisTextButton(
                 onClick = {
@@ -81,6 +79,9 @@ fun ImportExtensionBox(navController: NavController) {
 
 @Composable
 fun UpdateBox(extensionIndex: List<Extension>) {
+    // FORK(S0-branding): "Search for updates" opens upstream's Addons Store (generateUpdateUrl uses
+    // BuildConfig.FLADDONS_STORE_URL), so the box is hidden everywhere it is used
+    if (!ADDONS_STORE_ENABLED) return
     val context = LocalContext.current
     FlorisOutlinedBox(
         modifier = Modifier.defaultFlorisOutlinedBox(),

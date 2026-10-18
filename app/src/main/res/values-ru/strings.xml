@@ -560,8 +560,9 @@
     <string name="setup__select_ime__description">{app_name} активирована. Чтобы ею пользоваться, переключитесь на {app_name} в окне способа ввода!</string>
     <string name="setup__select_ime__switch_keyboard_btn">Переключить клавиатуру</string>
     <string name="setup__grant_notification_permission__title">Разрешить уведомления об ошибках</string>
+    <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->
     <string name="setup__grant_notification_permission__description">Начиная с Android 13, приложения должны
-        запрашивать разрешение для отправки уведомлений. Florisboard будет использовать это только для отправки отчёта о сбое при вылете приложения.
+        запрашивать разрешение для отправки уведомлений. {app_name} будет использовать это только для отправки отчёта о сбое при вылете приложения.
         Данное разрешение всегда можно отозвать в настройках устройства.
     </string>
     <string name="setup__grant_notification_permission__btn">Предоставить разрешение</string>

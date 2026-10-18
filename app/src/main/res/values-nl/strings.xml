@@ -158,7 +158,8 @@
     <string name="pref__theme__day" comment="Label of the day group (day means light theme)">Dagthema</string>
     <string name="pref__theme__night" comment="Label of the night group (night means dark theme)">Nachtthema</string>
     <string name="settings__theme_manager__title_manage" comment="Title of the theme manager screen for managing installed and custom themes">Geïnstalleerde thema\'s beheren</string>
-    <string name="pref__theme__source_assets" comment="Label for the theme source field">Florisboard Apponderdelen</string>
+    <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->
+    <string name="pref__theme__source_assets" comment="Label for the theme source field">AI Keyboard Apponderdelen</string>
     <string name="pref__theme__source_internal" comment="Label for the theme source field">Intern geheugen</string>
     <string name="pref__theme__source_external" comment="Label for the theme source field">Externe leverancier</string>
     <string name="settings__theme_manager__title_day" comment="Title of the theme manager screen for day theme selection">Selecteer dagthema</string>
@@ -476,7 +477,8 @@
     <string name="setup__select_ime__description">{app_name} is nu ingeschakeld in uw systeem. Om het actief te gebruiken, schakel over naar {app_name} door het te selecteren in het invoerkeuzedialoogvenster!</string>
     <string name="setup__select_ime__switch_keyboard_btn">Van toetsenbord wisselen</string>
     <string name="setup__grant_notification_permission__title">Meldingen van crashrapporten toestaan</string>
-    <string name="setup__grant_notification_permission__description">Vanaf Android 13+ moeten apps toestemming vragen om meldingen te verzenden. In Florisboard wordt dit alleen gebruikt om bij een crash een crashrapportage te openen.
+    <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->
+    <string name="setup__grant_notification_permission__description">Vanaf Android 13+ moeten apps toestemming vragen om meldingen te verzenden. In {app_name} wordt dit alleen gebruikt om bij een crash een crashrapportage te openen.
 Deze toestemming kan op elk moment worden gewijzigd in de systeeminstellingen.    </string>
     <string name="setup__grant_notification_permission__btn">Toestemming verlenen</string>
     <string name="setup__finish_up__title">Afronden</string>

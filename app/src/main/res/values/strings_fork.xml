@@ -4,7 +4,18 @@
   Licensed under the Apache License, Version 2.0
 -->
 <!-- Strings added by the fork. Kept in a separate file so upstream string merges stay clean. -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Legal attribution (Apache-2.0 §4(d)); not translated on purpose. -->
     <string name="about__based_on_florisboard" translatable="false">Based on FlorisBoard, Apache-2.0</string>
+
+    <!-- Privacy policy shown on the About and Setup screens. TODO(OD-01): placeholder until the product
+         domain exists (RN-08); replace before any public release. -->
+    <string name="privacy_policy_url" translatable="false">https://example.com/privacy</string>
+
+    <!-- Extensions home info. Replaces upstream's ext__home__info, which points at the FlorisBoard Addons
+         Store (hidden in this fork). English only until our own translations exist. -->
+    <string name="ext__home__info_import_only" tools:ignore="MissingTranslation">You can import any extension file you have downloaded from the internet.</string>
+
+    <!-- Crash dialog: label of the share button that replaces upstream's "Open issue tracker" button. -->
+    <string name="crash_dialog__share" tools:ignore="MissingTranslation">Share</string>
 </resources>

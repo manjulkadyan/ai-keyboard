@@ -459,8 +459,9 @@
     <string name="setup__select_ime__description">У вашій системі ввімкнено {app_name}. Щоб активно використовувати його, перемкніться на {app_name}, вибравши його у діалоговому вікні вибору вводу!</string>
     <string name="setup__select_ime__switch_keyboard_btn">Перемкнути клавіатуру</string>
     <string name="setup__grant_notification_permission__title">Повідомлення про збої в роботі з дозволами</string>
+    <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->
     <string name="setup__grant_notification_permission__description">Починаючи з Android 13+, програми повинні запитувати дозвіл на
-        надсилання сповіщень. У Florisboard цей дозвіл використовується лише для того, щоб відкрити екран звіту про збій у разі збою.
+        надсилання сповіщень. У {app_name} цей дозвіл використовується лише для того, щоб відкрити екран звіту про збій у разі збою.
         Цей дозвіл можна будь-коли змінити в налаштуваннях системи.
     </string>
     <string name="setup__grant_notification_permission__btn">Надати дозвіл</string>

@@ -1,9 +1,7 @@
 <resources>
-    <string name="florisboard__repo_url" translatable="false">https://github.com/florisboard/florisboard</string>
-    <string name="florisboard__issue_tracker_url" translatable="false">https://github.com/florisboard/florisboard/issues</string>
-    <string name="florisboard__privacy_policy_url" translatable="false">https://florisboard.org/legal/privacy/</string>
-    <string name="florisboard__changelog_url" translatable="false">https://github.com/florisboard/florisboard/releases/v{version}</string>
-    <string name="florisboard__commit_by_hash_url" translatable="false">https://github.com/florisboard/florisboard/commit/{hash}</string>
+    <!-- FORK(S0-branding): removed florisboard__repo_url, __issue_tracker_url, __privacy_policy_url,
+         __changelog_url and __commit_by_hash_url. Users and crash reports must not be sent to upstream;
+         the privacy policy URL is our own `privacy_policy_url` in strings_fork.xml. -->
     <string name="florisboard__spell_checker_wiki_url" translatable="false">https://github.com/florisboard/florisboard/wiki/System-spell-checker-service</string>
     <string name="florisboard__theme_editor_wiki_url" translatable="false">https://github.com/florisboard/florisboard/wiki/Using-the-new-Theme-Editor</string>
     <!-- FORK(S0-rename): the upstream file path still uses the old package; link to a code search for KeyCode.kt instead -->

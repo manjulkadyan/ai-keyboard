@@ -558,8 +558,9 @@
     <string name="setup__select_ime__description">A {app_name} most már engedélyezve van a rendszerben. Hogy aktívan használja, váltson erre: {app_name} a bevitelkiválasztó párbeszédablakban!</string>
     <string name="setup__select_ime__switch_keyboard_btn">Billentyűzet váltása</string>
     <string name="setup__grant_notification_permission__title">Összeomlási jelentések értesítéseinek engedélyezése</string>
+    <!-- FORK(S0-branding): upstream product name replaced in user-visible text (Apache-2.0 §6) -->
     <string name="setup__grant_notification_permission__description">Az Android 13+ rendszertől kezdve az alkalmazásoknak engedélyt kell kérniük az
-        értesítések küldéséhez. A Florisboardban ez csak arra szolgál, hogy
+        értesítések küldéséhez. Az {app_name} alkalmazásban ez csak arra szolgál, hogy
         összeomlás esetén az összeomlási jelentés képernyője. Ez az engedély
         bármikor megváltoztatható a rendszerbeállításokban.
     </string>
