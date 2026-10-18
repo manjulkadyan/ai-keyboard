@@ -1,8 +1,9 @@
 # Copyright (C) 2026 AI Keyboard contributors
 # Licensed under the Apache License, Version 2.0
 #
-# PR stage (TRD §7.2, §11.8): fork-marker check, debug build, unit tests for every module, Android
-# Lint, ad-isolation manifest checks and the 16 KB native-library alignment check.
+# PR stage (TRD §7.2, §11.8): fork-marker check, debug build, unit tests for every module, `check`
+# (Android Lint, ad-isolation manifest checks and anything else wired into it) and the 16 KB
+# native-library alignment check.
 
 name: PR
 
@@ -93,24 +94,22 @@ jobs:
       - name: Assemble debug
         run: ./gradlew assembleDebug --console=plain
 
+      # `test` without a project path runs in every project that has it (all JVM modules, plus every
+      # unit-test variant of the Android modules); build-logic is an included build, so it is named.
       - name: Unit tests (all modules)
         run: >-
           ./gradlew --console=plain
-          testDebugUnitTest
-          :lib:kotlin:test :ime:policy:test :lint-rules:test
+          test testDebugUnitTest
           :build-logic:convention:test
 
-      - name: Merged manifest checks (ad auto-init, exported components)
-        run: >
-          ./gradlew --console=plain
-          :app:verifyDebugNoAdAutoInit :app:verifyReleaseNoAdAutoInit
-          :app:verifyDebugExportedComponents :app:verifyReleaseExportedComponents
+      # `check` picks up every task wired into it, e.g. :app:verify<Variant>NoAdAutoInit and
+      # :app:verify<Variant>ExportedComponents (merged-manifest ad-isolation checks) and lint.
+      - name: Check (lint, merged-manifest verification)
+        run: ./gradlew --console=plain check :app:lintDebug
 
-      - name: Android Lint
-        run: ./gradlew --console=plain :app:lintDebug
-
+      # One libfl_native.so per ABI: lib/native builds all four default ABIs (no abiFilters).
       - name: 16 KB alignment of native libraries
-        run: scripts/check-16kb-alignment.sh app/build/outputs/apk/debug/app-debug.apk
+        run: scripts/check-16kb-alignment.sh --min-libs 4 app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload reports
         if: failure()

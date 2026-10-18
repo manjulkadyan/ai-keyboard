@@ -7,9 +7,11 @@
 # For each APK given:
 #   1. `zipalign -c -P 16 -v 4`: uncompressed .so entries must start on a 16 KB boundary in the zip;
 #   2. every lib/<abi>/*.so must have all ELF LOAD segments aligned to >= 16 KB (0x4000).
-# Fails on the first APK with any misaligned library. An APK without .so files passes.
+# Checks every APK and fails if any library is misaligned. With --min-libs N, each APK must also
+# contain at least N native libraries, so a build that silently dropped its .so files does not pass;
+# without it an APK with no .so files passes. unzip errors fail the check (except "no matching files").
 #
-# Usage: scripts/check-16kb-alignment.sh app/build/outputs/apk/debug/app-debug.apk [...]
+# Usage: scripts/check-16kb-alignment.sh [--min-libs N] app/build/outputs/apk/debug/app-debug.apk [...]
 # Tools: zipalign from build-tools (version from gradle/tools.versions.toml) and llvm-readelf from the
 # NDK (version from gradle/tools.versions.toml), located via ANDROID_HOME / ANDROID_SDK_ROOT or the
 # sdk.dir in local.properties. Override with ZIPALIGN=... and READELF=... if needed.
@@ -17,9 +19,36 @@
 
 set -euo pipefail
 
-if [ "$#" -eq 0 ]; then
-    echo "usage: $0 <apk> [<apk>...]" >&2
+usage() {
+    echo "usage: $0 [--min-libs N] <apk> [<apk>...]" >&2
     exit 2
+}
+
+MIN_LIBS=0
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --min-libs)
+            [ "$#" -ge 2 ] || usage
+            MIN_LIBS="$2"
+            shift 2
+            ;;
+        --min-libs=*)
+            MIN_LIBS="${1#--min-libs=}"
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*) usage ;;
+        *) break ;;
+    esac
+done
+case "$MIN_LIBS" in
+    ''|*[!0-9]*) echo "check-16kb-alignment: --min-libs needs a non-negative integer, got '$MIN_LIBS'" >&2; exit 2 ;;
+esac
+if [ "$#" -eq 0 ]; then
+    usage
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -71,7 +100,16 @@ for apk in "$@"; do
 
     out="$TMP/$(basename "$apk").d"
     mkdir -p "$out"
-    unzip -q -o "$apk" 'lib/*.so' -d "$out" 2>/dev/null || true
+    # Info-ZIP unzip exits 11 when no entry matches (an APK without native libraries); any other
+    # non-zero status is a real error (corrupt APK, disk full, ...).
+    rc=0
+    unzip -q -o "$apk" 'lib/*.so' -d "$out" > "$TMP/unzip.log" 2>&1 || rc=$?
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 11 ]; then
+        cat "$TMP/unzip.log"
+        echo "FAIL: $apk: unzip failed (exit $rc)"
+        errors=$((errors + 1))
+        continue
+    fi
     count=0
     while IFS= read -r so; do
         [ -n "$so" ] || continue
@@ -100,6 +138,10 @@ for apk in "$@"; do
 $(find "$out" -type f -name '*.so' | sort)
 EOF
     echo "   $count native librar$( [ "$count" -eq 1 ] && echo y || echo ies) checked"
+    if [ "$count" -lt "$MIN_LIBS" ]; then
+        echo "FAIL: $apk: $count native librar$( [ "$count" -eq 1 ] && echo y || echo ies) found, expected at least $MIN_LIBS"
+        errors=$((errors + 1))
+    fi
 done
 
 if [ "$errors" -gt 0 ]; then
