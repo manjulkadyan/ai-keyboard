@@ -11,37 +11,37 @@
   "themes": [
     {
       "id": "floris_day",
-      "label": "Floris Day",
+      "label": "Day",
       "authors": [ "patrickgold" ],
       "isNight": false
     },
     {
       "id": "floris_day_borderless",
-      "label": "Floris Day (Borderless)",
+      "label": "Day (Borderless)",
       "authors": [ "patrickgold" ],
       "isNight": false
     },
     {
       "id": "floris_night",
-      "label": "Floris Night",
+      "label": "Night",
       "authors": [ "patrickgold" ],
       "isNight": true
     },
     {
       "id": "floris_night_borderless",
-      "label": "Floris Night (Borderless)",
+      "label": "Night (Borderless)",
       "authors": [ "patrickgold" ],
       "isNight": true
     },
     {
       "id": "floris_pure_night",
-      "label": "Floris Pure Night",
+      "label": "Pure Night",
       "authors": [ "serebit" ],
       "isNight": true
     },
     {
       "id": "floris_pure_night_borderless",
-      "label": "Floris Pure Night (Borderless)",
+      "label": "Pure Night (Borderless)",
       "authors": [ "serebit" ],
       "isNight": true
     }

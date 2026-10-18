@@ -107,9 +107,15 @@ jobs:
       - name: Check (lint, merged-manifest verification)
         run: ./gradlew --console=plain check :app:lintDebug
 
-      # One libfl_native.so per ABI: lib/native builds all four default ABIs (no abiFilters).
+      # lib/native builds all four default ABIs (no abiFilters). Require libfl_native.so in each one,
+      # because a count alone would be satisfied by other libraries (androidx ships its own .so files).
       - name: 16 KB alignment of native libraries
-        run: scripts/check-16kb-alignment.sh --min-libs 4 app/build/outputs/apk/debug/app-debug.apk
+        run: |
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            unzip -l "$apk" "lib/$abi/libfl_native.so" > /dev/null || { echo "missing lib/$abi/libfl_native.so"; exit 1; }
+          done
+          scripts/check-16kb-alignment.sh --min-libs 4 "$apk"
 
       - name: Upload reports
         if: failure()
