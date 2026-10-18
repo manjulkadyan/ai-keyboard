@@ -273,6 +273,7 @@ dependencies {
     implementation(projects.ime.policy)
     // FORK(S1-clipboard): clipboard sensitivity classifier used by the capture gate
     implementation(projects.core.privacy)
+    implementation(projects.core.analytics) // FORK(S1-analytics): event catalog and relay
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)

@@ -64,6 +64,8 @@ include(":ime:policy")
 include(":core:datastore")
 // FORK(S1-clipboard): clipboard sensitivity classifier
 include(":core:privacy")
+// FORK(S1-analytics): event catalog and batched consent-aware relay
+include(":core:analytics")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

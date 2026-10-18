@@ -52,6 +52,10 @@ import org.florisboard.lib.kotlin.tryOrNull
 import org.florisboard.libnative.dummyAdd
 // FORK(S1-policy): import for the fork settings store
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+// FORK(S1-analytics): imports for the analytics relay
+import com.manjul.aikeyboard.core.analytics.BatchingRelay
+import com.manjul.aikeyboard.core.analytics.LogcatSink
+import com.manjul.aikeyboard.core.analytics.NoopSink
 import java.lang.ref.WeakReference
 
 /**
@@ -86,6 +90,16 @@ class FlorisApplication : Application() {
     val themeManager = lazy { ThemeManager(this) }
     // FORK(S1-policy): fork-owned settings (DataStore), read by the policy controller
     val featureSettingsStore = lazy { FeatureSettingsStore(this) }
+    // FORK(S1-analytics): batched, consent-aware analytics relay (Logcat in debug, no-op in release)
+    val analytics = lazy {
+        BatchingRelay(
+            sink = if (BuildConfig.DEBUG) LogcatSink else NoopSink,
+            clock = System::currentTimeMillis,
+            scope = scope,
+            optOut = { featureSettingsStore.value.current.analyticsOptOut },
+            policy = { FlorisImeService.policyControllerOrNull()?.decision?.value },
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
