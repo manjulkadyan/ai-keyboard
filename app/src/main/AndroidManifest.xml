@@ -43,11 +43,8 @@
 
         <!-- IME service -->
         <!-- FORK(S1-policy): directBootAware="false" on the IME and spell checker; the policy and settings store need credential-encrypted storage -->
-        <service
-            android:name="com.manjul.aikeyboard.FlorisImeService"
-            android:label="@string/floris_app_name"
-            android:permission="android.permission.BIND_INPUT_METHOD"
-            android:directBootAware="false"
+        <service android:name="com.manjul.aikeyboard.FlorisImeService" android:directBootAware="false"
+            android:label="@string/floris_app_name" android:permission="android.permission.BIND_INPUT_METHOD"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.view.InputMethod"/>
@@ -57,11 +54,9 @@
 
         <!-- Spellchecker service -->
         <!-- FORK(S1-policy): directBootAware="false", see the IME service above -->
-        <service
-            android:name="com.manjul.aikeyboard.FlorisSpellCheckerService"
+        <service android:name="com.manjul.aikeyboard.FlorisSpellCheckerService" android:directBootAware="false"
             android:label="@string/floris_app_name"
             android:permission="android.permission.BIND_TEXT_SERVICE"
-            android:directBootAware="false"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.service.textservice.SpellCheckerService"/>

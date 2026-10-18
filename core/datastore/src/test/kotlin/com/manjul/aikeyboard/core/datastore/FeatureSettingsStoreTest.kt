@@ -59,4 +59,17 @@ class FeatureSettingsStoreTest {
         store.update { it.copy(voiceSilenceMs = 10) }
         assertEquals(2000, store.flow.first().voiceSilenceMs)
     }
+
+    @Test
+    fun `corrupt file resets to defaults`() = runTest {
+        val file = File(app.filesDir, "datastore/feature_settings.json")
+        file.parentFile!!.mkdirs()
+        file.writeBytes(byteArrayOf(0x00, 0x7B, 0x7F, 0x13, 0x42))
+
+        val store = FeatureSettingsStore(app)
+
+        assertEquals(FeatureSettings(), store.flow.first())
+        store.update { it.copy(onboardingStep = 2) }
+        assertEquals(2, store.flow.first().onboardingStep)
+    }
 }

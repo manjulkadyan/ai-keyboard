@@ -9,6 +9,7 @@ import android.content.Context
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.MultiProcessDataStoreFactory
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.core.Serializer
 import java.io.File
 import java.io.InputStream
@@ -55,6 +56,7 @@ class FeatureSettingsStore(
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val dataStore: DataStore<FeatureSettings> = MultiProcessDataStoreFactory.create(
         serializer = FeatureSettingsSerializer,
+        corruptionHandler = ReplaceFileCorruptionHandler { FeatureSettingsSerializer.defaultValue },
         produceFile = { File(context.applicationContext.filesDir, "datastore/feature_settings.json") },
         scope = scope,
     )

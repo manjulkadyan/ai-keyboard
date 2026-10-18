@@ -287,6 +287,7 @@ class FlorisImeService : LifecycleInputMethodService() {
             store = featureSettingsStore().value,
             keyguard = { keyguardManager?.isDeviceLocked ?: true },
             forcedPackages = { emptySet() },
+            scope = lifecycleScope,
         )
     }
 

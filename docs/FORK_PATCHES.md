@@ -51,7 +51,7 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-policy | Lazy `featureSettingsStore` and `Context.featureSettingsStore()` accessor |
 | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy | Owns an `ImePolicyController` (keyguard read on every evaluation, no forced packages until S3); calls it from `onStartInput`, `onFinishInputView`, `onFinishInput`, `onDestroy`; companion `policyController()` accessor. `onStartInputView` needs no call: the decision is made in `onStartInput`, which always precedes it |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt` | S1-policy | `isIncognitoMode` is also true when the policy decision does not allow learning; composing is off when it does not allow the suggestion strip |
-| `app/src/main/AndroidManifest.xml` | S1-policy | `android:directBootAware="false"` on the IME and spell-checker services (was `true` / absent): the policy and settings store live in credential-encrypted storage. Guarded by `ManifestHardeningTest` |
+| `app/src/main/AndroidManifest.xml` | S1-policy | `android:directBootAware="false"` on the IME and spell-checker services (was `true` / absent): the policy and settings store live in credential-encrypted storage. Guarded by `ManifestHardeningTest`. The attributes share the `<service` line so the marker sits within 3 lines of each edit (per-hunk marker check); no behaviour change from that |
 
 ## Marker-exempt files
 

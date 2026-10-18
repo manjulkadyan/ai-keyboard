@@ -11,6 +11,11 @@ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import com.manjul.aikeyboard.ime.policy.SensitivityReason
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -25,8 +30,15 @@ import kotlin.test.assertTrue
 @Config(sdk = [34], application = android.app.Application::class)
 class ImePolicyControllerTest {
     private var locked = false
-    private val store = FeatureSettingsStore(RuntimeEnvironment.getApplication())
-    private val controller = ImePolicyController(store, keyguard = { locked }, forcedPackages = { emptySet() })
+    private val dispatcher = UnconfinedTestDispatcher()
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val store = FeatureSettingsStore(RuntimeEnvironment.getApplication(), dispatcher)
+    private val controller = ImePolicyController(store, keyguard = { locked }, forcedPackages = { emptySet() }, scope = scope)
+
+    @After
+    fun tearDown() {
+        scope.cancel()
+    }
 
     private fun text(pkg: String = "some.app") = EditorInfo().apply {
         packageName = pkg
@@ -101,5 +113,35 @@ class ImePolicyControllerTest {
         controller.onFinishInputView()
         assertNotEquals(before, controller.generation.value)
         assertFalse(controller.generation.isCurrent(before))
+    }
+
+    @Test
+    fun `settings that load after the first field lock it once`() = runTest {
+        controller.onStartInput(text("com.bank"), false)
+        assertTrue(controller.decision.value.allowVoice)
+        val seen = mutableListOf<PolicyDecision>()
+        controller.addRestrictionListener { seen += it }
+        val before = controller.generation.value
+
+        store.update { it.copy(privatePackages = setOf("com.bank")) }
+
+        assertEquals(1, seen.size)
+        assertTrue(SensitivityReason.PRIVATE_APP in controller.decision.value.reasons)
+        assertTrue(SensitivityReason.PRIVATE_APP in seen.single().reasons)
+        assertNotEquals(before, controller.generation.value)
+    }
+
+    @Test
+    fun `settings emission after finishing input does not resurrect a field`() = runTest {
+        controller.onStartInput(text("com.bank"), false)
+        controller.onFinishInput()
+        val denied = controller.decision.value
+        var calls = 0
+        controller.addRestrictionListener { calls++ }
+
+        store.update { it.copy(privatePackages = setOf("com.bank")) }
+
+        assertEquals(denied, controller.decision.value)
+        assertEquals(0, calls)
     }
 }
