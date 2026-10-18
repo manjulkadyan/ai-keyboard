@@ -44,5 +44,9 @@ gradlePlugin {
             id = "aikeyboard.module-rules"
             implementationClass = "com.manjul.aikeyboard.buildlogic.ModuleRulesPlugin"
         }
+        register("adIsolation") {
+            id = "aikeyboard.ad-isolation"
+            implementationClass = "com.manjul.aikeyboard.buildlogic.AdIsolationPlugin"
+        }
     }
 }

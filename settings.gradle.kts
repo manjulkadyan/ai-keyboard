@@ -57,6 +57,8 @@ include(":lib:snygg")
 
 // FORK(S0-modules): AI Keyboard modules (TRD §2.2). The upstream IME stays in :app for now.
 include(":core:common")
+// FORK(S0-ads): app-process-only ads module (consent, placement registry, caps); never used by the IME
+include(":core:ads")
 include(":ime:policy")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks

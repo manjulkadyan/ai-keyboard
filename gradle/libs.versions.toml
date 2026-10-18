@@ -38,6 +38,8 @@ javax-inject = "1"
 # Lint API for :lint-rules. Must stay at AGP version + 23 (AGP 8.12.0 -> lint 31.12.0).
 android-lint = "31.12.0"
 junit4 = "4.13.2"
+# :core:ads consent (Google UMP). 4.0.0 is the latest release on Google Maven (checked 2026-10-18)
+google-ump = "4.0.0"
 
 
 
@@ -102,6 +104,8 @@ android-lint-api = { module = "com.android.tools.lint:lint-api", version.ref = "
 android-lint-checks = { module = "com.android.tools.lint:lint-checks", version.ref = "android-lint" }
 android-lint-tests = { module = "com.android.tools.lint:lint-tests", version.ref = "android-lint" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
+# :core:ads
+google-ump = { module = "com.google.android.ump:user-messaging-platform", version.ref = "google-ump" }
 
 
 
@@ -127,3 +131,4 @@ aikeyboard-android-library = { id = "aikeyboard.android.library" }
 aikeyboard-android-library-compose = { id = "aikeyboard.android.library.compose" }
 aikeyboard-jvm-library = { id = "aikeyboard.jvm.library" }
 aikeyboard-module-rules = { id = "aikeyboard.module-rules" }
+aikeyboard-ad-isolation = { id = "aikeyboard.ad-isolation" }

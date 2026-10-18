@@ -27,6 +27,9 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/AndroidManifest.xml` | S0-hardening | `android:networkSecurityConfig="@xml/network_security_config"`; `android:dataExtractionRules` now points at the new `data_extraction_rules.xml` (upstream pointed it at the `full-backup-content` file, which is the wrong format for API 31+). `allowBackup="true"` kept, as TRD §6.3 requires |
 | `app/src/main/res/xml/backup_rules.xml` | S0-hardening | Removed the `database/floris_user_dictionary` include: learned/user-added words are user-typed content (TRD §6.3). Only `root/jetpref_datastore` (settings) and `file/ime` (installed extensions) are backed up; clipboard databases, `no_backup/clipboard_files`, crash data and caches are excluded by omission. XML comment marker at the top of the file |
 | `app/src/main/kotlin/com/manjul/aikeyboard/lib/crashutility/CrashUtility.kt` | S0-hardening | `@SuppressLint("ImeProcessTermination")` on `UncaughtExceptionHandler.uncaughtException`. **Justification:** this is the last step of the uncaught-exception handler; the process is already crashing and must terminate after the stacktrace is written (returning would leave a dead main thread). It is the only `killProcess`/`exitProcess` call in the codebase and is not reachable from normal IME or app flows |
+| `settings.gradle.kts` | S0-ads | `include(":core:ads")` |
+| `gradle/libs.versions.toml` | S0-ads | `google-ump` version (4.0.0, the latest release on Google Maven on 2026-10-18) and library, `aikeyboard-ad-isolation` plugin id, added inside the existing `# --- AI Keyboard ---` blocks |
+| `app/build.gradle.kts` | S0-ads | Applies `aikeyboard.ad-isolation` (merged-manifest auto-init check wired into `check`); `implementation(projects.core.ads)`. Nothing in `:app` calls `:core:ads` yet |
 | Deleted: `fastlane/`, `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `crowdin.yml`, `ROADMAP.md`, `AI_POLICY.md`, `LANGUAGEPACKS*.md`, `.idea/icon.svg` | S0-branding | Upstream store listings, project-process docs, CI that uses FlorisBoard secrets, and the FlorisBoard logo. `README.md` was rewritten for the fork |
 
 ## Decisions
@@ -72,8 +75,8 @@ that runs the plugin against a fixture build. Run them with `./gradlew :build-lo
 
 **Limitation:** because the upstream IME still lives in `:app`, and `:app` is allowed to depend on
 `:core:ads`, this Gradle rule cannot by itself keep ad code out of the keyboard. That guarantee comes
-from the class-reference test added together with `:core:ads` (and the process/auto-init measures in
-TRD §11.1). The Gradle rule protects our `:ime:*` modules.
+from the ad-isolation checks below (S0-ads) and the process/auto-init measures in TRD §11.1. The Gradle
+rule protects our `:ime:*` modules.
 
 ## Hardening baseline (S0-hardening)
 
@@ -103,3 +106,33 @@ translations, plus `WrongConstant`, `RestrictedApi`, `LocalContextConfigurationR
 baselined. Creating a real baseline (or fixing those errors) is a follow-up. Lint needs the Rust Android
 targets for `:lib:native`; without them, skip the CMake tasks with
 `-x ':lib:native:buildCMakeDebug[<abi>][fl_native]' -x ':lib:native:configureCMakeDebug[<abi>]'` per ABI.
+
+## Ads skeleton and IME isolation (S0-ads)
+
+New files (no markers needed), TRD §2.2, §2.3, §4.11, §11.1:
+
+- `:core:ads` (Android library, `aikeyboard.android.library`), app process only:
+  - `consent/ConsentManager` + `UmpConsentManager` (Google UMP 4.0.0). Every call takes an `Activity`;
+    constructing it touches nothing. `ConsentDebugConfig` forces a debug geography for debug builds.
+  - `placement/AdPlacement`, `AdPlacementId` (lower_snake_case), `AdFormat`, `FrequencyCap`,
+    `AdPlacementRegistry`. `AdPlacements.registry` is **empty**; Sprint 4 registers the PRD FR-27 placements.
+  - `cap/AdCapPolicy`: pure global + per-placement cap (defaults: interstitial and app-open share
+    1 per 3 min and 6 per rolling 24 h). `AdCapStateStore` is an interface; the DataStore implementation
+    comes with `:core:datastore`.
+  - `AdsInitializer.initialize(activity)`: UMP consent, then the `AdSdk` only if `canRequestAds()` and the
+    user is not ad-free. Sprint 0 ships `NoAdSdk`; the Google Mobile Ads SDK is **not** a dependency yet.
+  - Tests: `./gradlew :core:ads:test`.
+- IME isolation, source level: `app/src/test/.../isolation/ImeAdIsolationTest.kt` scans the IME code
+  (`com.manjul.aikeyboard.ime.*`, `...lib.*`, `FlorisImeService`, `FlorisSpellCheckerService`,
+  `FlorisApplication`, and the upstream `:lib:*` modules) and fails on any reference (import or
+  fully-qualified) to `com.manjul.aikeyboard.core.ads`, `com.google.android.gms.ads`,
+  `com.google.android.libraries.ads` or `com.google.android.ump`. Because the IME also uses
+  `com.manjul.aikeyboard.app.*` (preferences, routes), the rest of `:app` may only use ads from the
+  allow-listed `com.manjul.aikeyboard.app.ads` package, which the IME code must not reference either.
+- IME isolation, manifest level: `aikeyboard.ad-isolation` (build-logic, `AdIsolationPlugin`,
+  `AdAutoInitRules`) registers `verify<Variant>NoAdAutoInit` on `:app` and wires it into `check`. It fails if
+  the merged manifest contains `MobileAdsInitProvider` or any provider / `androidx.startup` initializer from
+  the GMA, GMA next-gen, UMP or `:core:ads` packages. UMP 4.0.0 merges no provider (only the
+  `com.google.android.gms.version` meta-data from `play-services-basement`).
+- These are static checks. The runtime proof (IME-only cold start, no `com.google.android.gms.ads` class
+  loaded, TRD §11.1 1.1(c)) is an instrumented test for Sprint 4, when GMA is added.

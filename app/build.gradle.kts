@@ -24,6 +24,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.mikepenz.aboutlibraries)
+    // FORK(S0-ads): verify<Variant>NoAdAutoInit fails `check` if an ad/consent SDK provider is merged (TRD §11.1)
+    alias(libs.plugins.aikeyboard.ad.isolation)
 }
 
 val projectMinSdk: String by project
@@ -254,6 +256,10 @@ dependencies {
     implementation(projects.lib.kotlin)
     implementation(projects.lib.native)
     implementation(projects.lib.snygg)
+
+    // FORK(S0-ads): ads stack for app Activities only. The IME code in this module must not use it
+    // (ImeAdIsolationTest; TRD §2.2, §11.1). Nothing calls it yet.
+    implementation(projects.core.ads)
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)
