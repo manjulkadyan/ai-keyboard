@@ -117,6 +117,7 @@ class FlorisApplication : Application() {
     }
 
     fun init() {
+        featureSettingsStore.value // FORK(S1-policy): start loading the fork settings at process start
         cacheDir?.deleteContentsRecursively()
         scope.launch {
             val result = FlorisPreferenceStore.initAndroid(

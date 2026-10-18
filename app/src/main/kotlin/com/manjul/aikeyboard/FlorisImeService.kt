@@ -152,7 +152,12 @@ class FlorisImeService : LifecycleInputMethodService() {
 
         // FORK(S1-policy): policy controller accessor for features (voice, smartbar, ...)
         fun policyController(): ImePolicyController {
-            return checkNotNull(FlorisImeServiceReference.get()) { "IME service is not running" }.policyController
+            return checkNotNull(policyControllerOrNull()) { "IME service is not running" }
+        }
+
+        fun policyControllerOrNull(): ImePolicyController? {
+            val service = FlorisImeServiceReference.get() ?: return null
+            return if (service::policyController.isInitialized) service.policyController else null
         }
 
         fun currentInputConnection(): InputConnection? {
@@ -279,17 +284,10 @@ class FlorisImeService : LifecycleInputMethodService() {
 
     private val wallpaperChangeReceiver = WallpaperChangeReceiver()
 
-    // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. The keyguard state is read
-    // on each evaluation, never cached. Remote-config forced packages arrive in S3.
-    private val policyController by lazy {
-        val keyguardManager = getSystemService(KeyguardManager::class.java)
-        ImePolicyController(
-            store = featureSettingsStore().value,
-            keyguard = { keyguardManager?.isDeviceLocked ?: true },
-            forcedPackages = { emptySet() },
-            scope = lifecycleScope,
-        )
-    }
+    // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. Created in onCreate so the store
+    // load and the settings collector start with the service. Keyguard state is read on each evaluation, never
+    // cached. Remote-config forced packages arrive in S3.
+    private lateinit var policyController: ImePolicyController
 
     init {
         setTheme(R.style.FlorisImeTheme)
@@ -298,6 +296,16 @@ class FlorisImeService : LifecycleInputMethodService() {
     override fun onCreate() {
         super.onCreate()
         FlorisImeServiceReference = WeakReference(this)
+        // FORK(S1-policy): see the policyController declaration
+        val keyguardManager = getSystemService(KeyguardManager::class.java)
+        policyController = ImePolicyController(
+            store = featureSettingsStore().value,
+            keyguard = { keyguardManager?.isDeviceLocked ?: true },
+            forcedPackages = { emptySet() },
+            scope = lifecycleScope,
+        )
+        // Settings can arrive after the field started: recompute the editor state from the new decision.
+        policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
         subtypeManager.activeSubtypeFlow.collectIn(lifecycleScope) { subtype ->
             val config = Configuration(resources.configuration)

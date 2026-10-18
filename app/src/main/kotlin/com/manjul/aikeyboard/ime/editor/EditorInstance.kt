@@ -23,6 +23,9 @@ import android.view.KeyEvent
 import androidx.core.view.inputmethod.InputConnectionCompat
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import com.manjul.aikeyboard.FlorisImeService
+// FORK(S1-policy): imports for the policy decision
+import com.manjul.aikeyboard.fork.policy.PolicyStateDerivation
+import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.clipboardManager
@@ -108,26 +111,39 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
             }
         }
         activeState.keyboardMode = keyboardMode
-        activeState.isComposingEnabled = when (keyboardMode) {
+        // FORK(S1-policy): upstream value is kept so a later policy decision can be re-applied to it
+        upstreamComposingEnabled = when (keyboardMode) {
             KeyboardMode.NUMERIC,
             KeyboardMode.PHONE,
             KeyboardMode.PHONE2,
             -> false
             else -> activeState.keyVariation != KeyVariation.PASSWORD &&
-                // FORK(S1-policy): no suggestions in sensitive fields
-                FlorisImeService.policyController().decision.value.allowSuggestionStrip &&
                 prefs.suggestion.enabled.get()// &&
             //!instance.inputAttributes.flagTextAutoComplete &&
             //!instance.inputAttributes.flagTextNoSuggestions
         }
-        val policyIncognito = !FlorisImeService.policyController().decision.value.allowLearning // FORK(S1-policy): sensitive fields never learn
-        activeState.isIncognitoMode = policyIncognito || when (prefs.suggestion.incognitoMode.get()) {
+        // FORK(S1-policy): upstream value is kept so a later policy decision can be re-applied to it
+        upstreamIncognitoMode = when (prefs.suggestion.incognitoMode.get()) {
             IncognitoMode.FORCE_OFF -> false
             IncognitoMode.FORCE_ON -> true
             IncognitoMode.DYNAMIC_ON_OFF -> {
                 editorInfo.imeOptions.flagNoPersonalizedLearning || prefs.suggestion.forceIncognitoModeFromDynamic.get()
             }
         }
+        applyPolicyDecision(currentPolicyDecision()) // FORK(S1-policy)
+    }
+
+    // FORK(S1-policy): sensitive fields never learn and show no suggestions. Re-applied by the service when a
+    // restriction listener fires (settings can arrive after the field started). Fails closed without a service.
+    private var upstreamComposingEnabled = false
+    private var upstreamIncognitoMode = false
+
+    private fun currentPolicyDecision(): PolicyDecision =
+        FlorisImeService.policyControllerOrNull()?.decision?.value ?: PolicyDecision.Locked
+
+    fun applyPolicyDecision(decision: PolicyDecision) {
+        activeState.isComposingEnabled = PolicyStateDerivation.composingEnabled(upstreamComposingEnabled, decision)
+        activeState.isIncognitoMode = PolicyStateDerivation.incognito(upstreamIncognitoMode, decision)
     }
 
     override fun handleSelectionUpdate(oldSelection: EditorRange, newSelection: EditorRange, composing: EditorRange) {
