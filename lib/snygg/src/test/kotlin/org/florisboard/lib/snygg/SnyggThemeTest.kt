@@ -5,8 +5,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.florisboard.lib.color.schemes.yellowDarkScheme
-import org.florisboard.lib.color.schemes.yellowLightScheme
+import org.florisboard.lib.color.neutralDynamicColorScheme
 import org.florisboard.lib.snygg.value.SnyggCircleShapeValue
 import org.florisboard.lib.snygg.value.SnyggDpSizeValue
 import org.florisboard.lib.snygg.value.SnyggFontStyleValue
@@ -23,6 +22,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+
+// FORK(S0-ci): upstream v0.5.2 imports org.florisboard.lib.color.schemes.yellow{Light,Dark}Scheme,
+// which does not exist in :lib:color at that tag, so this test did not compile. The tests only need
+// two distinct, fixed color schemes; build them from lib/color's neutralDynamicColorScheme instead.
+private val yellowLightScheme = neutralDynamicColorScheme(primary = Color(0xFFFFEB3B), isDark = false)
+private val yellowDarkScheme = neutralDynamicColorScheme(primary = Color(0xFFFFEB3B), isDark = true)
 
 class SnyggThemeTest {
     private fun SnyggTheme.helperQuery(

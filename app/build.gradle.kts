@@ -168,7 +168,10 @@ android {
     }
 
     lint {
-        baseline = file("lint.xml")
+        // FORK(S0-ci): upstream pointed `baseline` at lint.xml, which is the lint *config* (still picked
+        // up by default). Use a real baseline of the pre-existing upstream issues so :app:lintDebug can
+        // gate CI on new ones (TRD §7.2). Regenerate with ./gradlew :app:updateLintBaseline.
+        baseline = file("lint-baseline.xml")
     }
 
     testOptions {

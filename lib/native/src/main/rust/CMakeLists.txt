@@ -58,3 +58,8 @@ add_dependencies(fl_native fl_native_rust_build)
 target_link_libraries(fl_native
     android log -Wl,--whole-archive -Wl,--allow-multiple-definition -Wl,--build-id=none ${FL_NATIVE_RUST_PATH}
 )
+
+# FORK(S0-ci): link with 16 KB max page size so every LOAD segment is 16 KB aligned (TRD §1, §11.8;
+# Play requirement for 16 KB page-size devices). NDK r26 defaults to 4 KB. Checked in CI by
+# scripts/check-16kb-alignment.sh.
+target_link_options(fl_native PRIVATE "-Wl,-z,max-page-size=16384")

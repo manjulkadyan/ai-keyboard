@@ -1,0 +1,120 @@
+# Copyright (C) 2026 AI Keyboard contributors
+# Licensed under the Apache License, Version 2.0
+#
+# PR stage (TRD §7.2, §11.8): fork-marker check, debug build, unit tests for every module, Android
+# Lint, ad-isolation manifest checks and the 16 KB native-library alignment check.
+
+name: PR
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_URL: https://github.com/florisboard/florisboard.git
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Fetch upstream FlorisBoard tag
+        run: |
+          tag="$(sed -n 's/^| *Tag *| *`\([^`]*\)` *|.*$/\1/p' UPSTREAM.md | head -n 1)"
+          test -n "$tag"
+          git fetch --no-tags --depth=1 "$UPSTREAM_URL" "refs/tags/$tag:refs/tags/$tag"
+
+      - name: Check fork markers
+        run: scripts/check-fork-markers.sh
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Read pinned tool versions
+        id: tools
+        run: |
+          v() { sed -n "s/^$1 *= *\"\([^\"]*\)\".*/\1/p" gradle/tools.versions.toml | head -n 1; }
+          {
+            echo "jdk=$(v jdk)"
+            echo "ndk=$(v ndk)"
+            echo "cmake=$(v cmake)"
+            echo "buildTools=$(v buildTools)"
+            echo "rust=$(v rustToolchain)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.tools.outputs.jdk }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK, CMake and build-tools
+        run: |
+          sdkmanager --install \
+            "ndk;${{ steps.tools.outputs.ndk }}" \
+            "cmake;${{ steps.tools.outputs.cmake }}" \
+            "build-tools;${{ steps.tools.outputs.buildTools }}" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ steps.tools.outputs.ndk }}" >> "$GITHUB_ENV"
+
+      - name: Install Rust toolchain and Android targets
+        run: |
+          rustup toolchain install "${{ steps.tools.outputs.rust }}" --profile minimal \
+            --target aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          rustup default "${{ steps.tools.outputs.rust }}"
+          rustup target list --installed
+
+      - name: Cache Cargo registry and native build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            lib/native/src/main/rust/target
+          key: cargo-${{ runner.os }}-${{ steps.tools.outputs.rust }}-${{ hashFiles('lib/native/src/main/rust/Cargo.lock') }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble debug
+        run: ./gradlew assembleDebug --console=plain
+
+      - name: Unit tests (all modules)
+        run: >-
+          ./gradlew --console=plain
+          testDebugUnitTest
+          :lib:kotlin:test :ime:policy:test :lint-rules:test
+          :build-logic:convention:test
+
+      - name: Ad-isolation manifest checks
+        run: ./gradlew --console=plain :app:verifyDebugNoAdAutoInit :app:verifyReleaseNoAdAutoInit
+
+      - name: Android Lint
+        run: ./gradlew --console=plain :app:lintDebug
+
+      - name: 16 KB alignment of native libraries
+        run: scripts/check-16kb-alignment.sh app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            **/build/reports/
+            **/build/test-results/
+          retention-days: 7

@@ -30,7 +30,27 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `settings.gradle.kts` | S0-ads | `include(":core:ads")` |
 | `gradle/libs.versions.toml` | S0-ads | `google-ump` version (4.0.0, the latest release on Google Maven on 2026-10-18) and library, `aikeyboard-ad-isolation` plugin id, added inside the existing `# --- AI Keyboard ---` blocks |
 | `app/build.gradle.kts` | S0-ads | Applies `aikeyboard.ad-isolation` (merged-manifest auto-init check wired into `check`); `implementation(projects.core.ads)`. Nothing in `:app` calls `:core:ads` yet |
+| `lib/native/src/main/rust/CMakeLists.txt` | S0-ci | `target_link_options(fl_native PRIVATE "-Wl,-z,max-page-size=16384")`: NDK r26 links with a 4 KB max page size by default, so `libfl_native.so` LOAD segments were 4 KB aligned. Play requires 16 KB alignment (TRD §1, §11.8); enforced by `scripts/check-16kb-alignment.sh` in CI |
+| `app/build.gradle.kts` | S0-ci | `lint { baseline }` now points at a real baseline, `app/lint-baseline.xml` (new file), instead of the `lint.xml` config file, so `:app:lintDebug` gates CI on new issues only |
+| Deleted: `app/src/main/res/drawable/ic_app_icon_{stable,beta,debug}_{foreground,monochrome}.xml`, `app/src/main/res/mipmap-*dpi/ic_app_icon_{stable,beta,debug}{,_round}.png`, `app/src/main/ic_app_icon_{stable,preview,debug}-playstore.png` | S0-branding | FlorisBoard launcher foreground/monochrome vectors, legacy PNG mipmaps and Play Store icons (see the `mipmap-anydpi-v26` row) |
+| Deleted: `app/src/main/assets/license/project_license.txt` | S0-licences | Copy of LICENSE replaced by the build-generated `assets/licenses/` (see the `ProjectLicenseScreen.kt` row) |
+| `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-ci | Upstream v0.5.2 imports `org.florisboard.lib.color.schemes.yellow{Light,Dark}Scheme`, which does not exist in `:lib:color` at that tag, so the `:lib:snygg` unit tests did not compile. The two fixed schemes are now built with `:lib:color`'s `neutralDynamicColorScheme` (yellow 500 seed); all assertions are unchanged |
 | Deleted: `fastlane/`, `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `crowdin.yml`, `ROADMAP.md`, `AI_POLICY.md`, `LANGUAGEPACKS*.md`, `.idea/icon.svg` | S0-branding | Upstream store listings, project-process docs, CI that uses FlorisBoard secrets, and the FlorisBoard logo. `README.md` was rewritten for the fork |
+
+## Marker-exempt files
+
+`scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+modified but not listed above or has no `FORK(` marker, or when a deleted upstream file is not listed.
+Files whose only change is the global package rename (content and path normalised
+`dev.patrickgold.florisboard` <-> `com.manjul.aikeyboard`) pass without a row. The `*(global)*` row is
+deliberately not used for matching, so any edit beyond the rename needs its own row.
+
+The files below are listed but cannot (or need not) carry an inline marker. Keep this list short.
+
+| File | Why no inline marker |
+|---|---|
+| `app/src/main/assets/ime/theme/org.florisboard.themes{,.my}/extension.json` | JSON has no comment syntax; branding-only title change recorded in the S0-branding row above |
+| `README.md` | Rewritten from scratch for the fork (S0-branding); no upstream hunk is left to annotate |
 
 ## Decisions
 
@@ -99,12 +119,12 @@ FileProvider: upstream's `file_paths.xml` already has a single `<cache-path name
 (used by the settings backup export), which is narrow; it is left unchanged. TRD §3.3 `cache/share/` will be
 added when the first sharing feature needs it.
 
-Lint status: `:app:lintDebug` loads the custom check ("Included Additional Checks", vendor AI Keyboard) but
-still fails on 49 pre-existing upstream errors (40 `ImpliedQuantity` and 6 `StringFormatInvalid` in
-translations, plus `WrongConstant`, `RestrictedApi`, `LocalContextConfigurationRead`). Upstream's
-`lint { baseline = file("lint.xml") }` points at a lint *config* file, not a baseline, so nothing is
-baselined. Creating a real baseline (or fixing those errors) is a follow-up. Lint needs the Rust Android
-targets for `:lib:native`; without them, skip the CMake tasks with
+Lint status: `:app:lintDebug` loads the custom check ("Included Additional Checks", vendor AI Keyboard).
+The 49 pre-existing upstream errors (40 `ImpliedQuantity` and 6 `StringFormatInvalid` in translations, plus
+`WrongConstant`, `RestrictedApi`, `LocalContextConfigurationRead`) and the upstream warnings are recorded in
+`app/lint-baseline.xml` (S0-ci); fixing them is a follow-up. Regenerate the baseline with
+`./gradlew :app:updateLintBaseline` only when an upstream merge brings new findings. Lint needs the Rust
+Android targets for `:lib:native`; without them, skip the CMake tasks with
 `-x ':lib:native:buildCMakeDebug[<abi>][fl_native]' -x ':lib:native:configureCMakeDebug[<abi>]'` per ABI.
 
 ## Ads skeleton and IME isolation (S0-ads)
@@ -136,3 +156,18 @@ New files (no markers needed), TRD §2.2, §2.3, §4.11, §11.1:
   `com.google.android.gms.version` meta-data from `play-services-basement`).
 - These are static checks. The runtime proof (IME-only cold start, no `com.google.android.gms.ads` class
   loaded, TRD §11.1 1.1(c)) is an instrumented test for Sprint 4, when GMA is added.
+
+## CI (S0-ci)
+
+New files (no markers needed), TRD §2.1, §7.2, §11.8:
+
+- `.github/workflows/pr.yml` (pull requests and pushes to `main`, ubuntu-latest): fetches the upstream tag,
+  runs `scripts/check-fork-markers.sh`, installs JDK 17 (temurin), the Android SDK and the NDK / CMake /
+  build-tools pinned in `gradle/tools.versions.toml`, the pinned Rust toolchain with the four Android targets,
+  then `assembleDebug`, unit tests for every module (`testDebugUnitTest` plus `test` on the JVM modules and
+  `:build-logic:convention:test`), `:app:verify{Debug,Release}NoAdAutoInit`, `:app:lintDebug` and the 16 KB
+  alignment check on the debug APK. The IME isolation and manifest hardening tests run as `:app` unit tests.
+- `scripts/check-fork-markers.sh`: see "Marker-exempt files" above. Run it locally before opening a PR.
+- `scripts/check-16kb-alignment.sh <apk>...`: `zipalign -c -P 16 -v 4` on the APK and an ELF check that
+  every `LOAD` segment of every `lib/<abi>/*.so` is aligned to at least 16 KB (`llvm-readelf` from the NDK).
+  All ABIs are checked. TRD §11.8 also asks for the check on the release AAB; that belongs to the Main stage.
