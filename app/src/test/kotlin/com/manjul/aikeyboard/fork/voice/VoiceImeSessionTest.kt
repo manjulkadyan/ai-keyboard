@@ -24,6 +24,7 @@ import com.manjul.aikeyboard.ime.voiceui.VoiceUiState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -146,7 +147,7 @@ class VoiceImeSessionTest {
         r.report()
     }
 
-    @Test fun passwordRestartFinishesThePartialWithoutCommittingIt() = run {
+    @Test fun passwordRestartRemovesOurPartialWithoutCommittingIt() = run {
         val r = Rig(this)
         listen(r, "hel")
         assertEquals("hel", r.text)
@@ -156,6 +157,8 @@ class VoiceImeSessionTest {
         r.policy.onStartInput(passwordField(), true)
         runCurrent()
 
+        // R24: our own verified composing region is removed; nothing is deleted outside it.
+        assertEquals("", r.text)
         assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
         assertTrue(r.commits.isEmpty())
         assertEquals(0, r.deletes)
@@ -168,8 +171,51 @@ class VoiceImeSessionTest {
         // A late result for the old field changes nothing.
         r.engine.listener!!.onFinal("hello")
         runCurrent()
-        assertEquals("hel", r.text)
+        assertEquals("", r.text)
         assertTrue(r.commits.isEmpty())
+    }
+
+    @Test fun cancelLeavesTheFieldAloneWhenTheTextBeforeTheCursorIsNoLongerOurs() = run {
+        val r = Rig(this, initial = "abc ")
+        listen(r, "hel")
+        assertEquals("abc hel", r.text)
+        // The host moved the cursor; its selection update has not arrived yet.
+        Selection.setSelection(r.edit.text, 2)
+
+        r.policy.onStartInput(passwordField(), true)
+        runCurrent()
+
+        assertEquals("abc hel", r.text)
+        assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
+        assertEquals(0, r.deletes)
+        assertTrue(r.commits.isEmpty())
+        assertFalse(r.ownsComposing)
+    }
+
+    @Test fun punctuationAfterTheHostMovedTheCursorDeletesNothing() = run {
+        val r = Rig(this, initial = "ab cd")
+        r.policy.onStartInput(textField(), false)
+        r.session.controller.toggle()
+        runCurrent()
+        r.engine.listener!!.onReady()
+        r.engine.listener!!.onFinal("hello")
+        runCurrent()
+        r.report()
+        assertEquals("ab cdhello ", r.text)
+
+        // The host moves the cursor to just after its own space; no composing region before or after.
+        Selection.setSelection(r.edit.text, 3)
+        r.report()
+
+        advanceTimeBy(RESTART_MS)
+        runCurrent()
+        r.engine.listener!!.onReady()
+        r.engine.listener!!.onFinal(", x")
+        runCurrent()
+
+        assertEquals(0, r.deletes)
+        assertTrue(r.text.startsWith("ab , x"), r.text)
+        assertTrue(r.text.endsWith("cdhello "), r.text)
     }
 
     @Test fun hostEditDuringAPartialDeletesNoHostText() = run {
@@ -184,8 +230,8 @@ class VoiceImeSessionTest {
         runCurrent()
         r.report()
 
-        assertTrue(r.text.startsWith("Xabc hel"), "host text and the earlier partial stay")
-        assertEquals("Xabc helhello", r.text)
+        // The region moved intact (same text, cursor at its end): it is still ours and is updated in place.
+        assertEquals("Xabc hello", r.text)
         assertEquals(0, r.deletes)
         assertTrue(r.commits.isEmpty())
     }
@@ -219,8 +265,10 @@ class VoiceImeSessionTest {
         assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
         assertTrue(r.engine.destroyed)
         assertNotNull(shadowOf(r.audioManager).lastAbandonedAudioFocusRequest)
-        assertEquals("hi", r.text)
+        // A cancel, like a field change: the unfinished partial is ours and is removed (R24).
+        assertEquals("", r.text)
         assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
+        assertEquals(0, r.deletes)
     }
 
     @Test fun firstDictationIsPersisted() = run {
@@ -235,5 +283,8 @@ class VoiceImeSessionTest {
 
     private companion object {
         const val NOW = 1_234L
+
+        /** Past VoiceTimings.restartDelayMs, short of the silence end. */
+        const val RESTART_MS = 300L
     }
 }

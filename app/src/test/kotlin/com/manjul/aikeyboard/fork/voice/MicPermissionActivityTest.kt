@@ -166,6 +166,20 @@ class MicPermissionActivityTest {
     }
 
     @Test
+    fun rationaleSurvivesRecreation() {
+        runBlocking { store.update { it.copy(consentVoiceNoticeAt = 5L) } }
+        val scenario = launch()
+        scenario.answer(granted = false)
+        compose.onNodeWithText("Microphone is off").assertExists()
+
+        scenario.recreate()
+        idle()
+
+        compose.onNodeWithText("Microphone is off").assertExists()
+        assertEquals(1, events.count { it.name == "voice_permission_result" })
+    }
+
+    @Test
     fun alreadyGrantedFinishesAtOnce() {
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
         val scenario = launch()

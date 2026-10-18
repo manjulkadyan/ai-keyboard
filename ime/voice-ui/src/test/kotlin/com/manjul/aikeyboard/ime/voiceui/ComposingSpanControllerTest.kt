@@ -64,6 +64,30 @@ class ComposingSpanControllerTest {
             return true
         }
 
+        override fun clearComposing(expected: String): Boolean {
+            calls += "clear:$expected"
+            if (compStart < 0 || cursor < expected.length || text.substring(cursor - expected.length, cursor) != expected) {
+                return false
+            }
+            text.delete(compStart, compEnd)
+            cursor = compStart
+            compStart = -1
+            compEnd = -1
+            report()
+            return true
+        }
+
+        /** The host inserts [s] at [at] on its own; a region after [at] shifts with the text, as in an EditText. */
+        fun hostInsert(at: Int, s: String) {
+            text.insert(at, s)
+            if (cursor >= at) cursor += s.length
+            if (compStart >= at) {
+                compStart += s.length
+                compEnd += s.length
+            }
+            report()
+        }
+
         /** The host edits the field on its own (types, moves the cursor, drops the region). */
         fun hostEdit(newCursor: Int, keepRegion: Boolean) {
             cursor = newCursor
@@ -188,5 +212,92 @@ class ComposingSpanControllerTest {
         span.update("um")
         span.commit("")
         assertEquals(listOf("set:um", "finish"), field.calls)
+    }
+
+    @Test fun discardRemovesOurOwnPartial() {
+        val field = FakeField("keep ")
+        val span = ComposingSpanController(field)
+        span.update("hel")
+        field.deliver(span)
+        span.discard()
+        assertEquals(listOf("set:hel", "clear:hel"), field.calls)
+        assertEquals("keep ", field.text.toString())
+        assertFalse(span.hasSpan)
+        span.discard()
+        assertEquals(2, field.calls.size)
+    }
+
+    @Test fun discardAfterTheHostTookTheRegionClearsNothing() {
+        val field = FakeField("keep ")
+        val span = ComposingSpanController(field)
+        span.update("hel")
+        field.deliver(span)
+        field.hostEdit(newCursor = 0, keepRegion = false)
+        field.deliver(span)
+        span.discard()
+        assertTrue(field.calls.none { it.startsWith("clear:") })
+        assertEquals("keep hel", field.text.toString())
+    }
+
+    @Test fun hostMovingTheCursorAfterACommitBlocksThePunctuationJoin() {
+        val field = FakeField("ab")
+        val span = ComposingSpanController(field)
+        span.commit("hello ")
+        field.deliver(span)
+        // No composing region either way: only the cursor position tells the host moved it.
+        field.hostEdit(newCursor = 1, keepRegion = false)
+        field.deliver(span)
+        span.commit(", x")
+        assertEquals("commit:, x:false", field.calls.last())
+        assertEquals("a, xbhello ", field.text.toString())
+    }
+
+    @Test fun repeatedReportsOfOurCommitKeepThePunctuationJoin() {
+        val field = FakeField()
+        val span = ComposingSpanController(field)
+        span.commit("hello ")
+        field.deliver(span)
+        field.hostEdit(newCursor = 6, keepRegion = false)
+        field.deliver(span)
+        span.commit(", ")
+        assertEquals("hello, ", field.text.toString())
+    }
+
+    @Test fun twoCommitsReportedLateStillJoin() {
+        val field = FakeField()
+        val span = ComposingSpanController(field)
+        span.commit("hello ")
+        span.commit("world ")
+        field.deliver(span)
+        span.commit(". ")
+        assertEquals("hello world. ", field.text.toString())
+    }
+
+    @Test fun newSessionNeverJoinsTheLastCommitOfTheOldOne() {
+        val field = FakeField()
+        val span = ComposingSpanController(field)
+        span.commit("hello ")
+        field.deliver(span)
+        span.startSession()
+        span.commit(", x")
+        assertEquals("commit:, x:false", field.calls.last())
+    }
+
+    @Test fun regionShiftedIntactByTheHostIsReanchored() {
+        val field = FakeField("abc ")
+        val span = ComposingSpanController(field)
+        span.update("hel")
+        field.deliver(span)
+        field.hostInsert(0, "X")
+        field.deliver(span)
+        assertTrue(span.hasSpan)
+        span.update("hello")
+        field.deliver(span)
+        assertEquals("Xabc hello", field.text.toString())
+        assertTrue(field.calls.none { it == "finish" })
+        // Still ours after the move: a cursor move away from it drops it.
+        field.hostEdit(newCursor = 1, keepRegion = true)
+        field.deliver(span)
+        assertEquals("finish", field.calls.last())
     }
 }

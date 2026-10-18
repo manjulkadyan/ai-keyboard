@@ -13,7 +13,8 @@ import com.manjul.aikeyboard.ime.voiceui.TextTarget
  * selection update for it. While a region is ours, [setOwnsComposing] tells the editor not to move the composing
  * region on its own (it would otherwise re-derive one from the last word).
  *
- * Never deletes text other than the single space the caller asks to join punctuation with, and never logs text.
+ * Never deletes text other than the single space the caller asks to join punctuation with and our own verified region
+ * ([clearComposing]), and never logs text.
  */
 class ImeTextTarget(
     private val connection: () -> InputConnection?,
@@ -54,6 +55,25 @@ class ImeTextTarget(
         if (!owned) return true
         own(false)
         return connection()?.finishComposingText() ?: false
+    }
+
+    override fun clearComposing(expected: String): Boolean {
+        if (!owned) return false
+        val ic = connection() ?: return false
+        own(false)
+        // In memory only: the field text is never logged.
+        if (ic.getTextBeforeCursor(expected.length, 0)?.toString() != expected) {
+            ic.finishComposingText()
+            return false
+        }
+        ic.beginBatchEdit()
+        try {
+            ic.setComposingText("", 1)
+            ic.finishComposingText()
+            return true
+        } finally {
+            ic.endBatchEdit()
+        }
     }
 
     private fun own(value: Boolean) {

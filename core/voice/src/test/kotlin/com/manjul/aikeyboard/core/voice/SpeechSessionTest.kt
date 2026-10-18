@@ -498,4 +498,16 @@ class SpeechSessionTest {
             assertEquals(VoiceOutput.Commit("hello comma world "), awaitItem())
         }
     }
+
+    @Test fun lastErrorCodeKeepsTheRawRecognizerCodeUntilTheNextStart() = runSession {
+        val r = rig()
+        assertNull(r.session.lastErrorCode)
+        r.session.start("en", true)
+        runCurrent()
+        r.l.onError(2)
+        assertEquals(2, r.session.lastErrorCode)
+        r.session.start("en", true)
+        runCurrent()
+        assertNull(r.session.lastErrorCode)
+    }
 }

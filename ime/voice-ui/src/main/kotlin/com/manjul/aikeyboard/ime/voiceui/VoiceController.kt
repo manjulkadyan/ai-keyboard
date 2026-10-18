@@ -152,7 +152,7 @@ class VoiceController(
 
     val canDownloadSystemModel: Boolean get() = downloadSystemModel != null
 
-    /** Field change, keyboard hidden or a more restrictive field: drop everything, commit nothing more. */
+    /** Field change, keyboard hidden or a more restrictive field: remove our partial, commit nothing more. */
     fun cancel(reason: String) {
         startJob?.cancel()
         startJob = null
@@ -164,7 +164,7 @@ class VoiceController(
             a.session.cancel()
             end(a, error = null, reason = EndReason.entries.firstOrNull { it.value == reason } ?: EndReason.FIELD_CHANGE)
         }
-        span.drop()
+        span.discard()
         focus.release()
         _ui.value = VoiceUiState.Hidden
     }
@@ -183,6 +183,7 @@ class VoiceController(
 
     private fun begin(kind: EngineKind, lang: String, token: Int) {
         stopDraining()
+        span.startSession()
         val segmented = segKey(kind, lang) !in segmentedOff
         val session = sessionFactory { engines.create(kind, segmented) }
         val a = Active(session, token, kind, lang)
@@ -234,7 +235,8 @@ class VoiceController(
             focus.release()
             if (!a.session.isSegmentedSupported(a.kind, a.lang)) segmentedOff += segKey(a.kind, a.lang)
             val endReason = reason ?: EndReason.entries.firstOrNull { it.value == a.session.endReason } ?: EndReason.ERROR
-            analytics(EventCatalog.voiceSessionEnd(clock() - a.session.startedAtMs, a.words, endReason, errorCode = null))
+            val errorCode = if (endReason == EndReason.ERROR) a.session.lastErrorCode else null
+            analytics(EventCatalog.voiceSessionEnd(clock() - a.session.startedAtMs, a.words, endReason, errorCode))
             if (a.words > 0) logFirstDictation(a.lang)
             _ui.value = if (a.session.tapToResume.value) VoiceUiState.TapToResume else VoiceUiState.Hidden
         }

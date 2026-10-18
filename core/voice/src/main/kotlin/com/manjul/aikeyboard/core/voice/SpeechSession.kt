@@ -50,6 +50,10 @@ class SpeechSession(
     var endReason: String? = null
         private set
 
+    /** Raw recognizer error code (android.speech.SpeechRecognizer.ERROR_*) last seen since [start]; never text. */
+    var lastErrorCode: Int? = null
+        private set
+
     /** Clock reading when the current (or last) session started. */
     var startedAtMs: Long = 0
         private set
@@ -83,6 +87,7 @@ class SpeechSession(
         active = true
         stopping = false
         endReason = null
+        lastErrorCode = null
         startedAtMs = clock()
         pendingPartial = null
         restarts = 0
@@ -268,6 +273,7 @@ class SpeechSession(
     }
 
     private fun handleError(code: Int) {
+        lastErrorCode = code
         if (stopping && code != ERROR_SPEECH_TIMEOUT && code != ERROR_NO_MATCH) {
             // Includes BUSY: restarting while stopping would leave the session stuck.
             val e = engine

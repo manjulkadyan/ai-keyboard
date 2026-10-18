@@ -79,6 +79,9 @@ class MicPermissionActivity : ComponentActivity() {
         }
         deps = depsOverride ?: defaultDeps(this)
         requested = savedInstanceState?.getBoolean(KEY_REQUESTED) ?: false
+        // The rationale has no other way back after a configuration change (the result was already delivered).
+        // The notice is rebuilt by the flow below, with the engine it names.
+        if (savedInstanceState?.getBoolean(KEY_RATIONALE) == true) screen = Screen.RATIONALE
         setContent {
             ProvideLocalizedResources(this, appName = R.string.app_name) {
                 FlorisAppTheme(AppTheme.AUTO) {
@@ -124,6 +127,7 @@ class MicPermissionActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(KEY_REQUESTED, requested)
+        outState.putBoolean(KEY_RATIONALE, screen == Screen.RATIONALE)
     }
 
     private fun request() {
@@ -144,6 +148,7 @@ class MicPermissionActivity : ComponentActivity() {
         /** BCP-47 tag of the keyboard language, to name the recognizer that will be used in the notice. */
         const val EXTRA_LANG = "com.manjul.aikeyboard.extra.VOICE_LANG"
         private const val KEY_REQUESTED = "requested"
+        private const val KEY_RATIONALE = "rationale"
         private const val DEFAULT_LANG = "en"
 
         @VisibleForTesting

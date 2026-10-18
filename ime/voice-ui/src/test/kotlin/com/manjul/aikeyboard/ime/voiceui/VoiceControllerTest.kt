@@ -55,8 +55,12 @@ class VoiceControllerTest {
     private class Field : TextTarget {
         val calls = mutableListOf<String>()
         override fun setComposing(text: String): Boolean { calls += "set:$text"; return true }
-        override fun commit(text: String, removeSpaceBefore: Boolean): Boolean { calls += "commit:$text"; return true }
+        override fun commit(text: String, removeSpaceBefore: Boolean): Boolean {
+            calls += if (removeSpaceBefore) "commit+join:$text" else "commit:$text"
+            return true
+        }
         override fun finishComposing(): Boolean { calls += "finish"; return true }
+        override fun clearComposing(expected: String): Boolean { calls += "clear:$expected"; return true }
     }
 
     private class Flag : FirstDictationFlag {
@@ -173,7 +177,8 @@ class VoiceControllerTest {
         val end = r.events.single { it.name == "voice_session_end" }
         assertEquals("field_change", end.params["end_reason"])
         assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
-        assertEquals(listOf("set:hel", "finish"), r.field.calls)
+        // Our own partial is removed (R24): the field may have become sensitive.
+        assertEquals(listOf("set:hel", "clear:hel"), r.field.calls)
     }
 
     @Test fun lateCommitFromAnOldGenerationIsDiscarded() = run {
@@ -283,5 +288,50 @@ class VoiceControllerTest {
         assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
         assertEquals("commit:hi there ", r.field.calls.last())
         assertEquals("user", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
+    }
+
+    @Test fun aNewSessionNeverJoinsPunctuationToTheLastSessionsCommit() = run {
+        val r = Rig(this)
+        r.controller.toggle()
+        runCurrent()
+        r.engine.listener!!.onReady()
+        r.controller.toggle()
+        r.engine.listener!!.onFinal("hello")
+        runCurrent()
+        assertEquals("commit:hello ", r.field.calls.last())
+
+        r.controller.toggle()
+        runCurrent()
+        r.engine.listener!!.onReady()
+        r.controller.toggle()
+        r.engine.listener!!.onFinal(", x")
+        runCurrent()
+        assertTrue(r.field.calls.last(), r.field.calls.last().startsWith("commit:,"))
+        assertTrue(r.field.calls.none { it.startsWith("commit+join:") })
+    }
+
+    @Test fun errorEndCarriesTheRecognizerErrorCode() = run {
+        val r = Rig(this)
+        r.controller.toggle()
+        runCurrent()
+        r.engine.listener!!.onReady()
+        r.engine.listener!!.onError(2)
+        runCurrent()
+        val end = r.events.single { it.name == "voice_session_end" }
+        assertEquals("error", end.params["end_reason"])
+        assertEquals(2, end.params["error_code"])
+    }
+
+    @Test fun userEndCarriesNoErrorCode() = run {
+        val r = Rig(this)
+        r.controller.toggle()
+        runCurrent()
+        r.engine.listener!!.onReady()
+        r.controller.toggle()
+        r.engine.listener!!.onFinal("hi")
+        runCurrent()
+        val end = r.events.single { it.name == "voice_session_end" }
+        assertEquals("user", end.params["end_reason"])
+        assertFalse("error_code" in end.params)
     }
 }
