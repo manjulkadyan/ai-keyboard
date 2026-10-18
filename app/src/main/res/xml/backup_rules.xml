@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- FORK(S0-hardening): Android 8-11 (API 26-30) full-backup rules; API 31+ uses data_extraction_rules.xml,
+     which carries the same include list. TRD §6.3 "Backup": only settings and themes/layouts may be
+     backed up. Upstream also included the "floris_user_dictionary" database (learned and user-added
+     words) which is user-typed content, so that include was removed. Everything not included is
+     excluded, including clipboard_history/clipboard_files databases and no_backup/. -->
 <full-backup-content>
     <include
         domain="root"
@@ -6,7 +11,4 @@
     <include
         domain="file"
         path="ime"/>
-    <include
-        domain="database"
-        path="floris_user_dictionary"/>
 </full-backup-content>

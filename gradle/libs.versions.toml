@@ -35,6 +35,9 @@ kotlinx-kover = "0.9.1"
 # --- AI Keyboard ---
 # FORK(S0-modules): entries below were added by the fork (see docs/FORK_PATCHES.md). Keep them in this block.
 javax-inject = "1"
+# Lint API for :lint-rules. Must stay at AGP version + 23 (AGP 8.12.0 -> lint 31.12.0).
+android-lint = "31.12.0"
+junit4 = "4.13.2"
 
 
 
@@ -94,6 +97,11 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 # build-logic (convention plugins) compile-time classpath
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "android-gradle-plugin" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+# :lint-rules (custom lint checks)
+android-lint-api = { module = "com.android.tools.lint:lint-api", version.ref = "android-lint" }
+android-lint-checks = { module = "com.android.tools.lint:lint-checks", version.ref = "android-lint" }
+android-lint-tests = { module = "com.android.tools.lint:lint-tests", version.ref = "android-lint" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
 
 
 

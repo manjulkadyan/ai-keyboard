@@ -21,6 +21,12 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/lib/crashutility/CrashDialogActivity.kt` | S0-branding | Crash report environment line uses our app name |
 | `lib/compose/src/main/kotlin/org/florisboard/lib/compose/Resources.kt` | S0-branding | Fallback `{app_name}` value is the placeholder name |
 | `app/src/main/res/xml/method.xml`, `app/src/main/res/xml/spellchecker.xml`, `utils/generate_spellcheck_config.py` | S0-settings | `android:settingsActivity` now targets the exported `app.FlorisAppActivity` instead of `SettingsLauncherAlias`, which `hideAppIcon()` disables (that left the IME/spell-checker gear pointing at a disabled component). Guarded by `SettingsActivityManifestTest` |
+| `settings.gradle.kts` | S0-hardening | `include(":lint-rules")` |
+| `gradle/libs.versions.toml` | S0-hardening | `android-lint` (= AGP + 23), `junit4` versions and `android-lint-api/-checks/-tests`, `junit4` libraries, added inside the existing `# --- AI Keyboard ---` blocks |
+| `app/build.gradle.kts` | S0-hardening | `lintChecks(projects.lintRules)`; `proguard-hardening.pro` added to the `beta` and `release` proguard files |
+| `app/src/main/AndroidManifest.xml` | S0-hardening | `android:networkSecurityConfig="@xml/network_security_config"`; `android:dataExtractionRules` now points at the new `data_extraction_rules.xml` (upstream pointed it at the `full-backup-content` file, which is the wrong format for API 31+). `allowBackup="true"` kept, as TRD §6.3 requires |
+| `app/src/main/res/xml/backup_rules.xml` | S0-hardening | Removed the `database/floris_user_dictionary` include: learned/user-added words are user-typed content (TRD §6.3). Only `root/jetpref_datastore` (settings) and `file/ime` (installed extensions) are backed up; clipboard databases, `no_backup/clipboard_files`, crash data and caches are excluded by omission. XML comment marker at the top of the file |
+| `app/src/main/kotlin/com/manjul/aikeyboard/lib/crashutility/CrashUtility.kt` | S0-hardening | `@SuppressLint("ImeProcessTermination")` on `UncaughtExceptionHandler.uncaughtException`. **Justification:** this is the last step of the uncaught-exception handler; the process is already crashing and must terminate after the stacktrace is written (returning would leave a dead main thread). It is the only `killProcess`/`exitProcess` call in the codebase and is not reachable from normal IME or app flows |
 | Deleted: `fastlane/`, `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `crowdin.yml`, `ROADMAP.md`, `AI_POLICY.md`, `LANGUAGEPACKS*.md`, `.idea/icon.svg` | S0-branding | Upstream store listings, project-process docs, CI that uses FlorisBoard secrets, and the FlorisBoard logo. `README.md` was rewritten for the fork |
 
 ## Decisions
@@ -68,3 +74,32 @@ that runs the plugin against a fixture build. Run them with `./gradlew :build-lo
 `:core:ads`, this Gradle rule cannot by itself keep ad code out of the keyboard. That guarantee comes
 from the class-reference test added together with `:core:ads` (and the process/auto-init measures in
 TRD §11.1). The Gradle rule protects our `:ime:*` modules.
+
+## Hardening baseline (S0-hardening)
+
+New files (no markers needed), TRD §2.3 "Process termination", §6.3, §7.1:
+
+- `lint-rules/` (`:lint-rules`, JVM, `lint-api`/`lint-checks` compileOnly): `ImeProcessTermination` (error)
+  flags `android.os.Process.killProcess`, `System.exit`, `Runtime.exit`/`halt` and `kotlin.system.exitProcess`.
+  Hooked into `:app` with `lintChecks`. Tests: `./gradlew :lint-rules:test` (JUnit 4, `LintDetectorTest`).
+- `app/src/main/res/xml/network_security_config.xml`: cleartext off, system CAs only; `debug-overrides`
+  adds user CAs (only effective in debuggable builds).
+- `app/src/main/res/xml/data_extraction_rules.xml`: API 31+ `cloud-backup` and `device-transfer` with the
+  same include-only list as `backup_rules.xml`.
+- `app/proguard-hardening.pro`: R8 `-assumenosideeffects` for `Log.v/d/i`; `Flog.checkShouldFlog*` assumed
+  `false` and `Flog.log*` side-effect free, so every `flog*` block is removed from minified builds.
+- `app/src/test/.../manifest/ManifestHardeningTest.kt`: exported-component allow-list, bind permissions,
+  providers not exported, FileProvider paths are `cache-path` sub-directories only, backup rules are
+  include-only without databases/shared prefs/clipboard/dictionary, NSC checks.
+
+FileProvider: upstream's `file_paths.xml` already has a single `<cache-path name="backup" path="backup-and-restore/"/>`
+(used by the settings backup export), which is narrow; it is left unchanged. TRD §3.3 `cache/share/` will be
+added when the first sharing feature needs it.
+
+Lint status: `:app:lintDebug` loads the custom check ("Included Additional Checks", vendor AI Keyboard) but
+still fails on 49 pre-existing upstream errors (40 `ImpliedQuantity` and 6 `StringFormatInvalid` in
+translations, plus `WrongConstant`, `RestrictedApi`, `LocalContextConfigurationRead`). Upstream's
+`lint { baseline = file("lint.xml") }` points at a lint *config* file, not a baseline, so nothing is
+baselined. Creating a real baseline (or fixing those errors) is a follow-up. Lint needs the Rust Android
+targets for `:lib:native`; without them, skip the CMake tasks with
+`-x ':lib:native:buildCMakeDebug[<abi>][fl_native]' -x ':lib:native:configureCMakeDebug[<abi>]'` per ABI.

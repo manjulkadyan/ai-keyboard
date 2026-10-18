@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (C) 2026 AI Keyboard contributors
+  Licensed under the Apache License, Version 2.0
+
+  Android 12+ (API 31+) backup and device-transfer rules. Keep in sync with backup_rules.xml
+  (API 26-30), which uses the same include list.
+
+  TRD §6.3 "Backup": only settings and themes/layouts may leave the device. Because every section
+  uses <include>, everything that is not listed is excluded, in particular:
+  - databases/clipboard_history*, databases/clipboard_files* (clipboard history, ClipboardDatabase.kt)
+  - no_backup/clipboard_files/ (clipboard images/files, ClipboardFileStorage.kt)
+  - databases/floris_user_dictionary* (learned / user-added words, UserDictionary.kt)
+  - shared_prefs/crash_utility.xml, no_backup/unhandled_stacktraces/ (crash data, CrashUtility.kt)
+  - cache/ and no_backup/ (never backed up by the platform anyway)
+  Do NOT add the "database" domain or "sharedpref" domain wholesale. ManifestHardeningTest checks this.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- jetpref preferences datastore (app settings) -->
+        <include domain="root" path="jetpref_datastore"/>
+        <!-- Installed keyboard/theme/language-pack extensions (files/ime/) -->
+        <include domain="file" path="ime"/>
+    </cloud-backup>
+    <device-transfer>
+        <include domain="root" path="jetpref_datastore"/>
+        <include domain="file" path="ime"/>
+    </device-transfer>
+</data-extraction-rules>

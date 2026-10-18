@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2020-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -371,6 +372,10 @@ abstract class CrashUtility private constructor() {
         private val oldHandler: WeakReference<Thread.UncaughtExceptionHandler?>,
         private val ustDir: FsDir,
     ) : Thread.UncaughtExceptionHandler {
+        // FORK(S0-hardening): the ImeProcessTermination lint rule (TRD §2.3) bans killProcess/exitProcess.
+        // This is the one justified exception: the process is already dying from an uncaught exception and
+        // must terminate after the stacktrace is saved (returning would leave a dead main thread behind).
+        @SuppressLint("ImeProcessTermination")
         override fun uncaughtException(thread: Thread, throwable: Throwable) {
             flogInfo(LogTopic.CRASH_UTILITY) {
                 "Detected application crash, executing custom crash handler."

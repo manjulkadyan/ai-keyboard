@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (C) 2026 AI Keyboard contributors
+  Licensed under the Apache License, Version 2.0
+
+  TRD §6.3 "Network security config": no cleartext anywhere, system CAs only in release builds.
+  Debuggable builds additionally trust user-installed CAs (debug-overrides is ignored when
+  android:debuggable is false), so a local proxy can be used for testing. Pinning is OD-17.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

@@ -125,7 +125,8 @@ android {
             applicationIdSuffix = ".beta"
             versionNameSuffix = projectVersionNameSuffix
 
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // FORK(S0-hardening): strip Log.v/d/i and flog calls from minified builds (TRD §6.3)
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "proguard-hardening.pro")
             isMinifyEnabled = true
             isShrinkResources = true
 
@@ -139,7 +140,8 @@ android {
         named("release") {
             versionNameSuffix = projectVersionNameSuffix
 
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // FORK(S0-hardening): strip Log.v/d/i and flog calls from minified builds (TRD §6.3)
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "proguard-hardening.pro")
             isMinifyEnabled = true
             isShrinkResources = true
 
@@ -252,6 +254,9 @@ dependencies {
     implementation(projects.lib.kotlin)
     implementation(projects.lib.native)
     implementation(projects.lib.snygg)
+
+    // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
+    lintChecks(projects.lintRules)
 
     testImplementation(libs.kotlin.test.junit5)
     androidTestImplementation(libs.androidx.test.ext)
