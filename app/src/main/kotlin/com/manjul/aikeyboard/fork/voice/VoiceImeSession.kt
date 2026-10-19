@@ -26,11 +26,11 @@ import com.manjul.aikeyboard.core.voice.SpeechSession
 import com.manjul.aikeyboard.core.voice.SpokenPunctuation
 import com.manjul.aikeyboard.core.voice.VoiceTimings
 import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
-import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
 import com.manjul.aikeyboard.core.voice.platform.PlatformSpeechEngine
 import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
 import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
+import com.manjul.aikeyboard.whisperVoice
 import com.manjul.aikeyboard.ime.voiceui.ComposingSpanController
 import com.manjul.aikeyboard.ime.voiceui.FirstDictationFlag
 import com.manjul.aikeyboard.ime.voiceui.VoiceController
@@ -57,9 +57,12 @@ class VoiceImeSession(
     private val lang: () -> String,
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
-    caps: RecognizerCapabilities = PlatformRecognizerCapabilities(context),
+    caps: RecognizerCapabilities = context.whisperVoice().value.capabilities(context),
     private val engineFactory: (EngineKind, segmented: Boolean) -> SpeechEngine = { kind, segmented ->
-        PlatformSpeechEngine(context, onDevice = kind == EngineKind.SYSTEM_ON_DEVICE, segmented = segmented)
+        when (kind) {
+            EngineKind.WHISPER -> context.whisperVoice().value.engine(scope)
+            else -> PlatformSpeechEngine(context, onDevice = kind == EngineKind.SYSTEM_ON_DEVICE, segmented = segmented)
+        }
     },
     private val online: () -> Boolean = { isOnline(context) },
 ) {
@@ -79,8 +82,7 @@ class VoiceImeSession(
             )
         },
         engines = object : VoiceEngines {
-            // WHISPER has no engine before Task 13: the controller reports it as unavailable.
-            override fun supports(kind: EngineKind) = kind != EngineKind.WHISPER
+            override fun supports(kind: EngineKind) = true
             override fun create(kind: EngineKind, segmented: Boolean) = engineFactory(kind, segmented)
         },
         selector = SpeechEngineSelector(caps),

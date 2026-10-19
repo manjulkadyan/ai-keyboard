@@ -86,6 +86,11 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt` | S1-voice | `voiceOwnsComposing` flag: while voice owns the composing region, `handleSelectionUpdate` does not treat the region as a word the editor must re-sync |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-voice | After `PrivateLockIndicator`, `smartbarVoicePanel()` replaces the rest of the main row while the voice panel is open |
 | `settings.gradle.kts`, `app/build.gradle.kts` | S1-whisper | `include(":lib:whisper")` (vendored whisper.cpp v1.9.5 + JNI bridge `libaikb_whisper.so`); `implementation(projects.lib.whisper)` |
+| `gradle/libs.versions.toml` | S1-whisper | `androidx-work` 2.12.0 (`work-runtime`, `work-testing`) and `mockwebserver` 4.12.0 (5.x pulls `okhttp-android`, which needs compileSdk 37) inside the `# --- AI Keyboard ---` blocks |
+| `app/build.gradle.kts` | S1-whisper | `WHISPER_MODEL_BASE_URL` build config field (placeholder `https://example.com/models/`, TODO(OD-01); every file is SHA-256 pinned in `WhisperModelSpec`) and `WHISPER_ENABLED_LANGS` (`"*"` = all languages in debug and beta, `""` = none in release); `implementation(libs.androidx.work.runtime)` |
+| `app/src/main/AndroidManifest.xml` | S1-whisper | `INTERNET` permission, used only by the Whisper model download worker (the app had no network access before); `androidx.work.WorkManagerInitializer` removed from the startup provider, so WorkManager initialises on demand through `FlorisApplication`'s `Configuration.Provider` and never on the IME cold start. WorkManager's exported `SystemJobService` (`BIND_JOB_SERVICE`) and `DiagnosticsReceiver` (`DUMP`) are on the `ExportedComponentRules` allow-list |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-whisper | Lazy `whisperVoice` (`fork.voice.WhisperVoice`: shared whisper.cpp context, idle unloader, model manager) and `Context.whisperVoice()` accessor; `Configuration.Provider` with `ModelDownloadWorkerFactory`; `onTrimMemory` frees the loaded model (non-blocking) when Whisper was ever used |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-whisper | `Settings.Voice` route (`settings/voice`) rendering `fork/settings/VoiceSettingsScreen` and a home entry for it after Private apps |
 
 ## Marker-exempt files
 
@@ -219,7 +224,10 @@ New files (no markers needed), TRD §2.2, §2.3, §4.11, §11.1:
   manifest, so components merged in from libraries are reviewed as well; `ManifestHardeningTest` only sees
   the source manifest. Library entries: `androidx.profileinstaller.ProfileInstallReceiver` (must require
   `android.permission.DUMP`) and `androidx.compose.ui.tooling.PreviewActivity` (debuggable builds only;
-  `ui-tooling` is a `debugImplementation`). Keep the `:app` entries in sync with `ManifestHardeningTest`.
+  `ui-tooling` is a `debugImplementation`), `androidx.activity.ComponentActivity` (debuggable builds only; the
+  Compose test host from `ui-test-manifest`, a `debugImplementation`), and WorkManager's
+  `androidx.work.impl.background.systemjob.SystemJobService` (must require `android.permission.BIND_JOB_SERVICE`)
+  and `androidx.work.impl.diagnostics.DiagnosticsReceiver` (must require `android.permission.DUMP`). Keep the `:app` entries in sync with `ManifestHardeningTest`.
 - These are static checks. The runtime proof (IME-only cold start, no `com.google.android.gms.ads` class
   loaded, TRD §11.1 1.1(c)) is an instrumented test for Sprint 4, when GMA is added.
 

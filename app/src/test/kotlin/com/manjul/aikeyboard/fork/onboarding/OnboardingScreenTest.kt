@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+import com.manjul.aikeyboard.fork.testing.ComposeHostActivityRule
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
@@ -29,7 +30,10 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = android.app.Application::class)
 class OnboardingScreenTest {
-    @get:Rule
+    @get:Rule(order = 0)
+    val host = ComposeHostActivityRule()
+
+    @get:Rule(order = 1)
     val compose = createComposeRule()
 
     private val store = FeatureSettingsStore(RuntimeEnvironment.getApplication())

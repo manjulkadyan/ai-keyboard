@@ -37,10 +37,15 @@ internal fun languageInstalled(lang: String, installed: Collection<String>): Boo
 
 private const val SUPPORT_CHECK_TIMEOUT_MS = 1_500L
 
-/** Platform-backed capabilities. The whisper* answers are false until the Whisper engine is wired in. */
+/**
+ * Platform-backed capabilities. The whisper* answers come from the app (the model manager and the Whisper
+ * language gate) and are false when not supplied.
+ */
 class PlatformRecognizerCapabilities(
     private val context: Context,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
+    private val whisperReady: (lang: String) -> Boolean = { false },
+    private val whisperEnabled: (lang: String) -> Boolean = { false },
 ) : RecognizerCapabilities {
     override val sdkInt: Int get() = Build.VERSION.SDK_INT
 
@@ -88,7 +93,7 @@ class PlatformRecognizerCapabilities(
         }
     }
 
-    override fun whisperModelReady(lang: String): Boolean = false
+    override fun whisperModelReady(lang: String): Boolean = whisperReady(lang)
 
-    override fun whisperLangEnabled(lang: String): Boolean = false
+    override fun whisperLangEnabled(lang: String): Boolean = whisperEnabled(lang)
 }

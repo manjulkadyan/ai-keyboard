@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 /** Read when a dictation starts. [lang] is the BCP-47 tag of the active subtype. */
 data class VoiceRequest(val lang: String, val preferWhisper: Boolean, val online: Boolean)
 
-/** The engines this build can run. WHISPER is not supported until its engine exists. */
+/** The engines this build can run; an unsupported kind is reported as unavailable. */
 interface VoiceEngines {
     fun supports(kind: EngineKind): Boolean
     fun create(kind: EngineKind, segmented: Boolean): SpeechEngine

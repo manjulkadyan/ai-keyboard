@@ -24,4 +24,13 @@ object Buckets {
         n <= 50 -> "21-50"
         else -> "51+"
     }
+
+    /** Download size in decimal megabytes. */
+    fun megabytes(bytes: Long): String = when {
+        bytes < 50_000_000 -> "0-50"
+        bytes < 100_000_000 -> "50-100"
+        bytes < 250_000_000 -> "100-250"
+        bytes < 500_000_000 -> "250-500"
+        else -> "500+"
+    }
 }

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock // FORK(S1-smartbar)
+import androidx.compose.material.icons.filled.Mic // FORK(S1-whisper)
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.SmartButton
 import androidx.compose.material.icons.filled.Spellcheck
@@ -132,6 +133,12 @@ fun HomeScreen() = FlorisScreen {
             icon = Icons.Default.Lock,
             title = stringRes(R.string.private_apps__title),
             onClick = { navController.navigate(Routes.Settings.PrivateApps) },
+        )
+        // FORK(S1-whisper): home entry for the Voice settings screen
+        Preference(
+            icon = Icons.Default.Mic,
+            title = stringRes(R.string.voice_settings__title),
+            onClick = { navController.navigate(Routes.Settings.Voice) },
         )
         Preference(
             icon = Icons.Default.Spellcheck,

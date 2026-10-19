@@ -29,4 +29,12 @@ class BucketsTest {
         )
         cases.forEach { (n, b) -> assertEquals(b, Buckets.words(n), "words($n)") }
     }
+
+    @Test fun megabytes() {
+        val cases = mapOf(
+            -1L to "0-50", 0L to "0-50", 49_999_999L to "0-50", 50_000_000L to "50-100", 99_999_999L to "50-100",
+            100_000_000L to "100-250", 250_000_000L to "250-500", 499_999_999L to "250-500", 500_000_000L to "500+",
+        )
+        cases.forEach { (b, bucket) -> assertEquals(bucket, Buckets.megabytes(b), "megabytes($b)") }
+    }
 }

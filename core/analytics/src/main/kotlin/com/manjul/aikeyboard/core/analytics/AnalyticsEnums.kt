@@ -21,3 +21,12 @@ enum class EndReason(val value: String) {
 enum class UnavailableReason(val value: String) {
     NO_SERVICE("no_service"), LANG_UNSUPPORTED("lang_unsupported"), OFFLINE_NO_MODEL("offline_no_model")
 }
+
+/** Kind of downloadable pack; only [WHISPER] is downloaded so far. */
+enum class PackKind(val value: String) {
+    TRANSLATE("translate"), DICT("dict"), TRANSLIT("translit"), WHISPER("whisper")
+}
+
+enum class PackResult(val value: String) {
+    OK("ok"), FAILED("failed"), HASH_MISMATCH("hash_mismatch"), CANCELLED("cancelled")
+}

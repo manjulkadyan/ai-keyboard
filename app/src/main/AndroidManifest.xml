@@ -11,6 +11,9 @@
     <!-- FORK(S1-voice): network state for the voice engine choice (a server recognizer needs a network) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
+    <!-- FORK(S1-whisper): network for the Whisper model download worker only; dictation audio never leaves the phone -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- Permission needed to create notifications on devices running Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
@@ -182,6 +185,10 @@
             tools:node="merge">
             <meta-data
                 android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                tools:node="remove"/>
+            <!-- FORK(S1-whisper): WorkManager starts on demand (FlorisApplication is its Configuration.Provider) -->
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
                 tools:node="remove"/>
         </provider>
 

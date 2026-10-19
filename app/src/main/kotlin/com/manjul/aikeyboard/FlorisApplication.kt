@@ -56,6 +56,10 @@ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.analytics.BatchingRelay
 import com.manjul.aikeyboard.core.analytics.LogcatSink
 import com.manjul.aikeyboard.core.analytics.NoopSink
+// FORK(S1-whisper): imports for the Whisper model download and unloading
+import androidx.work.Configuration
+import com.manjul.aikeyboard.core.voice.whisper.ModelDownloadWorkerFactory
+import com.manjul.aikeyboard.fork.voice.WhisperVoice
 import java.lang.ref.WeakReference
 
 /**
@@ -65,7 +69,7 @@ import java.lang.ref.WeakReference
 private var FlorisApplicationReference = WeakReference<FlorisApplication?>(null)
 
 @Suppress("unused")
-class FlorisApplication : Application() {
+class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whisper): on-demand WorkManager
     companion object {
         init {
             try {
@@ -100,6 +104,20 @@ class FlorisApplication : Application() {
             // null policy = no IME field context (app-side events): not minimal, by design
             policy = { FlorisImeService.policyControllerOrNull()?.decision?.value },
         )
+    }
+    // FORK(S1-whisper): Whisper model, idle unloader and model manager; created on first Whisper use
+    val whisperVoice = lazy { WhisperVoice(this) { analytics.value::log } }
+
+    // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(ModelDownloadWorkerFactory { whisperVoice.value.models })
+            .build()
+
+    // FORK(S1-whisper): free the Whisper model under memory pressure; never creates it, never blocks
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (whisperVoice.isInitialized()) whisperVoice.value.unloader.onTrimMemory(level)
     }
 
     override fun onCreate() {
@@ -195,3 +213,6 @@ fun Context.themeManager() = this.florisApplication().themeManager
 
 // FORK(S1-policy): accessor for the fork settings store
 fun Context.featureSettingsStore() = this.florisApplication().featureSettingsStore
+
+// FORK(S1-whisper): accessor for the app-wide Whisper pieces
+fun Context.whisperVoice() = this.florisApplication().whisperVoice

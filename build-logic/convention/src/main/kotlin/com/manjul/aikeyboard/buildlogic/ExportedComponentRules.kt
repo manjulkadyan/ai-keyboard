@@ -59,6 +59,22 @@ object ExportedComponentRules {
             "Android Studio @Preview launcher from ui-tooling (debug builds only)",
             debuggableOnly = true,
         ),
+        // androidx.compose.ui:ui-test-manifest is a debugImplementation dependency: Compose unit tests host
+        // their content in this empty activity. It must never reach a non-debuggable build.
+        "androidx.activity.ComponentActivity" to ExportedComponentAllowance(
+            "Compose test host activity from ui-test-manifest (debug builds only)",
+            debuggableOnly = true,
+        ),
+        // androidx.work (Whisper model downloads): JobScheduler binds the job service, and adb can ask for
+        // WorkManager diagnostics. Only the system (BIND_JOB_SERVICE) or shell (DUMP) can reach them.
+        "androidx.work.impl.background.systemjob.SystemJobService" to ExportedComponentAllowance(
+            "WorkManager's JobScheduler service; bound by the system only",
+            requiredPermission = "android.permission.BIND_JOB_SERVICE",
+        ),
+        "androidx.work.impl.diagnostics.DiagnosticsReceiver" to ExportedComponentAllowance(
+            "WorkManager diagnostics dump for adb; DUMP-protected",
+            requiredPermission = "android.permission.DUMP",
+        ),
     )
 
     /** @return one message per violation; empty when every exported component is allowed. */

@@ -33,9 +33,9 @@ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.platform.EngineChoice
-import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
 import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
 import com.manjul.aikeyboard.featureSettingsStore
+import com.manjul.aikeyboard.whisperVoice
 import com.manjul.aikeyboard.fork.onboarding.DisclosureEngineKind
 import com.manjul.aikeyboard.fork.onboarding.VoiceDisclosureSheet
 import kotlinx.coroutines.flow.first
@@ -161,7 +161,7 @@ class MicPermissionActivity : ComponentActivity() {
 
         private fun defaultDeps(context: Context): Deps {
             val store = context.featureSettingsStore().value
-            val selector = SpeechEngineSelector(PlatformRecognizerCapabilities(context))
+            val selector = SpeechEngineSelector(context.whisperVoice().value.capabilities(context))
             return Deps(
                 store = store,
                 analytics = context.appContext().value.analytics.value::log,

@@ -72,6 +72,7 @@ import com.manjul.aikeyboard.app.settings.localization.SubtypeEditorScreen
 import com.manjul.aikeyboard.app.settings.media.MediaScreen
 import com.manjul.aikeyboard.app.settings.smartbar.SmartbarScreen
 import com.manjul.aikeyboard.fork.privacy.PrivateAppsScreen // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.settings.VoiceSettingsScreen // FORK(S1-whisper)
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
 import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
@@ -153,6 +154,11 @@ object Routes {
         @Serializable
         @Deeplink("settings/privacy/private-apps")
         object PrivateApps
+
+        // FORK(S1-whisper): Voice settings (engine, auto-stop, offline Whisper models), reached from the Settings home
+        @Serializable
+        @Deeplink("settings/voice")
+        object Voice
 
         @Serializable
         @Deeplink("settings/typing")
@@ -309,6 +315,7 @@ object Routes {
             composableWithDeepLink(Settings.Smartbar::class) { SmartbarScreen() }
 
             composableWithDeepLink(Settings.PrivateApps::class) { PrivateAppsScreen() } // FORK(S1-smartbar)
+            composableWithDeepLink(Settings.Voice::class) { VoiceSettingsScreen() } // FORK(S1-whisper)
 
             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
 

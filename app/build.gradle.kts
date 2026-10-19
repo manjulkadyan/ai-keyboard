@@ -82,6 +82,10 @@ android {
         buildConfigField("String", "BUILD_COMMIT_HASH", "\"${getGitCommitHash().get()}\"")
         buildConfigField("String", "FLADDONS_API_VERSION", "\"v~draft2\"")
         buildConfigField("String", "FLADDONS_STORE_URL", "\"beta.addons.florisboard.org\"")
+        // FORK(S1-whisper): Whisper model host (TODO(OD-01): placeholder until the product host exists; the files
+        // are SHA-256 pinned in WhisperModelSpec) and the languages Whisper may serve ("*" = all; release: none)
+        buildConfigField("String", "WHISPER_MODEL_BASE_URL", "\"https://example.com/models/\"")
+        buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"*\"")
 
         sourceSets {
             maybeCreate("main").apply {
@@ -153,6 +157,8 @@ android {
             // FORK(S0-branding): placeholder app name and neutral launcher glyph instead of FlorisBoard branding
             resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_keyboard_foreground")
             resValue("string", "floris_app_name", "@string/app_name")
+            // FORK(S1-whisper): no language uses Whisper in release until each is checked (decision 5)
+            buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"\"")
         }
 
         create("benchmark") {
@@ -279,6 +285,7 @@ dependencies {
     implementation(projects.ime.voiceUi)
     // FORK(S1-whisper): on-device whisper.cpp (libaikb_whisper.so); WhisperSpeechEngine builds on it
     implementation(projects.lib.whisper)
+    implementation(libs.androidx.work.runtime) // FORK(S1-whisper): model download worker, on-demand init
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)

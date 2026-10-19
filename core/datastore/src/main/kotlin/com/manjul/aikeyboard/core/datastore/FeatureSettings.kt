@@ -31,4 +31,6 @@ data class FeatureSettings(
     val analyticsOptOut: Boolean = false,
     /** When the first dictation with words was logged (first_dictation is sent once per install); 0 = never. */
     val firstDictationAt: Long = 0L,
+    /** Whisper model downloads wait for an unmetered network (Wi-Fi). */
+    val whisperWifiOnly: Boolean = true,
 )

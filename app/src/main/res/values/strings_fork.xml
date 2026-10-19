@@ -71,4 +71,31 @@
     <string name="voice__permission_denied_body" tools:ignore="MissingTranslation">Voice typing needs the microphone. You can allow it in the app settings, then tap the mic again.</string>
     <string name="voice__permission_open_settings" tools:ignore="MissingTranslation">Open app settings</string>
     <string name="voice__permission_not_now" tools:ignore="MissingTranslation">Not now</string>
+    <string name="voice_settings__title" tools:ignore="MissingTranslation">Voice</string>
+    <string name="voice_settings__engine" tools:ignore="MissingTranslation">Speech engine</string>
+    <string name="voice_settings__engine_auto" tools:ignore="MissingTranslation">Auto</string>
+    <string name="voice_settings__engine_auto_summary" tools:ignore="MissingTranslation">Use the best speech engine this phone has.</string>
+    <string name="voice_settings__engine_on_device" tools:ignore="MissingTranslation">On-device only</string>
+    <string name="voice_settings__engine_on_device_summary" tools:ignore="MissingTranslation">Use only the phone\'s on-device speech recognition.</string>
+    <string name="voice_settings__engine_whisper" tools:ignore="MissingTranslation">Offline (Whisper)</string>
+    <string name="voice_settings__engine_whisper_summary" tools:ignore="MissingTranslation">Use a downloaded Whisper model. Text appears when you stop speaking.</string>
+    <string name="voice_settings__needs_model" tools:ignore="MissingTranslation">Offline (Whisper) needs a model before it can work.</string>
+    <string name="voice_settings__spoken_punctuation" tools:ignore="MissingTranslation">Spoken punctuation</string>
+    <string name="voice_settings__spoken_punctuation_summary" tools:ignore="MissingTranslation">Say "comma" or "full stop" to type the symbol.</string>
+    <string name="voice_settings__auto_stop" tools:ignore="MissingTranslation">Stop after silence</string>
+    <string name="voice_settings__auto_stop_value" tools:ignore="MissingTranslation">{s} seconds</string>
+    <string name="voice_settings__models" tools:ignore="MissingTranslation">Offline models</string>
+    <string name="voice_settings__model_base" tools:ignore="MissingTranslation">Base</string>
+    <string name="voice_settings__model_small" tools:ignore="MissingTranslation">Small</string>
+    <string name="voice_settings__model_absent" tools:ignore="MissingTranslation">Not downloaded, {size}</string>
+    <string name="voice_settings__model_downloading" tools:ignore="MissingTranslation">Downloading, {size}</string>
+    <string name="voice_settings__model_ready" tools:ignore="MissingTranslation">Downloaded, {size}</string>
+    <string name="voice_settings__model_failed" tools:ignore="MissingTranslation">Download failed, {size}</string>
+    <string name="voice_settings__download_base" tools:ignore="MissingTranslation">Download Base</string>
+    <string name="voice_settings__download_small" tools:ignore="MissingTranslation">Download Small</string>
+    <string name="voice_settings__delete_base" tools:ignore="MissingTranslation">Delete Base</string>
+    <string name="voice_settings__delete_small" tools:ignore="MissingTranslation">Delete Small</string>
+    <string name="voice_settings__cancel_base" tools:ignore="MissingTranslation">Cancel Base download</string>
+    <string name="voice_settings__cancel_small" tools:ignore="MissingTranslation">Cancel Small download</string>
+    <string name="voice_settings__wifi_only" tools:ignore="MissingTranslation">Download on Wi-Fi only</string>
 </resources>

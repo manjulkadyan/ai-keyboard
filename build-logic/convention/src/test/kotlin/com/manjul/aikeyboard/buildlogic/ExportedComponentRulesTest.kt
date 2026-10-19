@@ -92,4 +92,29 @@ class ExportedComponentRulesTest {
         assertEquals(1, result.size)
         assertTrue(result.single().contains("android.permission.DUMP"))
     }
+
+    @Test
+    fun `work manager components pass only with their system permissions`() {
+        val guarded = """
+            <service android:name="androidx.work.impl.background.systemjob.SystemJobService" android:exported="true"
+                android:permission="android.permission.BIND_JOB_SERVICE" />
+            <receiver android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver" android:exported="true"
+                android:permission="android.permission.DUMP" />
+        """
+        assertEquals(emptyList<String>(), violations(appComponents + guarded))
+        val open = """
+            <service android:name="androidx.work.impl.background.systemjob.SystemJobService" android:exported="true" />
+            <receiver android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver" android:exported="true" />
+        """
+        assertEquals(2, violations(open).size)
+    }
+
+    @Test
+    fun `compose test host activity fails in a non-debuggable manifest`() {
+        val result = violations(
+            """<activity android:name="androidx.activity.ComponentActivity" android:exported="true" />""",
+        )
+        assertEquals(1, result.size)
+        assertTrue(result.single().contains("debuggable builds only"))
+    }
 }

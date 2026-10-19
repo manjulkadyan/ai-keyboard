@@ -29,6 +29,8 @@ class EventCatalogLimitsTest {
         EventCatalog.voicePermissionResult(true),
         EventCatalog.voiceUnavailable(UnavailableReason.OFFLINE_NO_MODEL),
         EventCatalog.privacyPrivateAppAdd(),
+        EventCatalog.packDownloadStart(big, PackKind.WHISPER, Long.MAX_VALUE),
+        EventCatalog.packDownloadDone("mul", PackKind.WHISPER, -1, PackResult.HASH_MISMATCH),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -43,6 +45,7 @@ class EventCatalogLimitsTest {
             assertEquals("other", EventCatalog.imeSessionStart(bad, false).params["subtype"], bad)
             assertEquals("other", EventCatalog.firstDictation(bad).params["lang"], bad)
             assertEquals("other", EventCatalog.voiceSessionStart(bad, VoiceEngine.WHISPER).params["lang"], bad)
+            assertEquals("other", EventCatalog.packDownloadStart(bad, PackKind.WHISPER, 0).params["lang"], bad)
         }
         assertEquals("ur", EventCatalog.firstDictation("ur").params["lang"])
         assertEquals("en-US", EventCatalog.imeSessionStart("en-US", false).params["subtype"])
@@ -67,11 +70,20 @@ class EventCatalogLimitsTest {
         assertFalse("error_code" in EventCatalog.voiceSessionEnd(0, 0, EndReason.USER, null).params)
     }
 
+    @Test fun packDownloadsCarryOnlyClosedValues() {
+        val done = EventCatalog.packDownloadDone("mul", PackKind.WHISPER, 57_000_000, PackResult.OK)
+        assertEquals(
+            mapOf("lang" to "mul", "kind" to "whisper", "size_bucket" to "50-100", "result" to "ok"),
+            done.params,
+        )
+    }
+
     @Test fun namesMatchPrd() {
         val expected = setOf(
             "onboarding_start", "onboarding_step_view", "ime_enabled", "ime_selected", "languages_set",
             "onboarding_complete", "ime_session_start", "first_dictation", "voice_session_start",
             "voice_session_end", "voice_permission_result", "voice_unavailable", "privacy_private_app_add",
+            "pack_download_start", "pack_download_done",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)

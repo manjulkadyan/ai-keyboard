@@ -33,6 +33,8 @@ object EventCatalog {
     const val VOICE_PERMISSION_RESULT = "voice_permission_result"
     const val VOICE_UNAVAILABLE = "voice_unavailable"
     const val PRIVACY_PRIVATE_APP_ADD = "privacy_private_app_add"
+    const val PACK_DOWNLOAD_START = "pack_download_start"
+    const val PACK_DOWNLOAD_DONE = "pack_download_done"
 
     val paramRegistry: Map<String, Set<String>> = mapOf(
         ONBOARDING_START to setOf("source"),
@@ -48,6 +50,8 @@ object EventCatalog {
         VOICE_PERMISSION_RESULT to setOf("granted"),
         VOICE_UNAVAILABLE to setOf("reason"),
         PRIVACY_PRIVATE_APP_ADD to emptySet(),
+        PACK_DOWNLOAD_START to setOf("lang", "kind", "size_bucket"),
+        PACK_DOWNLOAD_DONE to setOf("lang", "kind", "size_bucket", "result"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -101,4 +105,16 @@ object EventCatalog {
     fun voiceUnavailable(reason: UnavailableReason) = event(VOICE_UNAVAILABLE, "reason" to reason.value)
 
     fun privacyPrivateAppAdd() = event(PRIVACY_PRIVATE_APP_ADD)
+
+    /** [lang] is the pack's language tag ("mul" for multilingual packs); [bytes] is only reported as a bucket. */
+    fun packDownloadStart(lang: String, kind: PackKind, bytes: Long) =
+        event(PACK_DOWNLOAD_START, "lang" to tag(lang), "kind" to kind.value, "size_bucket" to Buckets.megabytes(bytes))
+
+    fun packDownloadDone(lang: String, kind: PackKind, bytes: Long, result: PackResult) = event(
+        PACK_DOWNLOAD_DONE,
+        "lang" to tag(lang),
+        "kind" to kind.value,
+        "size_bucket" to Buckets.megabytes(bytes),
+        "result" to result.value,
+    )
 }
