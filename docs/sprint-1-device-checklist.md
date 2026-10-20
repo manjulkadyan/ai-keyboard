@@ -35,7 +35,8 @@ Tick a box only after running it on a device. Record device, Android version and
 | [ ] 2.6 | Dictate partials, then move the host cursor or edit host text mid-partial. | Our span is dropped. No host text is deleted. | T11, Review Focus 2 |
 | [ ] 2.7 | Run the R24 scenario in several host apps; the input method manager may already finish composing before `restarting=true`. | The clear is a harmless no-op and no partial text remains in the field. | R24, T11 |
 | [ ] 2.8 | Logcat (debug build), exercise typing, voice, clipboard and onboarding. Filter on `AiKbAnalytics` and the app package. | No typed text, transcript, clipboard text or host package name appears in any log line or event. | Global constraints, PC-10 |
-| [ ] 2.9 | **Password-field egress test (instrumented).** With a password field focused, dictation, clipboard capture and analytics all idle, assert the app opens no network connection (for example `NetworkStatsManager`/`adb shell` per-UID counters or a proxy). Still required. Gate for Sprint 3, when INTERNET-using features (translation cloud, AI) land. The only INTERNET user so far is the Whisper model download worker (R29), which is not triggered from a password field. | Zero bytes sent by the app while a sensitive field is focused. | Brief; R29 |
+| [ ] 2.9 | **Password-field egress, on a device.** The JVM version is `PasswordFieldEgressTest` (R34, runs in `./gradlew test`): it scripts a password-field session with a `ProxySelector` guard, an empty WorkManager and a Room statement log. Still do it on hardware, because the test cannot run `FlorisImeService`: with a password field focused, type, backspace, paste and tap the mic, and check the app opens no connection (per-UID counters in `NetworkStatsManager`, or a proxy). Repeat as an instrumented test when Sprint 3 adds INTERNET-using features (translation cloud, AI); that is the Sprint 3 gate. Today the only INTERNET user is the Whisper model download worker (R29), which is never started from a password field. | Zero bytes sent by the app while a sensitive field is focused. | Brief; R29, R34 |
+| [ ] 2.10 | Clipboard settings: the auto-clean slider. | Range is 0 to 1440 minutes (widened from upstream's 120) in steps of 5; the 24 h default is reachable. Check it is usable and the label reads sensibly. Release note: auto-clean is on by default. | T3 |
 
 ## 3. Onboarding
 
@@ -61,6 +62,7 @@ Tick a box only after running it on a device. Record device, Android version and
 | [ ] 4.8 | Audio focus: play music, start dictation, stop it. | Music pauses and resumes. | T10 |
 | [ ] 4.9 | Check the IME hooks that have no unit test: mic key, voice panel in the smartbar, `FlorisImeService`/`KeyboardManager` hooks. | Behave as above with no regressions in normal typing. | T11 |
 | [ ] 4.10 | Set "Offline only" (on-device) in voice settings with no on-device support and no Whisper model. | Voice is unavailable with an offer. It never silently uses the server recogniser. | R32 |
+| [ ] 4.11 | On a service-recognizer (system default) session, check whether `EXTRA_PREFER_OFFLINE` has any effect on your devices. | It is only a hint on `SYSTEM_DEFAULT`; some services ignore it and use the network. Do not rely on it for privacy (use the on-device-only preference, R32). | T10 |
 
 ## 5. Voice (Whisper)
 
@@ -82,13 +84,14 @@ All Whisper download items depend on OD-01 (model host and hashes). Until then d
 | [ ] 5.12 | Release build. | The Offline (Whisper) option and the model section are hidden and the engine never picks Whisper (gate is empty). | Decision 5 |
 | [ ] 5.13 | IME cold start. Check `adb shell dumpsys jobscheduler` and `/proc/<pid>/maps`. | WorkManager is not initialised and `libaikb_whisper.so` is not loaded just by starting the keyboard. | T13 |
 | [ ] 5.14 | Rename versus delete of the model while a download finishes (rare race). | No installed file is left with state ABSENT. | T13 (parked) |
+| [ ] 5.15 | Start a Whisper model download from settings and watch the screen. | Known gap: settings show no download percentage, only a state. Decide if that is acceptable. | T13 |
 
 ## 6. Packaging and permissions
 
 | # | Steps | Expected | From |
 |---|---|---|---|
 | [ ] 6.1 | Install the release APK or AAB built by CI. Run `scripts/check-16kb-alignment.sh` on the APK, and on a 16 KB page-size device or emulator image start the app and dictate with Whisper. | `libfl_native.so` and `libaikb_whisper.so` are 16 KB aligned for every ABI and load on a 16 KB page-size device. AAB alignment is checked in the Main stage. | R6, T12 |
-| [ ] 6.2 | Inspect the installed app's declared permissions (`adb shell dumpsys package <pkg>`). | `RECORD_AUDIO`, `ACCESS_NETWORK_STATE` (R23), `INTERNET` (R29) and nothing else new. `POST_NOTIFICATIONS` is not requested (R17). | R17, R23, R29 |
+| [ ] 6.2 | Inspect the installed release app's declared permissions (`adb shell dumpsys package <pkg>`). | Exactly: `RECORD_AUDIO`, `ACCESS_NETWORK_STATE` (R23), `INTERNET` (R29), `VIBRATE` and `POST_NOTIFICATIONS` (both upstream), and WorkManager's merged `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE` (R29), plus the app-private `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. `POST_NOTIFICATIONS` stays declared because upstream `CrashUtility` posts crash notifications; onboarding never requests it (R17, R35), so on API 33+ crash notifications stay off until the user grants it in system settings. | R17, R23, R29, R35 |
 | [ ] 6.3 | Check exported components of the release build (including WorkManager `SystemJobService` and `DiagnosticsReceiver`). | Only the allow-listed components are exported. | T13 |
 | [ ] 6.4 | Release build startup. | The IME is not `directBootAware`; no crash before first unlock. Release APK size is acceptable (debug APK grew by about 5 MB with the Whisper library). | T2, T12 |
 
@@ -100,10 +103,16 @@ These are not code tasks. They need an owner outside engineering.
   `https://example.com/models/` and the pinned hashes are empty. Until both are filled, downloads fail closed
   (an empty hash makes the manager fail the download and discard the file, R28). The privacy policy URL is
   also a placeholder (OD-01).
-- **Play listing notes for the new permissions.** `ACCESS_NETWORK_STATE` (R23, used for the online check in
-  engine selection) and `INTERNET` (R29, used only by the Whisper model download worker; no URL or path
-  logging). Both are normal permissions, but the Data safety and permissions text must be updated and must
-  keep the "audio never leaves the phone" wording accurate for the Whisper and on-device-only paths.
+- **Play listing notes for the permissions.** The merged release manifest declares: `RECORD_AUDIO` (voice,
+  requested only from the mic chip), `ACCESS_NETWORK_STATE` (R23, the online check in engine selection),
+  `INTERNET` (R29, used only by the Whisper model download worker; no URL or path logging), `VIBRATE`
+  (upstream, key haptics), `POST_NOTIFICATIONS` (upstream, for crash notifications; we never request it, R17 and
+  R35), and from WorkManager `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED` and `FOREGROUND_SERVICE` (R29). All are normal
+  permissions except `RECORD_AUDIO` and `POST_NOTIFICATIONS`. The Data safety and permissions text must cover
+  them and keep the "audio never leaves the phone" wording accurate for the Whisper and on-device-only paths.
+  Upstream `SetupScreen.kt` still contains a `POST_NOTIFICATIONS` request (line 230) but no route reaches it: the
+  setup route shows the new onboarding (`Routes.kt`), so it is dead code. Decide whether to drop the permission
+  or surface a notification step when a feature needs it.
 - **`whisper_enabled_langs = []` in release.** No language has passed the native-speaker evals, so release
   builds do not expose Whisper (decision 5). Debug and beta enable all languages. Set the list per language
   only after the evals pass.
@@ -131,7 +140,7 @@ The plan narrows it to four checks. Each test file below was confirmed to exist 
 | Criterion | Covered by | Notes |
 |---|---|---|
 | Password field: no smartbar action | `app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyChipFilterTest.kt` (`password field keeps only emoji and settings`, `locked decision hides everything but emoji and settings`); decision source `ime/policy/.../SensitiveFieldPolicyMatrixTest.kt` (about 400 cases); `app/.../fork/policy/ImePolicyControllerTest.kt` | Emoji and settings stay by design (they take no field content). The on-screen result is device item 2.1. |
-| Password field: no Room write | `app/src/test/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt` (`nothing is captured while the policy forbids clipboard history`, `nothing is captured without a policy decision`, sensitive-flag and OTP cases) | Covers the capture gate that runs before `ClipboardItem.fromClipData` and the insert. The manager wiring around the gate is not unit tested (needs `FlorisApplication`, parked in the ledger). Device item 2.2. |
-| Robolectric no-network test (TRD wording) | **No test.** `ManifestHardeningTest.network security config blocks cleartext and user CAs outside debug` only checks the network security config. | The password-field egress test is still required: device item 2.9, a Sprint 3 gate. INTERNET has landed (Task 13), but its only user is the Whisper download worker (R29), so nothing in a password field can reach the network today. That is an argument by construction, not a test. |
+| Password field: no Room write | `app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PasswordFieldEgressTest.kt` (`scriptedPasswordSessionMakesNoNetworkCallAndNoRoomWrite`): a Room `QueryCallback` records every INSERT/UPDATE/DELETE on the clipboard database during the scripted session; plus `app/.../ime/clipboard/ClipboardCaptureGateTest.kt` (gate unit cases) | R34. The paste step mirrors `ClipboardManager.onPrimaryClipChanged` (real gate in front of the real DAO); `ClipboardManager` itself needs `FlorisApplication` and is not instantiated. Device item 2.2. |
+| Robolectric no-network test (TRD wording) | `PasswordFieldEgressTest` (R34): scripted password-field session (onStartInput, restart from a normal field, key presses, backspace, paste, mic action) with a `ProxySelector` guard that records any connection attempt and an empty WorkManager (no Whisper download queued). `positiveControlsProveTheDetectorsFire` shows the network, Room and WorkManager detectors fire. | Covers java.net and OkHttp URL connections (the Whisper worker's path) but not raw native sockets. Sprint 1 has no suggestion engine, so there is no suggestion tap to script. `FlorisImeService` itself cannot run under Robolectric, so the script drives the same policy controller, voice session and gate it wires. Device item 2.9. |
 | Voice shows live partials | `core/voice/.../SpeechSessionTest.kt` (`partialsEmitComposingAndFinalCommitsWithTrailingSpace`); `ime/voice-ui/.../ComposingSpanControllerTest.kt` and `VoiceControllerTest.kt`; `app/.../fork/voice/VoiceImeSessionTest.kt` (`ownPartialUpdatesKeepReplacingTheRegion`, the password and host-edit cases) | Fakes only. A real `SpeechRecognizer` showing partials is device item 4.1. |
 | Onboarding funnel events | `app/.../fork/onboarding/OnboardingViewModelTest.kt` (start, step, languages, skip, re-entry logs nothing, mic denial); `core/analytics/.../EventCatalogLimitsTest.kt` (names and limits) | The Logcat sink (`LogcatSink`, tag `AiKbAnalytics`, wired only when `BuildConfig.DEBUG`) replaces DebugView because Firebase is not set up. `LogcatSink` itself has no unit test. Device item 3.4. |
