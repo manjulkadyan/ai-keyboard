@@ -140,6 +140,10 @@ New code lives in our own modules (TRD §2.1, §2.2). These are new files, not u
 - `:ime:policy` (pure JVM): `SensitiveFieldPolicy` (Sprint 1).
 - `:core:datastore` (Android library, S1-policy): `FeatureSettings` and `FeatureSettingsStore` (multi-process DataStore, JSON).
 - `:ime:voice-ui` (Android library, Compose, S1-voice): `VoiceController`, `ComposingSpanController`, `VoicePanel`. No `:app` types; the IME wiring is in `:app` `fork/voice`.
+- `:core:privacy` (Android library, S1-clipboard): clipboard sensitivity classifier and capture gate inputs. New files.
+- `:core:analytics` (Android library, S1-analytics): `EventCatalog`, limits, `BatchingRelay`, `LogcatSink` (debug) and `NoopSink`. No Firebase yet.
+- `:core:voice` (Android library, S1-voice, S1-whisper): `SpeechSession`, platform recognizer engine, `SpeechEngineSelector`, audio focus, and the Whisper engine, model manager and download worker.
+- `:lib:whisper` (Android library, native, S1-whisper): vendored whisper.cpp v1.9.5 (`third_party/`, see `WHISPER_UPSTREAM.md`) and the 16 KB-aligned JNI bridge `WhisperNative`.
 
 Layout decision: the upstream IME stays in `:app` (no `:ime` module split in Sprint 0).
 
