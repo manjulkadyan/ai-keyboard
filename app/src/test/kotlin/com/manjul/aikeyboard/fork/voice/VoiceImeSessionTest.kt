@@ -70,7 +70,7 @@ class VoiceImeSessionTest {
         override fun whisperLangEnabled(lang: String) = false
     }
 
-    private inner class Rig(scope: TestScope, initial: String = "", caps: RecognizerCapabilities = Caps()) {
+    private inner class Rig(scope: TestScope, initial: String = "", caps: () -> RecognizerCapabilities = { Caps() }) {
         val edit = EditText(app).apply {
             setText(initial)
             setSelection(initial.length)
@@ -88,6 +88,8 @@ class VoiceImeSessionTest {
                 return super.deleteSurroundingText(beforeLength, afterLength)
             }
         }
+        /** The connection the session sees; a field change hands it a new one. */
+        var current: InputConnection = ic
         val engines = mutableListOf<Engine>()
         val events = mutableListOf<AnalyticsEvent>()
         val store = FeatureSettingsStore(app, StandardTestDispatcher(scope.testScheduler))
@@ -99,7 +101,7 @@ class VoiceImeSessionTest {
             policy = policy,
             store = store,
             analytics = { events += it },
-            connection = { ic },
+            connection = { current },
             isRawInputEditor = { false },
             setOwnsComposing = { ownsComposing = it },
             lang = { "en-US" },
@@ -150,7 +152,7 @@ class VoiceImeSessionTest {
     }
 
     @Test fun onDeviceOnlyNeverStartsTheServerRecognizer() = run {
-        val r = Rig(this, caps = Caps(onDevice = false))
+        val r = Rig(this, caps = { Caps(onDevice = false) })
         r.store.update { it.copy(voiceEnginePreference = VoiceEnginePreference.ON_DEVICE) }
         runCurrent()
         r.policy.onStartInput(textField(), false)
@@ -283,6 +285,61 @@ class VoiceImeSessionTest {
         assertEquals("", r.text)
         assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
         assertEquals(0, r.deletes)
+    }
+
+    @Test fun capabilitiesAreResolvedOnFirstVoiceUseNotAtCreation() = run {
+        var resolved = 0
+        val r = Rig(this, caps = { resolved++; Caps() })
+        assertEquals(0, resolved, "the IME's onCreate must not create the Whisper pieces")
+        listen(r, "hi")
+        r.session.controller.toggle()
+        runCurrent()
+        r.session.controller.toggle()
+        runCurrent()
+        assertEquals(1, resolved)
+    }
+
+    @Test fun fieldChangeDiscardsThePartialBeforeTheFrameworkFinishesComposing() = run {
+        val r = Rig(this, initial = "abc ")
+        listen(r, "hel")
+        assertEquals("abc hel", r.text)
+
+        // FlorisImeService.onFinishInput (R39): our cancel first, then InputMethodService.onFinishInput, which
+        // finishes whatever composing region is left, then the policy controller's "no field".
+        r.session.onFinishInput()
+        r.ic.finishComposingText()
+        r.policy.onFinishInput()
+        runCurrent()
+
+        assertEquals("abc ", r.text)
+        assertTrue(r.commits.isEmpty())
+        assertEquals(0, r.deletes)
+        assertFalse(r.ownsComposing)
+        assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
+        assertEquals("field_change", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
+    }
+
+    @Test fun newFieldConnectionIsNeverTreatedAsOurs() = run {
+        val r = Rig(this)
+        listen(r, "hel")
+        assertTrue(r.ownsComposing)
+        // A different field whose own text happens to end with our partial, with the editor's composing region.
+        val other = EditText(app).apply {
+            setText("hel")
+            setSelection(3)
+        }
+        val otherIc = other.onCreateInputConnection(EditorInfo())
+        otherIc.setComposingRegion(0, 3)
+        r.current = otherIc
+
+        // onStartInput for the new field (not a restart): the region we owned belonged to the old connection.
+        r.session.onStartInput(restarting = false)
+        assertFalse(r.ownsComposing)
+        r.policy.onStartInput(textField(), false)
+        runCurrent()
+
+        assertEquals("hel", other.text.toString())
+        assertEquals(0, BaseInputConnection.getComposingSpanStart(other.text))
     }
 
     @Test fun firstDictationIsPersisted() = run {

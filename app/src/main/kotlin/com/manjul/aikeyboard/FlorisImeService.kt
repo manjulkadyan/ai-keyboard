@@ -116,6 +116,8 @@ import dev.patrickgold.jetpref.datastore.model.observeAsState
 import android.app.KeyguardManager
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.fork.voice.VoiceImeSession // FORK(S1-voice)
+import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
+import com.manjul.aikeyboard.fork.analytics.ImeSessionStartReporter // FORK(S1-analytics)
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.flow.update
 import org.florisboard.lib.android.AndroidInternalR
@@ -297,6 +299,8 @@ class FlorisImeService : LifecycleInputMethodService() {
     private lateinit var policyController: ImePolicyController
     // FORK(S1-voice): in-keyboard voice typing; cancelled by every policy restriction and when the keyboard hides
     private lateinit var voiceSession: VoiceImeSession
+    // FORK(S1-analytics): sampled ime_session_start from onStartInputView (R36)
+    private lateinit var imeSessionReporter: ImeSessionStartReporter
 
     init {
         setTheme(R.style.FlorisImeTheme)
@@ -315,6 +319,8 @@ class FlorisImeService : LifecycleInputMethodService() {
         )
         // Settings can arrive after the field started: recompute the editor state from the new decision.
         policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
+        // FORK(S1-policy): an open clipboard history panel closes when the field turns more restrictive
+        ClipboardPanelGate.closeOnRestriction(policyController, { activeState.imeUiMode }) { activeState.imeUiMode = it }
         // FORK(S1-voice): see the voiceSession declaration
         voiceSession = VoiceImeSession(
             context = this,
@@ -327,6 +333,8 @@ class FlorisImeService : LifecycleInputMethodService() {
             lang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
             scope = lifecycleScope,
         )
+        // FORK(S1-analytics): see the imeSessionReporter declaration
+        imeSessionReporter = ImeSessionStartReporter(System::currentTimeMillis, appContext().value.analytics.value::log)
         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
         subtypeManager.activeSubtypeFlow.collectIn(lifecycleScope) { subtype ->
             val config = Configuration(resources.configuration)
@@ -400,6 +408,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     override fun onStartInput(info: EditorInfo?, restarting: Boolean) {
         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
         super.onStartInput(info, restarting)
+        voiceSession.onStartInput(restarting) // FORK(S1-voice): a new field's connection holds no region of ours
         policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
@@ -411,10 +420,15 @@ class FlorisImeService : LifecycleInputMethodService() {
         super.onStartInputView(info, restarting)
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
+        // FORK(S1-analytics): the decision for this field is already set by onStartInput
+        imeSessionReporter.onStartInputView(policyController.decision.value, subtypeManager.activeSubtype.primaryLocale.languageTag())
         activeState.batchEdit {
-            if (activeState.imeUiMode != ImeUiMode.CLIPBOARD || prefs.clipboard.historyHideOnNextTextField.get()) {
-                activeState.imeUiMode = ImeUiMode.TEXT
-            }
+            // FORK(S1-policy): a restart never keeps the clipboard panel open where history is denied
+            activeState.imeUiMode = ClipboardPanelGate.onStartInputView(
+                activeState.imeUiMode,
+                prefs.clipboard.historyHideOnNextTextField.get(),
+                policyController.decision.value,
+            )
             activeState.isSelectionMode = editorInfo.initialSelection.isSelectionMode
             editorInstance.handleStartInputView(editorInfo, isRestart = restarting)
         }
@@ -458,6 +472,7 @@ class FlorisImeService : LifecycleInputMethodService() {
 
     override fun onFinishInput() {
         flogInfo { "(no args)" }
+        voiceSession.onFinishInput() // FORK(S1-voice): discard the partial before super finishes composing (R39)
         super.onFinishInput()
         policyController.onFinishInput() // FORK(S1-policy)
         editorInstance.handleFinishInput()

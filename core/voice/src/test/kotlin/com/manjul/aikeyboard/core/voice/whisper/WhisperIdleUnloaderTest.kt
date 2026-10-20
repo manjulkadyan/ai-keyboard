@@ -59,14 +59,23 @@ class WhisperIdleUnloaderTest {
         assertEquals(1, frees)
     }
 
-    @Test fun onlyRunningLowAndAboveFree() = runTest {
+    /** R38: RUNNING_LOW, RUNNING_CRITICAL and BACKGROUND or above free; UI_HIDDEN (settings backgrounded) does not. */
+    @Suppress("DEPRECATION")
+    @Test fun onlyRunningLowCriticalAndBackgroundOrAboveFree() = runTest {
         val u = unloader()
         u.touch()
-        @Suppress("DEPRECATION")
         u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE)
-        assertEquals(0, frees)
         u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
+        assertEquals(0, frees)
+        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
         assertEquals(1, frees)
+        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)
+        assertEquals(2, frees)
+        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_BACKGROUND)
+        assertEquals(3, frees)
+        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_MODERATE)
+        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
+        assertEquals(5, frees)
     }
 
     @Test fun noFreeWithoutATouch() = runTest {

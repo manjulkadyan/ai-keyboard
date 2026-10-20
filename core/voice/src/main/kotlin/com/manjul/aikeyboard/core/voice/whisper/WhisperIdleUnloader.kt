@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Frees the loaded Whisper model [IDLE_MS] after the last [touch], or at once when the system reports
- * memory pressure ([onTrimMemory] with a level of at least TRIM_MEMORY_RUNNING_LOW). [free] must not block:
+ * memory pressure ([onTrimMemory], see there for the levels). [free] must not block:
  * it runs on the main thread from onTrimMemory. The model is loaded again on next use.
  */
 class WhisperIdleUnloader(
@@ -32,9 +32,16 @@ class WhisperIdleUnloader(
         }
     }
 
-    @Suppress("DEPRECATION") // TRIM_MEMORY_RUNNING_LOW is still delivered below API 34.
+    /**
+     * Frees on RUNNING_LOW, RUNNING_CRITICAL and BACKGROUND or above (R38). UI_HIDDEN only means our settings UI
+     * went to the background; freeing then would force a reload on the next dictation.
+     */
+    @Suppress("DEPRECATION") // The RUNNING_* levels are still delivered below API 34.
     fun onTrimMemory(level: Int) {
-        if (level < ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) return
+        val free = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+        if (!free) return
         synchronized(lock) {
             job?.cancel()
             job = null

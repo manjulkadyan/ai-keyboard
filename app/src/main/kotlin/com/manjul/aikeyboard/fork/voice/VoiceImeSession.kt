@@ -56,7 +56,8 @@ class VoiceImeSession(
     private val lang: () -> String,
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
-    caps: RecognizerCapabilities = context.whisperVoice().value.capabilities(context),
+    /** Resolved on first voice use, so the IME's onCreate does not create the app's Whisper pieces. */
+    caps: () -> RecognizerCapabilities = { context.whisperVoice().value.capabilities(context) },
     private val engineFactory: (EngineKind, segmented: Boolean) -> SpeechEngine = { kind, segmented ->
         when (kind) {
             EngineKind.WHISPER -> context.whisperVoice().value.engine(scope)
@@ -65,7 +66,9 @@ class VoiceImeSession(
     },
     private val online: () -> Boolean = { isOnline(context) },
 ) {
-    val span = ComposingSpanController(ImeTextTarget(connection, isRawInputEditor, setOwnsComposing))
+    private val target = ImeTextTarget(connection, isRawInputEditor, setOwnsComposing)
+
+    val span = ComposingSpanController(target)
 
     val controller = VoiceController(
         scope = scope,
@@ -84,7 +87,7 @@ class VoiceImeSession(
             override fun supports(kind: EngineKind) = true
             override fun create(kind: EngineKind, segmented: Boolean) = engineFactory(kind, segmented)
         },
-        selector = SpeechEngineSelector(caps),
+        selector = SpeechEngineSelector(LazyCapabilities(caps)),
         request = {
             VoiceRequest(
                 lang = lang(),
@@ -123,6 +126,22 @@ class VoiceImeSession(
         policy.addRestrictionListener { controller.cancel(EndReason.FIELD_CHANGE.value) }
     }
 
+    /**
+     * A new field (not a restart) has a new input connection: a region we owned belonged to the old one. Call
+     * before the policy controller's onStartInput, whose restriction cancels the session.
+     */
+    fun onStartInput(restarting: Boolean) {
+        if (!restarting) target.forgetOwnedRegion()
+    }
+
+    /**
+     * Field change (R39): call before `InputMethodService.onFinishInput`, which finishes the composing region, so
+     * the partial is discarded as on hide (R25) instead of being committed into the old field.
+     */
+    fun onFinishInput() {
+        controller.cancel(EndReason.FIELD_CHANGE.value)
+    }
+
     fun onFinishInputView() {
         controller.cancel(EndReason.FIELD_CHANGE.value)
     }
@@ -150,6 +169,17 @@ class VoiceImeSession(
             }
         }
     }
+}
+
+/** Resolves [provider] on the first capability question and keeps the answer. */
+private class LazyCapabilities(provider: () -> RecognizerCapabilities) : RecognizerCapabilities {
+    private val caps by lazy(provider)
+    override val sdkInt: Int get() = caps.sdkInt
+    override fun isRecognitionAvailable() = caps.isRecognitionAvailable()
+    override fun isOnDeviceAvailable() = caps.isOnDeviceAvailable()
+    override suspend fun onDeviceSupports(lang: String): Boolean? = caps.onDeviceSupports(lang)
+    override fun whisperModelReady(lang: String) = caps.whisperModelReady(lang)
+    override fun whisperLangEnabled(lang: String) = caps.whisperLangEnabled(lang)
 }
 
 /** Whether a network is up, for the engine choice (a server recognizer needs one). */

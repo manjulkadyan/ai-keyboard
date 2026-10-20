@@ -32,9 +32,14 @@ fun rememberPolicyDecision(): PolicyDecision {
     return decision
 }
 
+/** Quick actions a sensitive field may show (R37): they read no field content. Every other action is hidden. */
+private val SensitiveAllowList = setOf(KeyCode.IME_UI_MODE_MEDIA, KeyCode.SETTINGS, KeyCode.TOGGLE_PRIVATE_APP)
+
 /** True if [action] may be shown under [decision]. Chip-backed actions follow [ChipArrangement.allowed]. */
 fun QuickAction.isAllowedBy(decision: PolicyDecision, clipboardHistoryOn: Boolean): Boolean {
-    val code = (this as? QuickAction.InsertKey)?.data?.code ?: return true
+    val code = (this as? QuickAction.InsertKey)?.data?.code
+    if (decision.sensitive && (code == null || code !in SensitiveAllowList)) return false
+    if (code == null) return true
     if (code == KeyCode.TOGGLE_PRIVATE_APP) return SensitivityReason.PRIVATE_APP !in decision.reasons
     val chip = ChipId.forKeyCode(code) ?: return true
     return ChipArrangement.allowed(chip, decision, clipboardHistoryOn)

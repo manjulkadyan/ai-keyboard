@@ -76,6 +76,11 @@ class ImeTextTarget(
         }
     }
 
+    /** The input connection changed (new field): nothing on it is ours, so later edits never act as if it were. */
+    fun forgetOwnedRegion() {
+        own(false)
+    }
+
     private fun own(value: Boolean) {
         if (owned == value) return
         owned = value

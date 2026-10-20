@@ -64,9 +64,23 @@ class PolicyQuickActionsTest {
     }
 
     @Test
-    fun `non chip actions are never filtered`() {
-        assertTrue(undo.isAllowedBy(PolicyDecision.Locked, false))
-        assertTrue(QuickAction.InsertText("x").isAllowedBy(PolicyDecision.Locked, false))
+    fun `sensitive fields show only emoji, settings and the private-app action`() {
+        val password = PolicyDecision.Locked.copy(reasons = setOf(SensitivityReason.PASSWORD))
+        for (d in listOf(PolicyDecision.Locked, password)) {
+            assertTrue(emoji.isAllowedBy(d, true))
+            assertTrue(settings.isAllowedBy(d, true))
+            assertTrue(makePrivate.isAllowedBy(d, true))
+            assertFalse(undo.isAllowedBy(d, true))
+            assertFalse(key(TextKeyData.REDO).isAllowedBy(d, true))
+            assertFalse(key(TextKeyData.CLIPBOARD_PASTE).isAllowedBy(d, true))
+            assertFalse(QuickAction.InsertText("x").isAllowedBy(d, true))
+        }
+    }
+
+    @Test
+    fun `non chip actions stay in normal fields`() {
+        assertTrue(undo.isAllowedBy(PolicyDecision.Unrestricted, false))
+        assertTrue(QuickAction.InsertText("x").isAllowedBy(PolicyDecision.Unrestricted, false))
     }
 
     @Test

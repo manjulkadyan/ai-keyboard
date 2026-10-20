@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.MutableLiveData
 import com.manjul.aikeyboard.FlorisImeService
 import com.manjul.aikeyboard.fork.privacy.makeAppPrivate // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
 import com.manjul.aikeyboard.fork.smartbar.decisionOrLocked // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
 import com.manjul.aikeyboard.R
@@ -752,7 +753,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             KeyCode.IME_NEXT_SUBTYPE -> subtypeManager.switchToNextSubtype()
             KeyCode.IME_UI_MODE_TEXT -> activeState.imeUiMode = ImeUiMode.TEXT
             KeyCode.IME_UI_MODE_MEDIA -> activeState.imeUiMode = ImeUiMode.MEDIA
-            KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ImeUiMode.CLIPBOARD
+            // FORK(S1-policy): every route (chip, Enter popup, swipe) lands here; no history where the policy denies it
+            KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ClipboardPanelGate.onClipboardKey(activeState.imeUiMode, policyDecision())
             // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires
             // FORK(S1-voice): in-keyboard voice typing instead of switching to another voice IME
             KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.voiceSessionOrNull()?.controller?.toggle()

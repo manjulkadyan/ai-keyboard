@@ -158,7 +158,7 @@ class PasswordFieldEgressTest {
             lang = { "en-US" },
             scope = backgroundScope,
             clock = { 0L },
-            caps = Caps,
+            caps = { Caps },
             engineFactory = { kind, _ -> Engine(kind).also { engines += it } },
             online = { true },
         )

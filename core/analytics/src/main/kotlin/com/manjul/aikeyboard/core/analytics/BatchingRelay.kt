@@ -14,8 +14,9 @@ import kotlinx.coroutines.launch
 /**
  * Batches events and flushes to [sink] at most once per 60 s (PRD FR-35 AC2). A batch flushes at
  * max(first event + 60 s, last flush + 60 s); later events join it. Opt-out drops everything; under a
- * minimal policy only `ime_session_start` with `is_sensitive=true` passes. Both are re-checked at flush.
- * A null policy means "no IME field context" and is not minimal.
+ * minimal policy only `ime_session_start` with `is_sensitive=true` passes. The policy is applied when the event
+ * is logged, against the decision current then, so a later field does not decide for an earlier one. Opt-out is
+ * re-checked at flush. A null policy means "no IME field context" and is not minimal.
  */
 class BatchingRelay(
     private val sink: AnalyticsSink,
@@ -62,7 +63,7 @@ class BatchingRelay(
             if (batch.isNotEmpty()) lastFlushAt = clock()
         }
         if (optOut()) return
-        batch.filter(::passesPolicy).forEach(sink::log)
+        batch.forEach(sink::log)
     }
 
     private fun passesPolicy(e: AnalyticsEvent) =

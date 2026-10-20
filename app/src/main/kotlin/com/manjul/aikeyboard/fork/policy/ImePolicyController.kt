@@ -98,7 +98,7 @@ class ImePolicyController(
         listeners.forEach { it(decision) }
     }
 
-    private companion object {
+    companion object {
         /** Everything denied and no reasons: used before the first and after the last field. */
         val NoField: PolicyDecision = PolicyDecision.Locked.copy(reasons = emptySet())
     }

@@ -102,13 +102,24 @@ class BatchingRelayTest {
         assertEquals(2, sink.flushed.size)
     }
 
-    @Test fun policyIsReappliedAtFlush() = runTest {
+    @Test fun normalFieldEventSurvivesAFlushInASensitiveField() = runTest {
         val sink = Recorder()
         var minimal = false
         val relay = relay(sink, policy = { if (minimal) PolicyDecision.Locked else null })
         relay.log(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER))
-        minimal = true
+        minimal = true // the user moved into a password field before the flush
         advanceTimeBy(61_000)
-        assertEquals(0, sink.flushed.size)
+        assertEquals(listOf(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER)), sink.flushed)
+    }
+
+    @Test fun sensitiveFieldEventStaysFilteredAfterLeavingTheField() = runTest {
+        val sink = Recorder()
+        var minimal = true
+        val relay = relay(sink, policy = { if (minimal) PolicyDecision.Locked else null })
+        relay.log(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER))
+        minimal = false // back in a normal field before the flush
+        relay.log(EventCatalog.privacyPrivateAppAdd())
+        advanceTimeBy(61_000)
+        assertEquals(listOf(EventCatalog.privacyPrivateAppAdd()), sink.flushed)
     }
 }
