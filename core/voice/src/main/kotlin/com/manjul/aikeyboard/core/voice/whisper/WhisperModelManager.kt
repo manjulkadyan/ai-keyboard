@@ -37,8 +37,10 @@ enum class ModelState { ABSENT, DOWNLOADING, READY, FAILED }
 
 /**
  * Whisper model files in `<noBackupDir>/models/` (never backed up). A download is unique WorkManager work
- * per model ([ModelDownloadWorker]): the file is written to `<name>.part`, SHA-256 verified against the
- * pinned hash and only then renamed. A model whose pinned hash is empty is never downloaded (fails closed).
+ * per model ([ModelDownloadWorker]): the file is written to `<name>.<request id>.part`, SHA-256 verified
+ * against the pinned hash and only then renamed. The partial file belongs to one request (its retries resume
+ * it), so a stopping old request never touches a newer one's. A model whose pinned hash is empty is never
+ * downloaded (fails closed).
  *
  * [baseUrl] ends with "/" and the file name is appended. [scope] runs blocking WorkManager queries (an IO
  * scope in the app). Nothing here logs; [analytics] only gets closed values.
@@ -66,7 +68,7 @@ class WhisperModelManager(
         scope.launch { restoreDownloads() }
     }
 
-    /** Models this device can run: [WhisperModelSpec.SMALL] needs 6 GiB of RAM. */
+    /** Models this device can run: [WhisperModelSpec.SMALL] needs 5.5 GiB of RAM (ruling R31). */
     fun offered(): List<WhisperModelSpec> = WhisperModelSpec.entries.filter { ramBytes >= it.minRamBytes }
 
     /** The largest downloaded model this device can run, or null. */
@@ -105,14 +107,24 @@ class WhisperModelManager(
         }
         workManager.cancelUniqueWork(workName(spec))
         file(spec).delete()
-        partFile(spec).delete()
+        deleteParts(spec, keep = null)
     }
 
     internal fun workName(spec: WhisperModelSpec) = "whisper_model_" + spec.name.lowercase()
 
     private fun file(spec: WhisperModelSpec) = File(modelsDir, spec.fileName)
 
-    private fun partFile(spec: WhisperModelSpec) = File(modelsDir, spec.fileName + PART_SUFFIX)
+    internal fun partFile(spec: WhisperModelSpec, requestId: UUID) =
+        File(modelsDir, "${spec.fileName}.$requestId$PART_SUFFIX")
+
+    /** Deletes the model's partial files except the one of request [keep]. */
+    private fun deleteParts(spec: WhisperModelSpec, keep: UUID?) {
+        val kept = keep?.let { partFile(spec, it).name }
+        modelsDir.listFiles()?.forEach { f ->
+            val name = f.name
+            if (name.startsWith(spec.fileName + ".") && name.endsWith(PART_SUFFIX) && name != kept) f.delete()
+        }
+    }
 
     private fun setState(spec: WhisperModelSpec, state: ModelState) = _states.update { it + (spec to state) }
 
@@ -126,8 +138,10 @@ class WhisperModelManager(
                 if (pending != null && _states.value[spec] == ModelState.ABSENT) {
                     requests[spec] = pending.id
                     setState(spec, ModelState.DOWNLOADING)
-                } else if (pending == null && _states.value[spec] != ModelState.DOWNLOADING) {
-                    partFile(spec).delete()
+                }
+                when {
+                    pending != null -> deleteParts(spec, keep = pending.id)
+                    _states.value[spec] != ModelState.DOWNLOADING -> deleteParts(spec, keep = null)
                 }
             }
         }
@@ -146,13 +160,13 @@ class WhisperModelManager(
         adopt(spec, requestId)
         val expected = pinnedSha256(spec).lowercase()
         if (!SHA256_HEX.matches(expected)) return finish(spec, requestId, PackResult.HASH_MISMATCH)
-        val part = partFile(spec)
+        val part = partFile(spec, requestId)
         val outcome = try {
             modelsDir.mkdirs()
             if (modelsDir.usableSpace < spec.bytes + FREE_SPACE_MARGIN) {
                 Outcome.Done(PackResult.FAILED)
             } else {
-                fetch(spec, part, expected, isStopped)
+                fetch(spec, part, expected, isStopped) { isCurrent(spec, requestId) }
             }
         } catch (e: IOException) {
             Outcome.Retry
@@ -160,6 +174,7 @@ class WhisperModelManager(
         return when (outcome) {
             Outcome.Stopped -> {
                 if (isCurrent(spec, requestId)) return ListenableWorker.Result.retry()
+                // Only this request's partial file: a newer download of the same model has its own.
                 part.delete()
                 finish(spec, requestId, PackResult.CANCELLED)
             }
@@ -181,7 +196,13 @@ class WhisperModelManager(
         data class Done(val result: PackResult) : Outcome
     }
 
-    private fun fetch(spec: WhisperModelSpec, part: File, expected: String, isStopped: () -> Boolean): Outcome {
+    private fun fetch(
+        spec: WhisperModelSpec,
+        part: File,
+        expected: String,
+        isStopped: () -> Boolean,
+        isCurrent: () -> Boolean,
+    ): Outcome {
         val digest = MessageDigest.getInstance("SHA-256")
         var have = if (part.isFile) part.length() else 0L
         val limit = spec.bytes * SIZE_CAP_FACTOR
@@ -233,6 +254,8 @@ class WhisperModelManager(
         }
         val actual = digest.digest().joinToString("") { "%02x".format(it) }
         if (actual != expected) return Outcome.Done(PackResult.HASH_MISMATCH)
+        // A delete that raced the end of the stream wins: the model is not installed behind its back.
+        if (!isCurrent()) return Outcome.Stopped
         val dest = file(spec)
         dest.delete()
         if (!part.renameTo(dest)) return Outcome.Done(PackResult.FAILED)

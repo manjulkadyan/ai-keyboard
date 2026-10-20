@@ -19,7 +19,6 @@ import android.view.inputmethod.InputConnection
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.EndReason
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
-import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.SpeechEngine
 import com.manjul.aikeyboard.core.voice.SpeechSession
@@ -89,7 +88,7 @@ class VoiceImeSession(
         request = {
             VoiceRequest(
                 lang = lang(),
-                preferWhisper = store.current.voiceEnginePreference == VoiceEnginePreference.WHISPER,
+                preference = store.current.voiceEnginePreference,
                 online = online(),
             )
         },

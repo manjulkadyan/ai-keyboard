@@ -24,6 +24,7 @@ android {
 dependencies {
     api(libs.kotlinx.coroutines)
     api(projects.lib.whisper)
+    api(projects.core.datastore)
     api(libs.androidx.work.runtime)
     implementation(projects.core.analytics)
 

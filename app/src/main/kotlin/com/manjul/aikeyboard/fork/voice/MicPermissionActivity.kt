@@ -30,7 +30,6 @@ import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.EventCatalog
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
-import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.platform.EngineChoice
 import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
@@ -166,8 +165,7 @@ class MicPermissionActivity : ComponentActivity() {
                 store = store,
                 analytics = context.appContext().value.analytics.value::log,
                 engineKind = { lang ->
-                    val preferWhisper = store.current.voiceEnginePreference == VoiceEnginePreference.WHISPER
-                    selector.choose(lang, preferWhisper, isOnline(context)).toDisclosureKind()
+                    selector.choose(lang, store.current.voiceEnginePreference, isOnline(context)).toDisclosureKind()
                 },
                 clock = System::currentTimeMillis,
             )
@@ -175,12 +173,16 @@ class MicPermissionActivity : ComponentActivity() {
     }
 }
 
-/** The notice names the recognizer the keyboard will use. No engine yet: assume audio may leave the device. */
+/**
+ * The notice names the recognizer the keyboard will use. No engine yet: assume audio may leave the device, unless
+ * the engine preference keeps it on the phone.
+ */
 internal fun EngineChoice.toDisclosureKind(): DisclosureEngineKind = when (this) {
     is EngineChoice.Use -> when (kind) {
         EngineKind.SYSTEM_ON_DEVICE -> DisclosureEngineKind.ON_DEVICE
         EngineKind.SYSTEM_DEFAULT -> DisclosureEngineKind.SYSTEM_SERVICE
         EngineKind.WHISPER -> DisclosureEngineKind.WHISPER
     }
-    is EngineChoice.Unavailable -> DisclosureEngineKind.SYSTEM_SERVICE
+    is EngineChoice.Unavailable ->
+        if (localOnly) DisclosureEngineKind.ON_DEVICE else DisclosureEngineKind.SYSTEM_SERVICE
 }

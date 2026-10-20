@@ -16,10 +16,12 @@ import android.view.inputmethod.InputConnectionWrapper
 import android.widget.EditText
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.SpeechEngine
 import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
+import com.manjul.aikeyboard.ime.voiceui.MessageKind
 import com.manjul.aikeyboard.ime.voiceui.VoiceUiState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -59,16 +61,16 @@ class VoiceImeSessionTest {
         override fun destroy() { destroyed = true }
     }
 
-    private object Caps : RecognizerCapabilities {
+    private class Caps(val onDevice: Boolean = true) : RecognizerCapabilities {
         override val sdkInt = 34
         override fun isRecognitionAvailable() = true
-        override fun isOnDeviceAvailable() = true
+        override fun isOnDeviceAvailable() = onDevice
         override suspend fun onDeviceSupports(lang: String): Boolean? = true
         override fun whisperModelReady(lang: String) = false
         override fun whisperLangEnabled(lang: String) = false
     }
 
-    private inner class Rig(scope: TestScope, initial: String = "") {
+    private inner class Rig(scope: TestScope, initial: String = "", caps: RecognizerCapabilities = Caps()) {
         val edit = EditText(app).apply {
             setText(initial)
             setSelection(initial.length)
@@ -103,7 +105,7 @@ class VoiceImeSessionTest {
             lang = { "en-US" },
             scope = scope.backgroundScope,
             clock = { NOW },
-            caps = Caps,
+            caps = caps,
             engineFactory = { kind, _ -> Engine(kind).also { engines += it } },
             online = { true },
         )
@@ -145,6 +147,18 @@ class VoiceImeSessionTest {
         r.engine.listener!!.onPartial(partial)
         runCurrent()
         r.report()
+    }
+
+    @Test fun onDeviceOnlyNeverStartsTheServerRecognizer() = run {
+        val r = Rig(this, caps = Caps(onDevice = false))
+        r.store.update { it.copy(voiceEnginePreference = VoiceEnginePreference.ON_DEVICE) }
+        runCurrent()
+        r.policy.onStartInput(textField(), false)
+        r.session.controller.toggle()
+        runCurrent()
+        // Online with a speech service, yet no server engine is created.
+        assertTrue(r.engines.isEmpty(), "${r.engines.map { it.kind }}")
+        assertEquals(VoiceUiState.Message(MessageKind.NO_LOCAL_ENGINE), r.session.controller.ui.value)
     }
 
     @Test fun passwordRestartRemovesOurPartialWithoutCommittingIt() = run {

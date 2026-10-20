@@ -73,7 +73,10 @@ class WhisperSpeechEngine(
         modelPath = path
         clearBuffer()
         val started = try {
-            recorder.start { samples, n -> onSamples(gen, samples, n) }
+            recorder.start(
+                onSamples = { samples, n -> onSamples(gen, samples, n) },
+                onFailure = { scope.launch { onMicLost(gen) } },
+            )
         } catch (e: SecurityException) {
             listener.onError(ERROR_INSUFFICIENT_PERMISSIONS)
             return
@@ -132,6 +135,14 @@ class WhisperSpeechEngine(
             listener?.onRms(db)
             if (reachedCap) transcribe()
         }
+    }
+
+    /** The microphone went away mid-recording: report ERROR_AUDIO and drop what was heard. */
+    private fun onMicLost(gen: Int) {
+        if (gen != generation || phase != Phase.RECORDING) return
+        val l = listener
+        cancel()
+        l?.onError(ERROR_AUDIO)
     }
 
     private fun transcribe() {

@@ -5,7 +5,9 @@
 
 package com.manjul.aikeyboard.ime.voiceui
 
-enum class MessageKind { NO_SERVICE, LANG_UNSUPPORTED, OFFLINE_NO_MODEL, NETWORK, MIC_BUSY, NO_PERMISSION, ERROR }
+enum class MessageKind {
+    NO_SERVICE, LANG_UNSUPPORTED, OFFLINE_NO_MODEL, NO_LOCAL_ENGINE, NETWORK, MIC_BUSY, NO_PERMISSION, ERROR,
+}
 
 /** What the smartbar shows for voice typing. Never carries transcript text. */
 sealed interface VoiceUiState {

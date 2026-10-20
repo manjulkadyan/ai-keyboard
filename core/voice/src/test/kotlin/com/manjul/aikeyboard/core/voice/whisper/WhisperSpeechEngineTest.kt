@@ -54,18 +54,27 @@ class WhisperSpeechEngineTest {
 
     private class FakeRecorder : PcmRecorder {
         var sink: ((FloatArray, Int) -> Unit)? = null
+        var failure: (() -> Unit)? = null
         var starts = 0
         var stops = 0
 
-        override fun start(onSamples: (FloatArray, Int) -> Unit): Boolean {
+        override fun start(onSamples: (FloatArray, Int) -> Unit, onFailure: () -> Unit): Boolean {
             starts++
             sink = onSamples
+            failure = onFailure
             return true
         }
 
         override fun stop() {
             stops++
             sink = null
+            failure = null
+        }
+
+        /** The microphone went away mid-recording (a negative read), as the recorder thread reports it. */
+        fun lose() {
+            sink = null
+            failure?.invoke()
         }
 
         /** Feeds [seconds] of a constant-amplitude signal in 100 ms chunks, as the recorder thread would. */
@@ -263,5 +272,34 @@ class WhisperSpeechEngineTest {
         r.engine.stop()
         advanceUntilIdle()
         assertEquals("final:", r.events.all.last())
+    }
+
+    @Test fun aLostMicrophoneIsAnAudioErrorAndDropsTheAudio() = runTest {
+        val r = Rig(this)
+        r.engine.start("en", r.events)
+        runCurrent()
+        r.recorder.feed(seconds = 1)
+        r.recorder.lose()
+        advanceUntilIdle()
+        assertEquals(listOf("ready", "error:3"), r.events.all)
+        assertEquals(0, r.api.transcribes)
+        // A later stop from the session is a no-op.
+        r.engine.stop()
+        advanceUntilIdle()
+        assertEquals(0, r.api.transcribes)
+        assertEquals(listOf("ready", "error:3"), r.events.all)
+    }
+
+    @Test fun aFailureFromAnOldRecordingIsIgnored() = runTest {
+        val r = Rig(this)
+        r.engine.start("en", r.events)
+        runCurrent()
+        val old = r.recorder.failure!!
+        r.engine.cancel()
+        r.engine.start("en", r.events)
+        runCurrent()
+        old()
+        advanceUntilIdle()
+        assertEquals(listOf("ready", "ready"), r.events.all)
     }
 }

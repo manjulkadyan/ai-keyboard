@@ -198,6 +198,12 @@ class MicPermissionActivityTest {
             DisclosureEngineKind.SYSTEM_SERVICE,
             EngineChoice.Unavailable("no_service", offerSystemDownload = false, offerWhisperDownload = false).toDisclosureKind(),
         )
+        // On-device only and Offline (Whisper) never fall back to the server recognizer.
+        assertEquals(
+            DisclosureEngineKind.ON_DEVICE,
+            EngineChoice.Unavailable("offline_no_model", false, offerWhisperDownload = true, localOnly = true)
+                .toDisclosureKind(),
+        )
     }
 
     private companion object {

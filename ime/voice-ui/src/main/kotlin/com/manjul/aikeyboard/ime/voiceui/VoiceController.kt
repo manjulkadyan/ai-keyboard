@@ -10,6 +10,7 @@ import com.manjul.aikeyboard.core.analytics.EndReason
 import com.manjul.aikeyboard.core.analytics.EventCatalog
 import com.manjul.aikeyboard.core.analytics.UnavailableReason
 import com.manjul.aikeyboard.core.analytics.VoiceEngine
+import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.SpeechEngine
 import com.manjul.aikeyboard.core.voice.SpeechSession
@@ -27,8 +28,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Read when a dictation starts. [lang] is the BCP-47 tag of the active subtype. */
-data class VoiceRequest(val lang: String, val preferWhisper: Boolean, val online: Boolean)
+/** Read when a dictation starts. [lang] is the BCP-47 tag of the active subtype; [preference] is the user's. */
+data class VoiceRequest(val lang: String, val preference: VoiceEnginePreference, val online: Boolean)
 
 /** The engines this build can run; an unsupported kind is reported as unavailable. */
 interface VoiceEngines {
@@ -102,14 +103,19 @@ class VoiceController(
         startJob = scope.launch {
             val req = request()
             lastLang = req.lang
-            val choice = selector.choose(req.lang, req.preferWhisper, req.online)
+            val choice = selector.choose(req.lang, req.preference, req.online)
             if (generation() != token || !decision().allowVoice) {
                 _ui.value = VoiceUiState.Hidden
                 return@launch
             }
             val kind = when (choice) {
                 is EngineChoice.Unavailable -> {
-                    unavailable(choice.reason, choice.offerSystemDownload, choice.offerWhisperDownload)
+                    unavailable(
+                        choice.reason,
+                        choice.offerSystemDownload,
+                        choice.offerWhisperDownload,
+                        choice.localOnly,
+                    )
                     return@launch
                 }
                 is EngineChoice.Use -> choice.kind
@@ -250,13 +256,15 @@ class VoiceController(
         analytics(EventCatalog.firstDictation(lang))
     }
 
-    private fun unavailable(reason: String, offerSystem: Boolean, offerWhisper: Boolean) {
+    private fun unavailable(reason: String, offerSystem: Boolean, offerWhisper: Boolean, localOnly: Boolean = false) {
         val r = UnavailableReason.entries.firstOrNull { it.value == reason } ?: UnavailableReason.NO_SERVICE
         analytics(EventCatalog.voiceUnavailable(r))
         val kind = when (r) {
             UnavailableReason.NO_SERVICE -> MessageKind.NO_SERVICE
             UnavailableReason.LANG_UNSUPPORTED -> MessageKind.LANG_UNSUPPORTED
-            UnavailableReason.OFFLINE_NO_MODEL -> MessageKind.OFFLINE_NO_MODEL
+            // The user chose to keep audio on the phone; "you are offline" would be wrong when online.
+            UnavailableReason.OFFLINE_NO_MODEL ->
+                if (localOnly) MessageKind.NO_LOCAL_ENGINE else MessageKind.OFFLINE_NO_MODEL
         }
         _ui.value = VoiceUiState.Message(kind, offerSystemDownload = offerSystem, offerWhisperDownload = offerWhisper)
     }

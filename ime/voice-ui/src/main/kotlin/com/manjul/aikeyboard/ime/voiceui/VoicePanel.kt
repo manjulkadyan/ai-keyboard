@@ -44,6 +44,7 @@ fun VoicePanel(
     onAllowMic: () -> Unit,
     onResume: () -> Unit,
     onDownloadSystemModel: (() -> Unit)?,
+    onDownloadWhisperModel: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val color = LocalContentColor.current
@@ -78,6 +79,9 @@ fun VoicePanel(
                 if (state.offerSystemDownload && onDownloadSystemModel != null) {
                     VoiceChip(stringResource(R.string.voice__download_system), onDownloadSystemModel)
                 }
+                if (state.offerWhisperDownload && onDownloadWhisperModel != null) {
+                    VoiceChip(stringResource(R.string.voice__download_whisper), onDownloadWhisperModel)
+                }
                 CloseButton(onDismiss)
             }
         }
@@ -89,6 +93,7 @@ private fun MessageKind.text(): Int = when (this) {
     MessageKind.NO_SERVICE -> R.string.voice__msg_no_service
     MessageKind.LANG_UNSUPPORTED -> R.string.voice__msg_lang_unsupported
     MessageKind.OFFLINE_NO_MODEL -> R.string.voice__msg_offline_no_model
+    MessageKind.NO_LOCAL_ENGINE -> R.string.voice__msg_no_local_engine
     MessageKind.NETWORK -> R.string.voice__msg_network
     MessageKind.MIC_BUSY -> R.string.voice__msg_mic_busy
     MessageKind.NO_PERMISSION -> R.string.voice__msg_no_permission

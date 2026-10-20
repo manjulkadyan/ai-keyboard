@@ -127,7 +127,7 @@ class SpeechSession(
                 delay(FINALIZE_TIMEOUT_MS)
                 finish(reason, commitPending = true)
             } else {
-                delay(timings.transcribeTimeoutMs)
+                delay(timings.transcribeTimeoutFor(e.kind))
                 fail(VoiceErrorKind.OTHER)
             }
         }

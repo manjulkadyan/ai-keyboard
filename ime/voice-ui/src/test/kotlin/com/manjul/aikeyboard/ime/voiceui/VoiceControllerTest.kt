@@ -7,6 +7,7 @@ package com.manjul.aikeyboard.ime.voiceui
 
 import android.media.AudioManager
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
+import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.SpeechEngine
 import com.manjul.aikeyboard.core.voice.SpeechSession
@@ -68,7 +69,11 @@ class VoiceControllerTest {
         override fun markLogged() { logged = true }
     }
 
-    private class Rig(val scope: TestScope, caps: Caps = Caps()) {
+    private class Rig(
+        val scope: TestScope,
+        caps: Caps = Caps(),
+        preference: VoiceEnginePreference = VoiceEnginePreference.AUTO,
+    ) {
         var permission = true
         var permissionChecks = 0
         var decision = PolicyDecision.Unrestricted
@@ -93,7 +98,7 @@ class VoiceControllerTest {
                 override fun create(kind: EngineKind, segmented: Boolean) = Engine(kind).also { engines += it }
             },
             selector = SpeechEngineSelector(caps),
-            request = { VoiceRequest("en-US", preferWhisper = false, online = true) },
+            request = { VoiceRequest("en-US", preference, online = true) },
             permission = { permissionChecks++; permission },
             decision = { decision },
             generation = { generation },
@@ -206,7 +211,7 @@ class VoiceControllerTest {
                 override fun create(kind: EngineKind, segmented: Boolean): SpeechEngine = error("no engine expected")
             },
             selector = SpeechEngineSelector(Caps(service = true, onDevice = false)),
-            request = { VoiceRequest("en-US", preferWhisper = false, online = false) },
+            request = { VoiceRequest("en-US", VoiceEnginePreference.AUTO, online = false) },
             permission = { true },
             decision = { PolicyDecision.Unrestricted },
             generation = { 1 },
@@ -222,6 +227,15 @@ class VoiceControllerTest {
         assertEquals(VoiceUiState.Message(MessageKind.OFFLINE_NO_MODEL, offerSystemDownload = true), offline.ui.value)
         assertEquals("offline_no_model", r.events.single { it.name == "voice_unavailable" }.params["reason"])
         assertFalse(r.focus.isHeld)
+    }
+
+    @Test fun onDeviceOnlyWithoutAnOnDeviceEngineNeverStartsTheServerRecognizer() = run {
+        val r = Rig(this, Caps(service = true, onDevice = false), VoiceEnginePreference.ON_DEVICE)
+        r.controller.toggle()
+        runCurrent()
+        assertEquals(VoiceUiState.Message(MessageKind.NO_LOCAL_ENGINE), r.controller.ui.value)
+        assertEquals(0, r.sessionsCreated)
+        assertEquals("offline_no_model", r.events.single { it.name == "voice_unavailable" }.params["reason"])
     }
 
     @Test fun micBusyShowsAMessage() = run {

@@ -10,9 +10,11 @@
     <string name="voice__msg_no_service" tools:ignore="MissingTranslation">This phone has no speech recognition service.</string>
     <string name="voice__msg_lang_unsupported" tools:ignore="MissingTranslation">Voice typing is not available for this language yet.</string>
     <string name="voice__msg_offline_no_model" tools:ignore="MissingTranslation">You are offline and this language has no offline speech model.</string>
+    <string name="voice__msg_no_local_engine" tools:ignore="MissingTranslation">No on-device speech engine is available for this language.</string>
     <string name="voice__msg_network" tools:ignore="MissingTranslation">Voice typing needs a connection. Check your network and try again.</string>
     <string name="voice__msg_mic_busy" tools:ignore="MissingTranslation">The microphone is in use. Try again in a moment.</string>
     <string name="voice__msg_no_permission" tools:ignore="MissingTranslation">Microphone access is off.</string>
     <string name="voice__msg_error" tools:ignore="MissingTranslation">Voice typing stopped. Tap the mic to try again.</string>
     <string name="voice__download_system" tools:ignore="MissingTranslation">Download offline speech</string>
+    <string name="voice__download_whisper" tools:ignore="MissingTranslation">Get offline model</string>
 </resources>

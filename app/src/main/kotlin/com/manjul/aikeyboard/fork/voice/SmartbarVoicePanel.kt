@@ -5,6 +5,8 @@
 
 package com.manjul.aikeyboard.fork.voice
 
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.view.View
 import android.window.OnBackInvokedCallback
@@ -17,8 +19,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.core.net.toUri
 import com.manjul.aikeyboard.FlorisImeService
+import com.manjul.aikeyboard.app.FlorisAppActivity
 import com.manjul.aikeyboard.ime.voiceui.VoicePanel
 import com.manjul.aikeyboard.ime.voiceui.VoiceUiState
 
@@ -31,6 +36,7 @@ fun RowScope.smartbarVoicePanel(): Boolean {
     val controller = FlorisImeService.voiceSessionOrNull()?.controller ?: return false
     val state by controller.ui.collectAsState()
     if (state == VoiceUiState.Hidden) return false
+    val context = LocalContext.current
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         BackDismisses(LocalView.current, controller::dismiss)
     }
@@ -41,10 +47,26 @@ fun RowScope.smartbarVoicePanel(): Boolean {
         onAllowMic = controller::requestPermission,
         onResume = controller::toggle,
         onDownloadSystemModel = if (controller.canDownloadSystemModel) controller::downloadSystemModel else null,
+        onDownloadWhisperModel = {
+            controller.dismiss()
+            context.startActivity(voiceSettingsIntent(context))
+        },
         modifier = Modifier.weight(1f),
     )
     return true
 }
+
+/** Opens Voice settings (Routes.Settings.Voice, deep link `settings/voice`), where offline models are downloaded. */
+internal fun voiceSettingsIntent(context: Context): Intent =
+    Intent(Intent.ACTION_VIEW, VOICE_SETTINGS_DEEPLINK.toUri(), context, FlorisAppActivity::class.java)
+        .addCategory(Intent.CATEGORY_BROWSABLE)
+        .addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP,
+        )
+
+private const val VOICE_SETTINGS_DEEPLINK = "ui://florisboard/settings/voice"
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable

@@ -121,6 +121,19 @@ class VoiceSettingsTest {
         assertTrue(compose.onAllNodesWithText("Offline models").isEmpty())
     }
 
+    @Test fun spokenPunctuationCopyKeepsItsQuotes() {
+        show()
+        compose.onNodeWithText("Say \"comma\" or \"full stop\" to type the symbol.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test fun onlyAutoMentionsThatVoiceCanLeaveThePhone() {
+        show()
+        compose.onNodeWithText("processes your voice off the phone", substring = true).assertIsDisplayed()
+        assertEquals(2, compose.onAllNodesWithText("Your voice stays on this phone", substring = true).size)
+    }
+
     @Test fun releaseHidesWhisperForEveryLanguageAndDebugAndBetaShowAll() {
         val release = WhisperLanguageGate.parse("")
         for (lang in listOf("en-US", "hi-IN", "ur", "ar", "pt-BR")) assertFalse(release.enabled(lang), lang)
@@ -137,10 +150,13 @@ class VoiceSettingsTest {
         assertFalse(some.enabled("ur"))
     }
 
-    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithText(t: String) =
-        onAllNodes(androidx.compose.ui.test.hasText(t)).fetchSemanticsNodes()
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithText(
+        t: String,
+        substring: Boolean = false,
+    ) = onAllNodes(androidx.compose.ui.test.hasText(t, substring = substring)).fetchSemanticsNodes()
 
     private companion object {
-        const val NEEDS_MODEL = "Offline (Whisper) needs a model before it can work."
+        const val NEEDS_MODEL =
+            "Download a model below. Until then, on-device speech recognition is used where the phone has it."
     }
 }

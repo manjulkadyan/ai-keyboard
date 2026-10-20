@@ -35,6 +35,7 @@ import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.core.datastore.FeatureSettings
 import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
 import com.manjul.aikeyboard.core.voice.whisper.ModelState
+import com.manjul.aikeyboard.core.voice.whisper.WhisperModelManager
 import com.manjul.aikeyboard.core.voice.whisper.WhisperModelSpec
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
@@ -63,19 +64,29 @@ fun VoiceSettingsScreen() = FlorisScreen {
     val whisper = remember { context.whisperVoice().value }
     val scope = rememberCoroutineScope()
     val settings by store.flow.collectAsState(initial = store.current)
-    val states by whisper.models.states.collectAsState()
-    val offered = remember { whisper.models.offered() }
+    // The gate is fixed per build: with no Whisper language (release) the model manager, and with it
+    // WorkManager, is never created.
+    val whisperOffered = whisper.gate.anyEnabled
+    val models = if (whisperOffered) offeredModels(whisper.models) else emptyMap()
 
     content {
         VoiceSettingsContent(
             settings = settings,
             onUpdate = { transform -> scope.launch { store.update(transform) } },
-            whisperOffered = whisper.gate.anyEnabled,
-            models = states.filterKeys { it in offered },
+            whisperOffered = whisperOffered,
+            models = models,
             onDownload = { whisper.models.download(it, settings.whisperWifiOnly) },
             onDelete = { whisper.models.delete(it) },
         )
     }
+}
+
+/** The state of each model this device can run. */
+@Composable
+private fun offeredModels(manager: WhisperModelManager): Map<WhisperModelSpec, ModelState> {
+    val states by manager.states.collectAsState()
+    val offered = remember(manager) { manager.offered() }
+    return states.filterKeys { it in offered }
 }
 
 /** The screen body; [models] lists the models this device can run. */

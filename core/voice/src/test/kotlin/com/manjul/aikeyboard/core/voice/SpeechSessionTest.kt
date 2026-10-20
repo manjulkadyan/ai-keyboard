@@ -267,7 +267,7 @@ class SpeechSessionTest {
             r.l.onReady()
             r.session.stopByUser()
             assertEquals(VoiceState.Transcribing, r.session.state.value)
-            advanceTimeBy(44_000)
+            advanceTimeBy(60_000)
             assertEquals(VoiceState.Transcribing, r.session.state.value)
             r.l.onFinal("transcribed")
             assertEquals(VoiceOutput.Commit("transcribed "), awaitItem())
@@ -276,8 +276,24 @@ class SpeechSessionTest {
         }
     }
 
-    @Test fun transcribeTimeoutBoundaries() = runSession {
+    @Test fun whisperTranscribeTimeoutIsTwoMinutes() = runSession {
         val r = rig { whisper() }
+        r.session.start("en", false)
+        runCurrent()
+        r.session.stopByUser()
+        advanceTimeBy(60_000)
+        assertEquals(VoiceState.Transcribing, r.session.state.value)
+        advanceTimeBy(59_999)
+        assertEquals(VoiceState.Transcribing, r.session.state.value)
+        advanceTimeBy(1_001)
+        assertEquals(VoiceState.Error(VoiceErrorKind.OTHER), r.session.state.value)
+        assertEquals("error", r.session.endReason)
+        assertTrue(r.engine.destroyed)
+        r.session.output.test { assertEquals(VoiceOutput.ClearComposing, awaitItem()); expectNoEvents() }
+    }
+
+    @Test fun otherEnginesWithoutPartialsKeepTheFortyFiveSecondTimeout() = runSession {
+        val r = rig { FakeSpeechEngine(EngineKind.SYSTEM_DEFAULT, supportsPartials = false) }
         r.session.start("en", false)
         runCurrent()
         r.session.stopByUser()
