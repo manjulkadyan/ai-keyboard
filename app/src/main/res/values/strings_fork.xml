@@ -36,6 +36,12 @@
     <string name="quick_action__toggle_private_app__tooltip" tools:ignore="MissingTranslation">Make this app private</string>
     <string name="quick_action__toggle_translate_bar" tools:ignore="MissingTranslation">Translate</string>
     <string name="quick_action__toggle_translate_bar__tooltip" tools:ignore="MissingTranslation">Translate as you type</string>
+    <!-- Shown in the keyboard's top bar for about 5 seconds right after the user made the current app private. Keep it short: it shares one line with the Undo button. Do not add the app name. -->
+    <string name="private_app_undo__message" tools:ignore="MissingTranslation">App made private</string>
+    <!-- Button next to "App made private": takes the app off the private apps list again. One short word. -->
+    <string name="private_app_undo__action" tools:ignore="MissingTranslation">Undo</string>
+    <!-- Screen reader (TalkBack) label of the Undo button next to "App made private". -->
+    <string name="private_app_undo__action_description" tools:ignore="MissingTranslation">Undo, make this app not private</string>
 
     <!-- Private apps settings screen. -->
     <string name="private_apps__title" tools:ignore="MissingTranslation">Private apps</string>

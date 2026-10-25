@@ -120,6 +120,8 @@ import com.manjul.aikeyboard.fork.translate.TranslateImeSession // FORK(S2-bar)
 import com.manjul.aikeyboard.core.analytics.EndReason // FORK(S2-bar)
 import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
 import com.manjul.aikeyboard.fork.analytics.ImeSessionStartReporter // FORK(S1-analytics)
+import com.manjul.aikeyboard.fork.privacy.PrivateAppUndo // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.privacy.privateAppsRepository // FORK(S1-smartbar)
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.flow.update
 import org.florisboard.lib.android.AndroidInternalR
@@ -175,6 +177,12 @@ class FlorisImeService : LifecycleInputMethodService() {
         fun translateSessionOrNull(): TranslateImeSession? {
             val service = FlorisImeServiceReference.get() ?: return null
             return if (service::translateSession.isInitialized) service.translateSession else null
+        }
+
+        // FORK(S1-smartbar): "App made private" with Undo after the smartbar made the app private
+        fun privateAppUndoOrNull(): PrivateAppUndo? {
+            val service = FlorisImeServiceReference.get() ?: return null
+            return if (service::privateAppUndo.isInitialized) service.privateAppUndo else null
         }
 
         fun currentInputConnection(): InputConnection? {
@@ -310,6 +318,9 @@ class FlorisImeService : LifecycleInputMethodService() {
     // FORK(S2-bar): the Translate bar; closed by every policy restriction, on hide and on field change. Its
     // controller and the translation core are created on the first chip tap, never when the keyboard shows.
     private lateinit var translateSession: TranslateImeSession
+    // FORK(S1-smartbar): "Make this app private" adds the app at once and offers Undo for 5 s in the smartbar;
+    // a field change dismisses the offer (the app stays private). The package is never logged.
+    private lateinit var privateAppUndo: PrivateAppUndo
     // FORK(S1-analytics): sampled ime_session_start from onStartInputView (R36)
     private lateinit var imeSessionReporter: ImeSessionStartReporter
 
@@ -358,6 +369,10 @@ class FlorisImeService : LifecycleInputMethodService() {
             subtypeLang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
             beforeToggle = { voiceSession.controller.cancel(EndReason.FIELD_CHANGE.value) },
         )
+        // FORK(S1-smartbar): see the privateAppUndo declaration
+        privateAppUndo = privateAppsRepository().let { repo ->
+            PrivateAppUndo(add = repo::add, remove = repo::remove, scope = lifecycleScope)
+        }
         // FORK(S1-analytics): see the imeSessionReporter declaration
         imeSessionReporter = ImeSessionStartReporter(System::currentTimeMillis, appContext().value.analytics.value::log)
         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
@@ -436,6 +451,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         super.onStartInput(info, restarting)
         voiceSession.onStartInput(restarting) // FORK(S1-voice): a new field's connection holds no region of ours
         translateSession.onStartInput(restarting) // FORK(S2-bar): same for the bar's live preview
+        if (!restarting) privateAppUndo.onFieldChange() // FORK(S1-smartbar): a new field ends the Undo offer
         policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
@@ -504,6 +520,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         flogInfo { "(no args)" }
         voiceSession.onFinishInput() // FORK(S1-voice): discard the partial before super finishes composing (R39)
         translateSession.onFinishInput() // FORK(S2-bar): before policy's "no field", so a sensitive field drops the cache
+        privateAppUndo.onFieldChange() // FORK(S1-smartbar): the field closed, the app stays private
         super.onFinishInput()
         policyController.onFinishInput() // FORK(S1-policy)
         editorInstance.handleFinishInput()

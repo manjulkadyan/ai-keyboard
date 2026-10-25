@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.manjul.aikeyboard.R
+import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import com.manjul.aikeyboard.ime.policy.SensitivityReason
 import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickAction
 import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
@@ -25,13 +26,14 @@ import org.florisboard.lib.snygg.ui.SnyggBox
 import org.florisboard.lib.snygg.ui.SnyggIcon
 
 /**
- * Shown while the field is sensitive. A long-press offers "Make this app private" unless the app already is.
+ * Shown while the field is sensitive. A long-press makes the app private at once unless it already is; the smartbar
+ * then offers Undo for 5 s ([smartbarPrivateAppUndo]).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PrivateLockIndicator(modifier: Modifier = Modifier) {
     val decision = rememberPolicyDecision()
-    if (!decision.sensitive && decision.reasons.isEmpty()) return
+    if (!decision.showsPrivateLock()) return
     val context = LocalContext.current
     val canMakePrivate = SensitivityReason.PRIVATE_APP !in decision.reasons
     val makePrivate = QuickAction.InsertKey(TextKeyData.TOGGLE_PRIVATE_APP)
@@ -60,3 +62,6 @@ fun PrivateLockIndicator(modifier: Modifier = Modifier) {
         )
     }
 }
+
+/** The lock shows while the field is sensitive or any sensitivity reason applies. */
+fun PolicyDecision.showsPrivateLock(): Boolean = sensitive || reasons.isNotEmpty()

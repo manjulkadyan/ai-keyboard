@@ -57,6 +57,7 @@ import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.fork.smartbar.PrivateLockIndicator // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.smartbar.policyFilteredOrNull // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.smartbar.smartbarPrivateAppUndo // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.voice.smartbarVoicePanel // FORK(S1-voice)
 import com.manjul.aikeyboard.fork.translate.SmartbarTranslateBar // FORK(S2-bar)
 import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
@@ -333,6 +334,7 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
             .height(FlorisImeSizing.smartbarHeight),
     ) {
         PrivateLockIndicator() // FORK(S1-smartbar): renders nothing unless the field is sensitive
+        if (smartbarPrivateAppUndo()) return@SnyggRow // FORK(S1-smartbar): "App made private" + Undo, for 5 s
         if (smartbarVoicePanel()) return@SnyggRow // FORK(S1-voice): the voice panel replaces the row while active
         when (smartbarLayout) {
             SmartbarLayout.SUGGESTIONS_ONLY -> {

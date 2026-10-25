@@ -794,9 +794,11 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             }
             KeyCode.TOGGLE_INCOGNITO_MODE -> scope.launch { handleToggleIncognitoMode() }
             KeyCode.TOGGLE_AUTOCORRECT -> handleToggleAutocorrect()
-            // FORK(S1-smartbar): the package is read here (main thread) and never logged
+            // FORK(S1-smartbar): the package is read here (main thread) and never logged; the smartbar then offers
+            // Undo for 5 s (falls back to a plain add without a running service)
             KeyCode.TOGGLE_PRIVATE_APP -> editorInstance.activeInfo.packageName.let { pkg ->
-                scope.launch { appContext.makeAppPrivate(pkg) }
+                FlorisImeService.privateAppUndoOrNull()?.makePrivate(pkg)
+                    ?: scope.launch { appContext.makeAppPrivate(pkg) }
             }
             KeyCode.UNDO -> editorInstance.performUndo()
             KeyCode.VIEW_CHARACTERS -> activeState.keyboardMode = KeyboardMode.CHARACTERS

@@ -29,6 +29,11 @@ Manual checks left (test-plan step → checklist row):
   with a pause (the ", " / ". " join still lands right after the first); dictate, then tap into the middle of the
   partial and type a letter before it settles (your letter stays, nothing of yours is deleted); dictate at the end
   of existing text (the existing text is untouched).
+- [ ] **"App made private" Undo message** (checklist 1.8, rebuild first): long-press the lock or tap "Make
+  private" in a normal field; the smartbar shows "App made private" with Undo next to the lock. Undo within 5 s:
+  the lock goes, the mic and "Make private" come back in the same field. Leave it: after about 5 s the message
+  goes and the app stays private. Change field while it shows: it goes and the app stays private. With TalkBack
+  on, the message is announced and Undo is easy to hit.
 
 Already verified on the Pixel 9 on 2026-10-25 (don't repeat):
 
