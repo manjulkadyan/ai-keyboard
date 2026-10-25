@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock // FORK(S1-smartbar)
 import androidx.compose.material.icons.filled.Mic // FORK(S1-whisper)
+import androidx.compose.material.icons.filled.DownloadForOffline // FORK(S2-packs)
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.SmartButton
 import androidx.compose.material.icons.filled.Spellcheck
@@ -139,6 +140,12 @@ fun HomeScreen() = FlorisScreen {
             icon = Icons.Default.Mic,
             title = stringRes(R.string.voice_settings__title),
             onClick = { navController.navigate(Routes.Settings.Voice) },
+        )
+        // FORK(S2-packs): home entry for the Offline languages screen (translation packs, voice models)
+        Preference(
+            icon = Icons.Default.DownloadForOffline,
+            title = stringRes(R.string.offline_languages__title),
+            onClick = { navController.navigate(Routes.Settings.OfflineLanguages) },
         )
         Preference(
             icon = Icons.Default.Spellcheck,

@@ -9,6 +9,9 @@ import app.cash.turbine.test
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.datastore.LanguagePair
+import com.manjul.aikeyboard.core.translate.Lang
+import com.manjul.aikeyboard.core.translate.LangPair
+import com.manjul.aikeyboard.core.translate.ModelSizes
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +36,15 @@ private class FakeIme(enabled: Boolean = false, selected: Boolean = false) : Ime
     override val selected = MutableStateFlow(selected)
 }
 
+/** Counts the pair's models as missing unless listed in [present]; records the downloads it was asked for. */
+private class FakeOffer(private val present: Set<Lang> = emptySet()) : OfflinePackOffer {
+    val downloads = mutableListOf<LangPair>()
+    override fun missingBytes(pair: LangPair) = ModelSizes.bytes(ModelSizes.missingFor(pair, present))
+    override fun download(pair: LangPair) {
+        downloads += pair
+    }
+}
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = android.app.Application::class)
 class OnboardingViewModelTest {
@@ -48,15 +60,17 @@ class OnboardingViewModelTest {
         scope.cancel()
     }
 
-    private fun vm(ime: FakeIme, locales: List<String> = emptyList()) = OnboardingViewModel(
-        store = store,
-        imeStatus = ime,
-        analytics = { events += it },
-        ensureSubtypes = { seeded += it },
-        clock = { now },
-        scope = scope,
-        systemLocaleTags = locales,
-    )
+    private fun vm(ime: FakeIme, locales: List<String> = emptyList(), offer: OfflinePackOffer? = null) =
+        OnboardingViewModel(
+            store = store,
+            imeStatus = ime,
+            analytics = { events += it },
+            ensureSubtypes = { seeded += it },
+            clock = { now },
+            scope = scope,
+            systemLocaleTags = locales,
+            offlinePacks = offer,
+        )
 
     private fun named(name: String) = events.filter { it.name == name }
 
@@ -119,6 +133,39 @@ class OnboardingViewModelTest {
         assertEquals(mapOf<String, Any>("count" to 2, "has_rtl" to true), named("languages_set").single().params)
         assertEquals(OnboardingStep.TRY_IT, vm.state.value.step)
         assertEquals(LanguagePair("en", "ur"), store.flow.first { it.translatePair != null }.translatePair)
+    }
+
+    @Test
+    fun languagesStepOffersThePairDownloadWithItsSize() = runTest {
+        val vm = vm(FakeIme(enabled = true, selected = true), offer = FakeOffer())
+        vm.next()
+        assertEquals(30L * 1024 * 1024, vm.offlineOfferBytes(listOf("en-US", "ur-PK")))
+        // ur -> hi goes through the English pivot: three models.
+        assertEquals(90L * 1024 * 1024, vm.offlineOfferBytes(listOf("ur-PK", "hi-IN")))
+        assertEquals(0L, vm(FakeIme(), offer = FakeOffer(setOf(Lang.of("ur")))).offlineOfferBytes(listOf("en-US", "ur-PK")))
+        assertEquals(0L, vm(FakeIme()).offlineOfferBytes(listOf("en-US", "ur-PK")))
+    }
+
+    @Test
+    fun choosingTheOfferEnqueuesThePairDownload() = runTest {
+        val offer = FakeOffer()
+        val vm = vm(FakeIme(enabled = true, selected = true), offer = offer)
+        vm.next()
+        vm.onLanguagesChosen(listOf("en-US", "ur-PK"), "en" to "ur", downloadOffline = true)
+        assertEquals(listOf(LangPair(Lang.of("en"), Lang.of("ur"))), offer.downloads)
+        assertEquals(OnboardingStep.TRY_IT, vm.state.value.step)
+    }
+
+    @Test
+    fun skippingTheOfferStillCompletesOnboarding() = runTest {
+        val offer = FakeOffer()
+        val vm = vm(FakeIme(enabled = true, selected = true), offer = offer)
+        vm.next()
+        vm.onLanguagesChosen(listOf("en-US", "ur-PK"), "en" to "ur", downloadOffline = false)
+        assertTrue(offer.downloads.isEmpty())
+        vm.next()
+        assertEquals(OnboardingStep.DONE, vm.state.value.step)
+        assertTrue(store.flow.first { it.onboardingDone }.onboardingDone)
     }
 
     @Test

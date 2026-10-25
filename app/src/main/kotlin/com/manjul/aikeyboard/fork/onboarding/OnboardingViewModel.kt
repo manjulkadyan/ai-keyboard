@@ -10,6 +10,8 @@ import com.manjul.aikeyboard.core.analytics.EventCatalog
 import com.manjul.aikeyboard.core.analytics.OnboardingSource
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.datastore.LanguagePair
+import com.manjul.aikeyboard.core.translate.Lang
+import com.manjul.aikeyboard.core.translate.LangPair
 import com.manjul.aikeyboard.fork.subtypes.MVP_LANGUAGE_TAGS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +53,18 @@ fun defaultTranslatePair(tags: List<String>): Pair<String, String> {
 }
 
 /**
+ * The O4 "Download for offline" offer (plan decision 12): the bytes [pair] still needs and the user-chosen
+ * download, served by the app's translation model store. Language tags only.
+ */
+interface OfflinePackOffer {
+    fun missingBytes(pair: LangPair): Long
+
+    fun download(pair: LangPair)
+}
+
+private fun Pair<String, String>.toLangPair() = LangPair(Lang.of(first), Lang.of(second))
+
+/**
  * State machine behind O1-O5. Progress is persisted in [store] after every step so a killed process resumes
  * where it left off; ENABLE and SELECT advance by themselves when [imeStatus] reports the change. Events carry
  * enums, buckets and language tags only.
@@ -64,6 +78,7 @@ class OnboardingViewModel(
     private val scope: CoroutineScope,
     systemLocaleTags: List<String> = emptyList(),
     private val source: OnboardingSource = OnboardingSource.LAUNCHER,
+    private val offlinePacks: OfflinePackOffer? = null,
 ) {
     private val _state = MutableStateFlow(OnboardingUiState(defaultLanguageTags = defaultLanguageSelection(systemLocaleTags)))
     val state: StateFlow<OnboardingUiState> = _state.asStateFlow()
@@ -141,10 +156,16 @@ class OnboardingViewModel(
         }
     }
 
-    fun onLanguagesChosen(tags: List<String>, pair: Pair<String, String>) {
+    /** Size of the O4 offline offer for the pair [tags] would set; 0 when nothing is missing (no offer shown). */
+    fun offlineOfferBytes(tags: List<String>): Long =
+        offlinePacks?.missingBytes(defaultTranslatePair(tags).toLangPair()) ?: 0L
+
+    /** [downloadOffline] is the O4 offer; it only enqueues the Wi-Fi-only job and never holds up the next step. */
+    fun onLanguagesChosen(tags: List<String>, pair: Pair<String, String>, downloadOffline: Boolean = false) {
         if (_state.value.step != OnboardingStep.LANGUAGES || tags.isEmpty()) return
         ensureSubtypes(tags)
         scope.launch { store.update { it.copy(translatePair = LanguagePair(pair.first, pair.second)) } }
+        if (downloadOffline) offlinePacks?.download(pair.toLangPair())
         analytics(EventCatalog.languagesSet(tags.size, tags.any { languageOf(it) in RTL_LANGUAGES }))
         goTo(OnboardingStep.TRY_IT)
     }

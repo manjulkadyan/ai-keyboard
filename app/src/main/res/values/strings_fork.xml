@@ -116,4 +116,34 @@
     <string name="devtools__translate_latency__summary" tools:ignore="MissingTranslation">Times each test language pair on this device and copies the p50/p90 numbers. Only numbers are copied, no text.</string>
     <string name="devtools__translate_latency__running" tools:ignore="MissingTranslation">Measuring {pair}…</string>
     <string name="devtools__translate_latency__copied" tools:ignore="MissingTranslation">Latency numbers copied</string>
+
+    <!-- Offline languages (PRD FR-36): translation packs, Whisper models and the system recognizer. ML Kit gives no download progress and cannot cancel, so the action is "Stop" (RN-06). -->
+    <string name="offline_languages__title" tools:ignore="MissingTranslation">Offline languages</string>
+    <string name="offline_languages__storage" tools:ignore="MissingTranslation">Storage used</string>
+    <string name="offline_languages__storage_value" tools:ignore="MissingTranslation">About {size} for translation</string>
+    <string name="offline_languages__wifi_only" tools:ignore="MissingTranslation">Download on Wi-Fi only</string>
+    <string name="offline_languages__wifi_only_summary" tools:ignore="MissingTranslation">Translation and voice models wait for Wi-Fi</string>
+    <string name="offline_languages__translation" tools:ignore="MissingTranslation">Translation</string>
+    <string name="offline_languages__absent" tools:ignore="MissingTranslation">Not downloaded, about {size}</string>
+    <string name="offline_languages__downloading" tools:ignore="MissingTranslation">Downloading, about {size}</string>
+    <string name="offline_languages__ready" tools:ignore="MissingTranslation">Downloaded, about {size}</string>
+    <string name="offline_languages__ready_pivot" tools:ignore="MissingTranslation">Downloaded, about {size}. Needed to translate between your other languages</string>
+    <string name="offline_languages__failed" tools:ignore="MissingTranslation">Download failed, about {size}</string>
+    <string name="offline_languages__cloud_only" tools:ignore="MissingTranslation">Cloud only (Pro)</string>
+    <string name="offline_languages__download" tools:ignore="MissingTranslation">Download</string>
+    <string name="offline_languages__download_a11y" tools:ignore="MissingTranslation">Download {language}</string>
+    <string name="offline_languages__stop" tools:ignore="MissingTranslation">Stop</string>
+    <string name="offline_languages__stop_a11y" tools:ignore="MissingTranslation">Stop downloading {language}</string>
+    <string name="offline_languages__delete" tools:ignore="MissingTranslation">Delete</string>
+    <string name="offline_languages__delete_a11y" tools:ignore="MissingTranslation">Delete {language}</string>
+    <string name="offline_languages__voice" tools:ignore="MissingTranslation">Voice typing</string>
+    <string name="offline_languages__recognizer" tools:ignore="MissingTranslation">Phone speech recognition</string>
+    <string name="offline_languages__recognizer_on_device" tools:ignore="MissingTranslation">Works offline for the languages installed in system settings</string>
+    <string name="offline_languages__recognizer_none" tools:ignore="MissingTranslation">This phone has no on-device speech recognition</string>
+    <string name="offline_languages__recognizer_open" tools:ignore="MissingTranslation">Settings</string>
+    <string name="offline_languages__whisper_base" tools:ignore="MissingTranslation">Whisper Base</string>
+    <string name="offline_languages__whisper_small" tools:ignore="MissingTranslation">Whisper Small</string>
+    <!-- Onboarding O4 (plan decision 12): optional, never blocks finishing onboarding. -->
+    <string name="onboarding__offline_offer" tools:ignore="MissingTranslation">Download for offline (about {size})</string>
+    <string name="onboarding__offline_offer_summary" tools:ignore="MissingTranslation">Translate without internet. Downloads on Wi-Fi only unless you change it in Offline languages.</string>
 </resources>

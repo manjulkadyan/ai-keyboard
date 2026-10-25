@@ -62,6 +62,15 @@ import com.manjul.aikeyboard.core.voice.whisper.ModelDownloadWorkerFactory
 import com.manjul.aikeyboard.fork.voice.WhisperVoice
 // FORK(S2-mlkit): import for the translation core
 import com.manjul.aikeyboard.fork.translate.TranslationCore
+// FORK(S2-packs): imports for the offline translation packs
+import android.app.Activity
+import android.os.Bundle
+import androidx.work.DelegatingWorkerFactory
+import androidx.work.WorkManager
+import com.manjul.aikeyboard.core.translate.mlkit.MlKitRemoteModels
+import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelDownloadWorkerFactory
+import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelStore
+import kotlinx.coroutines.SupervisorJob
 import java.lang.ref.WeakReference
 
 /**
@@ -109,14 +118,30 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     }
     // FORK(S1-whisper): Whisper model, idle unloader and model manager; created on first Whisper use
     val whisperVoice = lazy { WhisperVoice(this) { analytics.value::log } }
+    // FORK(S2-packs): offline translation packs (ML Kit models, WorkManager job); both start on first use
+    val translateModelStore = lazy {
+        TranslateModelStore(
+            models = MlKitRemoteModels(this),
+            workManager = { WorkManager.getInstance(this) },
+            settings = featureSettingsStore.value,
+            analytics = { analytics.value.log(it) },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        )
+    }
     // FORK(S2-mlkit): router, ML Kit engine, language ID and translator pool; ML Kit itself starts on first use
-    // FORK(S2-bar): the bar's model downloads follow the Wi-Fi-only setting
-    val translation = lazy { TranslationCore(this) { featureSettingsStore.value.current.translateWifiOnly } }
+    // FORK(S2-packs): model presence and the bar's downloads go through the model store
+    val translation = lazy { TranslationCore(this) { translateModelStore.value } }
 
     // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
-            .setWorkerFactory(ModelDownloadWorkerFactory { whisperVoice.value.models })
+            .setWorkerFactory(
+                DelegatingWorkerFactory().apply {
+                    addFactory(ModelDownloadWorkerFactory { whisperVoice.value.models })
+                    // FORK(S2-packs): translation model downloads
+                    addFactory(TranslateModelDownloadWorkerFactory { translateModelStore.value })
+                },
+            )
             .build()
 
     // FORK(S1-whisper): free the Whisper model under memory pressure; never creates it, never blocks
@@ -171,6 +196,21 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
         extensionManager.value.init()
         clipboardManager.value.initializeForContext(this)
         DictionaryManager.init(this)
+        registerActivityLifecycleCallbacks(PackRefresher()) // FORK(S2-packs): refresh model states on app resume
+    }
+
+    // FORK(S2-packs): re-reads ML Kit's models when an app screen resumes (plan decision 4); never from the IME
+    private inner class PackRefresher : ActivityLifecycleCallbacks {
+        override fun onActivityResumed(activity: Activity) {
+            scope.launch { runCatching { translateModelStore.value.refresh() } }
+        }
+
+        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+        override fun onActivityStarted(activity: Activity) = Unit
+        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivityStopped(activity: Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+        override fun onActivityDestroyed(activity: Activity) = Unit
     }
 
     private inner class BootComplete : BroadcastReceiver() {
@@ -227,3 +267,6 @@ fun Context.whisperVoice() = this.florisApplication().whisperVoice
 
 // FORK(S2-mlkit): accessor for the app-wide translation core
 fun Context.translation() = this.florisApplication().translation
+
+// FORK(S2-packs): accessor for the offline translation packs
+fun Context.translateModelStore() = this.florisApplication().translateModelStore

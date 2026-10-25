@@ -5,23 +5,13 @@
 
 package com.manjul.aikeyboard.fork.translate
 
-import android.content.Context
-import com.google.mlkit.common.model.DownloadConditions
-import com.google.mlkit.common.model.RemoteModelManager
-import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.manjul.aikeyboard.core.translate.Lang
 import com.manjul.aikeyboard.core.translate.LangPair
-import com.manjul.aikeyboard.core.translate.ModelSizes
-import com.manjul.aikeyboard.core.translate.mlkit.MlKitBootstrap
-import com.manjul.aikeyboard.core.translate.mlkit.MlKitLanguages
-import com.manjul.aikeyboard.core.translate.mlkit.ModelPresence
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelStore
 
 /**
  * The translation models the bar needs: which languages are on the device (a snapshot, for the "Download" chip
- * size) and the user-started download. Task 5's `TranslateModelStore` (WorkManager job, Offline languages screen)
- * replaces [MlKitTranslateModels] behind this interface.
+ * size) and the user-started download. [StoreTranslateModels] serves it from the app's `TranslateModelStore`.
  */
 interface TranslateModels {
     /** The last known downloaded languages; empty until [refresh] has run. */
@@ -35,33 +25,13 @@ interface TranslateModels {
 }
 
 /**
- * Interim [TranslateModels] until Task 5: downloads through ML Kit's `RemoteModelManager` in the app's
- * [scope], so a download keeps going after the keyboard hides. Wi-Fi only unless the user turned that off.
+ * [TranslateModels] over the app's [TranslateModelStore] (S2-packs): a download is the store's app-owned WorkManager
+ * job, so it keeps going after the keyboard hides, Wi-Fi only unless the user turned that off.
  */
-class MlKitTranslateModels(
-    private val context: Context,
-    private val presence: ModelPresence,
-    private val scope: CoroutineScope,
-    private val wifiOnly: () -> Boolean,
-) : TranslateModels {
-    @Volatile private var known: Set<Lang> = emptySet()
+class StoreTranslateModels(private val store: () -> TranslateModelStore) : TranslateModels {
+    override fun downloaded(): Set<Lang> = store().ready()
 
-    override fun downloaded(): Set<Lang> = known
+    override suspend fun refresh() = store().refresh()
 
-    override suspend fun refresh() {
-        known = runCatching { presence.downloaded() }.getOrDefault(known)
-    }
-
-    override fun download(pair: LangPair) {
-        val missing = ModelSizes.missingFor(pair, known)
-        if (missing.isEmpty()) return
-        MlKitBootstrap.ensure(context)
-        val conditions = DownloadConditions.Builder().apply { if (wifiOnly()) requireWifi() }.build()
-        for (lang in missing) {
-            val code = MlKitLanguages.toMlKit(lang) ?: continue
-            RemoteModelManager.getInstance()
-                .download(TranslateRemoteModel.Builder(code).build(), conditions)
-                .addOnCompleteListener { scope.launch { refresh() } }
-        }
-    }
+    override fun download(pair: LangPair) = store().download(pair)
 }
