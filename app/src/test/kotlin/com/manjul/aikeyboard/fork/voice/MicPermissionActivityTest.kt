@@ -13,6 +13,7 @@ import android.provider.Settings
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
@@ -31,6 +32,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -94,7 +96,7 @@ class MicPermissionActivityTest {
     }
 
     private fun ActivityScenario<MicPermissionActivity>.isFinishing(): Boolean {
-        if (state == androidx.lifecycle.Lifecycle.State.DESTROYED) return true
+        if (state == Lifecycle.State.DESTROYED) return true
         var finishing = false
         onActivity { finishing = it.isFinishing }
         return finishing
@@ -177,6 +179,28 @@ class MicPermissionActivityTest {
 
         compose.onNodeWithText("Microphone is off").assertExists()
         assertEquals(1, events.count { it.name == "voice_permission_result" })
+    }
+
+    @Test
+    fun leavingTheNoticeFinishes() {
+        val scenario = launch()
+        compose.onNodeWithText("Before you speak").assertExists()
+        // Home or recents: the trampoline must not linger in the background (it is not noHistory any more).
+        scenario.moveToState(Lifecycle.State.CREATED)
+        assertTrue(scenario.isFinishing())
+    }
+
+    @Test
+    fun stoppingWhileThePermissionDialogIsUpKeepsTheActivityForTheResult() {
+        runBlocking { store.update { it.copy(consentVoiceNoticeAt = 5L) } }
+        val scenario = launch()
+        scenario.moveToState(Lifecycle.State.CREATED)
+        assertFalse(scenario.isFinishing())
+
+        scenario.moveToState(Lifecycle.State.RESUMED)
+        scenario.answer(granted = false)
+        assertEquals(listOf(false), events.filter { it.name == "voice_permission_result" }.map { it.params["granted"] })
+        compose.onNodeWithText("Microphone is off").assertExists()
     }
 
     @Test

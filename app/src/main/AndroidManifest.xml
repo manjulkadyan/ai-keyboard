@@ -149,12 +149,12 @@
             </intent-filter>
         </activity>
 
-        <!-- FORK(S1-voice): microphone permission trampoline for the keyboard, opened only from the mic chip -->
+        <!-- FORK(S1-voice): microphone permission trampoline for the keyboard, opened only from the mic chip.
+             No noHistory: it would drop the permission result. The activity finishes itself in onStop instead. -->
         <activity
             android:name="com.manjul.aikeyboard.fork.voice.MicPermissionActivity"
             android:theme="@style/FlorisAppTheme.Transparent"
             android:excludeFromRecents="true"
-            android:noHistory="true"
             android:taskAffinity=""
             android:exported="false"/>
 

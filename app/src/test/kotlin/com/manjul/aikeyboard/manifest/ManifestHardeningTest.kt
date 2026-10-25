@@ -222,4 +222,16 @@ class ManifestHardeningTest {
         val actions = manifest.elements("queries").single().children("action").map { it.attr("name") }
         assertTrue("android.speech.RecognitionService" in actions)
     }
+
+    @Test
+    fun `mic permission trampoline keeps its result and stays hidden`() {
+        val activity = manifest.elements("activity")
+            .single { it.attr("name") == "com.manjul.aikeyboard.fork.voice.MicPermissionActivity" }
+        // noHistory drops the RequestPermission result, so the rationale and voice_permission_result never happen.
+        assertNotEquals("true", activity.attr("noHistory"), "MicPermissionActivity must not be noHistory")
+        assertEquals("true", activity.attr("excludeFromRecents"))
+        assertEquals("", activity.attr("taskAffinity"))
+        assertTrue(activity.hasAttributeNS(androidNs, "taskAffinity"))
+        assertEquals("false", activity.attr("exported"))
+    }
 }

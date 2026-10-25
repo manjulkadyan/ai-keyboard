@@ -64,8 +64,11 @@ class MicPermissionActivity : ComponentActivity() {
     private var screen by mutableStateOf(Screen.NONE)
     private var disclosureKind = DisclosureEngineKind.SYSTEM_SERVICE
     private var requested = false
+    /** The permission dialog is up and its result has not come back yet. */
+    private var awaitingResult = false
 
     private val launcher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        awaitingResult = false
         deps.analytics(EventCatalog.voicePermissionResult(granted))
         if (granted) finish() else screen = Screen.RATIONALE
     }
@@ -78,6 +81,7 @@ class MicPermissionActivity : ComponentActivity() {
         }
         deps = depsOverride ?: defaultDeps(this)
         requested = savedInstanceState?.getBoolean(KEY_REQUESTED) ?: false
+        awaitingResult = savedInstanceState?.getBoolean(KEY_AWAITING) ?: false
         // The rationale has no other way back after a configuration change (the result was already delivered).
         // The notice is rebuilt by the flow below, with the engine it names.
         if (savedInstanceState?.getBoolean(KEY_RATIONALE) == true) screen = Screen.RATIONALE
@@ -123,15 +127,26 @@ class MicPermissionActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Leaves no trace once the user moves away (home, recents, another app). Not while the permission dialog is up:
+     * its result has to come back here. This replaces `noHistory`, which would drop that result.
+     */
+    override fun onStop() {
+        super.onStop()
+        if (!isFinishing && !isChangingConfigurations && !awaitingResult) finish()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(KEY_REQUESTED, requested)
+        outState.putBoolean(KEY_AWAITING, awaitingResult)
         outState.putBoolean(KEY_RATIONALE, screen == Screen.RATIONALE)
     }
 
     private fun request() {
         screen = Screen.NONE
         requested = true
+        awaitingResult = true
         launcher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
@@ -147,6 +162,7 @@ class MicPermissionActivity : ComponentActivity() {
         /** BCP-47 tag of the keyboard language, to name the recognizer that will be used in the notice. */
         const val EXTRA_LANG = "com.manjul.aikeyboard.extra.VOICE_LANG"
         private const val KEY_REQUESTED = "requested"
+        private const val KEY_AWAITING = "awaiting"
         private const val KEY_RATIONALE = "rationale"
         private const val DEFAULT_LANG = "en"
 
