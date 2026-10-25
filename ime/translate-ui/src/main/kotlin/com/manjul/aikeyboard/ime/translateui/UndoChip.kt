@@ -16,18 +16,20 @@ import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
 
 /**
- * "Undo" after an insert, shown while [visible] and for at most [windowMs] after [visible] became true; then it
- * hides itself even if [visible] stays true (the controller's own undo window ends at the same time).
+ * "Undo" after an insert, shown while [visible] and for at most [windowMs] after [visible] became true or [undoId]
+ * changed (a new insert); then it hides itself even if [visible] stays true (the controller's own undo window ends
+ * at the same time).
  */
 @Composable
 fun UndoChip(
     visible: Boolean,
     onUndo: () -> Unit,
     modifier: Modifier = Modifier,
+    undoId: Long = 0,
     windowMs: Long = UNDO_WINDOW_MS,
 ) {
-    var expired by remember(visible) { mutableStateOf(false) }
-    LaunchedEffect(visible, windowMs) {
+    var expired by remember(visible, undoId) { mutableStateOf(false) }
+    LaunchedEffect(visible, undoId, windowMs) {
         if (visible) {
             delay(windowMs)
             expired = true

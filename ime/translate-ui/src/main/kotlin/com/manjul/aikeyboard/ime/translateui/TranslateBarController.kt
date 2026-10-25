@@ -112,6 +112,15 @@ class TranslateBarController(
     private var insertUpdatePending = false
     private var firstTranslateChecked = false
 
+    /** Counts inserts, for [BarUiState.Open.undoId]. */
+    private var inserts = 0L
+
+    /** Counts sensitive closes, so a request that spans one can drop what the router cached meanwhile. */
+    private var sensitiveCloses = 0
+
+    /** The text of the request now at the engine, or null. User content: never logged. */
+    private var requestText: String? = null
+
     private var bufferJob: Job? = null
     private var undoJob: Job? = null
 
@@ -138,9 +147,11 @@ class TranslateBarController(
         refresh()
     }
 
-    fun close(reason: CloseReason) {
+    /** Defaults to [CloseReason.USER], so the bar's close button can take `controller::close`. */
+    fun close(reason: CloseReason = CloseReason.USER) {
         when (reason) {
             CloseReason.SENSITIVE -> {
+                sensitiveCloses++
                 closeBar(clearBuffer = true)
                 cache?.clear()
             }
@@ -150,20 +161,28 @@ class TranslateBarController(
         }
     }
 
-    /** ✓ or Enter: commits the latest good preview once. */
+    /**
+     * ✓ or Enter: commits the latest good preview once. Without a preview of exactly the buffer (Enter before the
+     * debounce, or a failed request) nothing is written; the buffer is sent for translation now instead of after the
+     * debounce, so the next ✓ can commit it.
+     */
     fun insert() {
         if (!open || !live()) return
-        val g = good ?: return
         val source = buffer.text.value
         val state = pipeline.state.value
+        val g = good
         // Only a preview of exactly what is in the buffer now, for the pair and field shown now.
-        if (g.source != source || g.pair != currentPair || g.generation != openGeneration || state.output != g.text) {
+        if (g == null || g.source != source || g.pair != currentPair || g.generation != openGeneration ||
+            state.output != g.text
+        ) {
+            if (source.isNotBlank() && !(state.inFlight && requestText == source)) pipeline.retry()
             return
         }
         // Each insert stands alone: never joined to an earlier one by deleting a space.
         span.startSession()
         span.commit(g.text)
         ownWrite.recordCommit(written = g.text, restore = source)
+        inserts++
         insertUpdatePending = true
         good = null
         buffer.clear()
@@ -193,9 +212,18 @@ class TranslateBarController(
     /** Removes our last insert if it is still right before the cursor, and puts its source back in the buffer. */
     fun undo() {
         if (!open || !live()) return
+        // A live preview typed since the insert sits right before the cursor: it goes first (verified ours), so the
+        // check below compares against our insert and not against the preview.
+        if (ownWrite.available) span.discard()
         val restore = ownWrite.undo()
         insertUpdatePending = false
-        if (restore != null) buffer.replace(restore)
+        if (restore != null) {
+            buffer.replace(restore)
+        } else if (currentMode == BarMode.LIVE) {
+            // Nothing was undone: the live preview comes back. (After a removal it waits for the next preview, so
+            // the removal's selection update is not taken for a host edit of the new region.)
+            matchingGood()?.let { span.update(it.text) }
+        }
         refresh()
     }
 
@@ -307,7 +335,16 @@ class TranslateBarController(
         if (!open || !live()) return TranslateResult.Failed(FailKind.POLICY)
         val requestPair = currentPair
         val requestGeneration = openGeneration
-        val result = router.translate(text, requestPair, seq)
+        val requestSensitiveCloses = sensitiveCloses
+        requestText = text
+        val result = try {
+            router.translate(text, requestPair, seq)
+        } finally {
+            requestText = null
+            // The router caches a result as the engine returns it, which can be after the field turned sensitive
+            // and the cache was cleared (an ML Kit Task cannot be cancelled): clear it again.
+            if (sensitiveCloses != requestSensitiveCloses) cache?.clear()
+        }
         if (!open || !live() || requestGeneration != openGeneration) {
             return TranslateResult.Failed(FailKind.POLICY)
         }
@@ -373,6 +410,7 @@ class TranslateBarController(
             status = state.status,
             undoAvailable = ownWrite.available,
             inFlight = state.inFlight,
+            undoId = inserts,
         )
     }
 

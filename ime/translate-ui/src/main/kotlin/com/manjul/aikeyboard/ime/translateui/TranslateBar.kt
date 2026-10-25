@@ -55,7 +55,7 @@ fun TranslateBar(
         ) {
             // The pair takes the room left of undo and close; its names ellipsize before the swap button shrinks.
             PairChip(state.pair, onSwap, Modifier.weight(1f))
-            UndoChip(state.undoAvailable, onUndo)
+            UndoChip(state.undoAvailable, onUndo, undoId = state.undoId)
             GlyphButton(stringResource(R.string.translate_bar__close_cd), onClose) { closeGlyph(it) }
         }
         BufferLine(state.input)

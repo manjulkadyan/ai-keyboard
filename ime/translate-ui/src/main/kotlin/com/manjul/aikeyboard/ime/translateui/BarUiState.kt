@@ -19,6 +19,7 @@ sealed interface BarUiState {
     /**
      * The bar is open. [preview] is the last good translation of [input] (kept through failures, null until the
      * first one); [status] drives the status chip; [undoAvailable] shows the undo chip of our last insert.
+     * [undoId] changes with every insert, so the chip's 5 s window restarts even when [undoAvailable] stays true.
      */
     data class Open(
         val input: String,
@@ -28,10 +29,11 @@ sealed interface BarUiState {
         val status: BarStatus,
         val undoAvailable: Boolean,
         val inFlight: Boolean,
+        val undoId: Long = 0,
     ) : BarUiState {
         override fun toString(): String =
             "Open(inputChars=${input.length}, previewChars=${preview?.length}, pair=$pair, mode=$mode, " +
-                "status=$status, undoAvailable=$undoAvailable, inFlight=$inFlight)"
+                "status=$status, undoAvailable=$undoAvailable, inFlight=$inFlight, undoId=$undoId)"
     }
 }
 

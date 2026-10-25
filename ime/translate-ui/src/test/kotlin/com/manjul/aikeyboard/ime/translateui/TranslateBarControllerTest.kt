@@ -520,6 +520,134 @@ class TranslateBarControllerTest {
         assertEquals("", rig.controller.buffer.text.value)
     }
 
+    @Test fun `a result the router caches after the field turned sensitive is cleared again`() = runTest {
+        delayMs = 1_000
+        val rig = rig()
+        rig.controller.open()
+        runCurrent()
+        rig.controller.buffer.type("hello")
+        runCurrent()
+        // Up to the instant the engine answers; the answer and the sensitive close land in the same turn.
+        advanceTimeBy(DEBOUNCE + delayMs)
+        assertEquals(1, rig.engine.inFlight)
+        rig.decision = BarRig.PASSWORD
+        rig.controller.onPolicyRestricted(BarRig.PASSWORD)
+        runCurrent()
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(0, rig.engine.inFlight)
+        assertEquals(0, rig.cache.size)
+        assertEquals(BarUiState.Hidden, rig.controller.ui.value)
+        assertEquals("Hi ", rig.editor.text)
+    }
+
+    @Test fun `enter before the debounce translates now and the next enter commits`() = runTest {
+        val rig = rig()
+        rig.controller.open()
+        runCurrent()
+        rig.controller.buffer.type("hello")
+        runCurrent()
+        rig.controller.insert()
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertEquals(listOf("hello"), rig.engine.calls.map { it.text })
+        assertEquals("hola", rig.open.preview)
+        // The debounced request for the same text is not sent again.
+        advanceTimeBy(DEBOUNCE + 1)
+        runCurrent()
+        assertEquals(1, rig.engine.calls.size)
+        rig.controller.insert()
+        runCurrent()
+        assertEquals("Hi hola", rig.editor.text)
+        assertEquals(1, rig.named(EventCatalog.TRANSLATE_DONE).size)
+    }
+
+    @Test fun `enter while the same text is at the engine does not send it again`() = runTest {
+        delayMs = 1_000
+        val rig = rig()
+        typed(rig)
+        rig.controller.buffer.type("!")
+        runCurrent()
+        advanceTimeBy(DEBOUNCE + 1)
+        runCurrent()
+        assertTrue(rig.open.inFlight)
+        rig.controller.insert()
+        runCurrent()
+        advanceTimeBy(delayMs)
+        runCurrent()
+        assertEquals(listOf("hello", "hello!"), rig.engine.calls.map { it.text })
+        assertEquals("Hi ", rig.editor.text)
+    }
+
+    @Test fun `undo in live mode removes our insert, not the preview typed since`() = runTest {
+        val rig = rig()
+        rig.mode = BarMode.LIVE
+        typed(rig)
+        rig.deliver()
+        rig.controller.insert()
+        runCurrent()
+        rig.deliver()
+        rig.controller.buffer.type("hello")
+        runCurrent()
+        advanceTimeBy(DEBOUNCE + 1)
+        runCurrent()
+        rig.deliver()
+        assertEquals("Hi holahola", rig.editor.text)
+        assertTrue(rig.open.undoAvailable)
+        rig.controller.undo()
+        runCurrent()
+        rig.deliver()
+        assertEquals("Hi ", rig.editor.text)
+        assertEquals("hello", rig.controller.buffer.text.value)
+        assertEquals("hola", rig.open.preview)
+        rig.controller.close(CloseReason.USER)
+        assertEquals("Hi ", rig.editor.text)
+        rig.checker.assertSafe()
+    }
+
+    @Test fun `every insert gets a new undo id`() = runTest {
+        val rig = rig()
+        typed(rig)
+        val before = rig.open.undoId
+        rig.controller.insert()
+        runCurrent()
+        rig.deliver()
+        val first = rig.open.undoId
+        typed(rig)
+        rig.controller.insert()
+        runCurrent()
+        assertTrue(rig.open.undoAvailable)
+        assertTrue(before < first && first < rig.open.undoId)
+    }
+
+    @Test fun `the bar's callbacks take the controller's methods directly`() = runTest {
+        val rig = rig()
+        typed(rig)
+        val c = rig.controller
+        val onSwap: () -> Unit = c::swapPair
+        val onInsert: () -> Unit = c::insert
+        val onUndo: () -> Unit = c::undo
+        val onDownload: () -> Unit = c::download
+        val onOpenOfflineLanguages: () -> Unit = c::openOfflineLanguages
+        val onRetry: () -> Unit = c::retry
+        val onClose: () -> Unit = c::close
+        onOpenOfflineLanguages()
+        assertEquals(1, rig.offlineOpened)
+        onDownload()
+        assertEquals(listOf(BarRig.EN_ES), rig.downloads)
+        onSwap()
+        onRetry()
+        runCurrent()
+        onInsert()
+        runCurrent()
+        assertEquals("Hi <en>hello", rig.editor.text)
+        onUndo()
+        assertEquals("Hi ", rig.editor.text)
+        onClose()
+        assertEquals(BarUiState.Hidden, c.ui.value)
+        assertEquals("", c.buffer.text.value)
+    }
+
     private companion object {
         const val DEBOUNCE = 450L
     }

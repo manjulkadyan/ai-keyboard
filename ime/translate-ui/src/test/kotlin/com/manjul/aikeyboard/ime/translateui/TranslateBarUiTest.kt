@@ -146,6 +146,25 @@ class TranslateBarUiTest {
         compose.onNodeWithContentDescription(undo).assertDoesNotExist()
     }
 
+    @Test fun undoChipRestartsItsWindowOnANewInsert() {
+        compose.mainClock.autoAdvance = false
+        var state by mutableStateOf(open(undoAvailable = true).copy(undoId = 1))
+        compose.setContent {
+            TranslateBar(state, onSwap = {}, onInsert = {}, onUndo = {}, onClose = {}, onDownload = {},
+                onOpenOfflineLanguages = {}, onRetry = {})
+        }
+        val undo = str(R.string.translate_bar__undo_cd)
+        compose.mainClock.advanceTimeBy(UNDO_WINDOW_MS - 1_000)
+        // A second insert within the window: undoAvailable stays true, the id changes.
+        state = state.copy(undoId = 2)
+        // Lets the new state reach the composition before the clock moves on.
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(UNDO_WINDOW_MS - 1_000)
+        compose.onNodeWithContentDescription(undo).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithContentDescription(undo).assertDoesNotExist()
+    }
+
     @Test fun noUndoChipWithoutAnUndo() {
         show(open(undoAvailable = false))
         compose.onNodeWithContentDescription(str(R.string.translate_bar__undo_cd)).assertDoesNotExist()
