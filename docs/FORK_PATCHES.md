@@ -96,6 +96,7 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/nlp/han/HanShapeBasedLanguageProvider.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-privacy-logs | The two error-level Flog lines that interpolated user content (composing text; the full key data of an unknown key) now log only non-content fields |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-policy | Final review Important 1: the `IME_UI_MODE_CLIPBOARD` key handler asks `fork.clipboard.ClipboardPanelGate.onClipboardKey`, so no route (smartbar chip, Enter long-press popup `-213`, `SWITCH_TO_CLIPBOARD_CONTEXT` swipe) opens clipboard history where the policy decision denies it |
 | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy, S1-voice, S1-analytics | Final review fixes. S1-policy: `ClipboardPanelGate.closeOnRestriction` on the policy controller closes an open clipboard panel on every more restrictive decision (new field, restart, late settings, R7), and `onStartInputView` keeps the panel on a restart only if the decision allows clipboard history (upstream "hide on next text field" pref still applies). S1-voice: `onStartInput` tells the voice session a new field's connection holds no region of ours (before the policy call); `onFinishInput` cancels voice before `super.onFinishInput()` so the partial is discarded, not committed (R39). S1-analytics: `onStartInputView` sends the sampled `ime_session_start` through `fork.analytics.ImeSessionStartReporter` (R36) |
+| `settings.gradle.kts` | S2-translate | `include(":core:translate")` (pure-JVM translation core: engine interface, router, LRU, chunking, translator pool, bar pipeline) |
 
 ## Marker-exempt files
 
@@ -148,6 +149,7 @@ New code lives in our own modules (TRD §2.1, §2.2). These are new files, not u
 - `:core:privacy` (Android library, S1-clipboard): clipboard sensitivity classifier and capture gate inputs. New files.
 - `:core:analytics` (Android library, S1-analytics): `EventCatalog`, limits, `BatchingRelay`, `LogcatSink` (debug) and `NoopSink`. No Firebase yet.
 - `:core:voice` (Android library, S1-voice, S1-whisper): `SpeechSession`, platform recognizer engine, `SpeechEngineSelector`, audio focus, and the Whisper engine, model manager and download worker.
+- `:core:translate` (pure JVM, S2-translate): `TranslationEngine`/`LanguageDetector` interfaces, `TranslationEngineRouter` (no silent cloud fallback, refuses when the field policy forbids translation), `TranslationCache` (LRU 200), `SentenceChunker`, `SourceResolver`, `ModelSizes`, `TranslatorPool`, the disabled `CloudTranslationEngine` stub (OD-05) and the bar `TranslatePipeline`. Fakes in `testFixtures`. New files.
 - `:lib:whisper` (Android library, native, S1-whisper): vendored whisper.cpp v1.9.5 (`third_party/`, see `WHISPER_UPSTREAM.md`) and the 16 KB-aligned JNI bridge `WhisperNative`.
 
 Layout decision: the upstream IME stays in `:app` (no `:ime` module split in Sprint 0).

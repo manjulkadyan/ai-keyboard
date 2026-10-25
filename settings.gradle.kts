@@ -72,6 +72,8 @@ include(":core:voice")
 include(":ime:voice-ui")
 // FORK(S1-whisper): vendored whisper.cpp + JNI bridge for on-device speech-to-text
 include(":lib:whisper")
+// FORK(S2-translate): engine-agnostic translation core (router, LRU, chunking, bar pipeline), pure JVM
+include(":core:translate")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")
