@@ -29,6 +29,7 @@ import com.manjul.aikeyboard.fork.privacy.makeAppPrivate // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
 import com.manjul.aikeyboard.fork.smartbar.decisionOrLocked // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.translate.BarKeyRouter // FORK(S2-bar)
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
@@ -301,11 +302,16 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         }
         when (candidate) {
             is ClipboardSuggestionCandidate -> editorInstance.commitClipboardItem(candidate.clipboardItem)
-            else -> editorInstance.commitCompletion(candidate)
+            // FORK(S2-bar): a suggestion tap goes into the open Translate bar, never the editor
+            else -> if (!BarKeyRouter.onWord(FlorisImeService.translateSessionOrNull(), candidate.text.toString())) {
+                editorInstance.commitCompletion(candidate)
+            }
         }
     }
 
     fun commitGesture(word: String) {
+        // FORK(S2-bar): a glide word goes into the open Translate bar, never the editor
+        if (BarKeyRouter.onWord(FlorisImeService.translateSessionOrNull(), fixCase(word))) return
         editorInstance.commitGesture(fixCase(word))
     }
 
@@ -703,6 +709,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     override fun onInputKeyUp(data: KeyData) = activeState.batchEdit {
+        // FORK(S2-bar): while the Translate bar is open, text keys, space, backspace and Enter edit the bar only
+        if (routeToTranslateBar(data)) return@batchEdit
         when (data.code) {
             KeyCode.ARROW_DOWN,
             KeyCode.ARROW_LEFT,
@@ -758,6 +766,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires
             // FORK(S1-voice): in-keyboard voice typing instead of switching to another voice IME
             KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.voiceSessionOrNull()?.controller?.toggle()
+            // FORK(S2-bar): the Translate chip, re-checked against the policy (the session checks again)
+            KeyCode.TOGGLE_TRANSLATE_BAR -> if (policyDecision().allowTranslate) FlorisImeService.translateSessionOrNull()?.toggle()
             KeyCode.KANA_SWITCHER -> handleKanaSwitch()
             KeyCode.KANA_HIRA -> handleKanaHira()
             KeyCode.KANA_KATA -> handleKanaKata()
@@ -841,6 +851,19 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         }
     }
 
+    // FORK(S2-bar): see onInputKeyUp; the shift state resets after a typed character as it does for the editor
+    private fun routeToTranslateBar(data: KeyData): Boolean {
+        val isText = (data.type == KeyType.CHARACTER || data.type == KeyType.NUMERIC) && data.code > 0
+        val text = if (isText) data.asString(isForDisplay = false) else null
+        if (!BarKeyRouter.onKey(FlorisImeService.translateSessionOrNull(), data.code, text)) return false
+        if (text != null && activeState.inputShiftState != InputShiftState.CAPS_LOCK &&
+            !inputEventDispatcher.isPressed(KeyCode.SHIFT)
+        ) {
+            activeState.inputShiftState = InputShiftState.UNSHIFTED
+        }
+        return true
+    }
+
     override fun onInputKeyCancel(data: KeyData) {
         when (data.code) {
             KeyCode.ARROW_DOWN,
@@ -880,6 +903,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     fun onHardwareKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // FORK(S2-bar): hardware typing goes into the open Translate bar too
+        if (BarKeyRouter.onHardwareKey(FlorisImeService.translateSessionOrNull(), keyCode, event)) return true
         when (keyCode) {
             KeyEvent.KEYCODE_SPACE -> {
                 handleHardwareKeyboardSpace()
@@ -1011,6 +1036,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 }
                 // FORK(S1-smartbar): chips follow the policy decision (fail closed without a service)
                 KeyCode.VOICE_INPUT -> policyDecision().allowVoice
+                KeyCode.TOGGLE_TRANSLATE_BAR -> policyDecision().allowTranslate // FORK(S2-bar)
                 KeyCode.IME_UI_MODE_CLIPBOARD -> policyDecision().allowClipboardHistory
                 KeyCode.TOGGLE_INCOGNITO_MODE -> when (prefs.suggestion.incognitoMode.get()) {
                     IncognitoMode.FORCE_OFF, IncognitoMode.FORCE_ON -> false

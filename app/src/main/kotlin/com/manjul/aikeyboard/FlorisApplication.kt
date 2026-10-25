@@ -110,7 +110,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     // FORK(S1-whisper): Whisper model, idle unloader and model manager; created on first Whisper use
     val whisperVoice = lazy { WhisperVoice(this) { analytics.value::log } }
     // FORK(S2-mlkit): router, ML Kit engine, language ID and translator pool; ML Kit itself starts on first use
-    val translation = lazy { TranslationCore(this) }
+    // FORK(S2-bar): the bar's model downloads follow the Wi-Fi-only setting
+    val translation = lazy { TranslationCore(this) { featureSettingsStore.value.current.translateWifiOnly } }
 
     // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
     override val workManagerConfiguration: Configuration

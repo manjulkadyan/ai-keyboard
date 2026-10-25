@@ -58,6 +58,7 @@ import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.fork.smartbar.PrivateLockIndicator // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.smartbar.policyFilteredOrNull // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.voice.smartbarVoicePanel // FORK(S1-voice)
+import com.manjul.aikeyboard.fork.translate.SmartbarTranslateBar // FORK(S2-bar)
 import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
 import com.manjul.aikeyboard.ime.nlp.NlpInlineAutofill
 import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickActionButton
@@ -98,6 +99,9 @@ fun Smartbar() {
     val smartbarEnabled by prefs.smartbar.enabled.observeAsState()
     val extendedActionsPlacement by prefs.smartbar.extendedActionsPlacement.observeAsState()
 
+    // FORK(S2-bar): the open Translate bar sits above the smartbar (shown even if the smartbar is turned off)
+    androidx.compose.foundation.layout.Column {
+    SmartbarTranslateBar()
     AnimatedVisibility(
         visible = smartbarEnabled,
         enter = VerticalEnterTransition,
@@ -139,6 +143,7 @@ fun Smartbar() {
             }
         }
     }
+    } // FORK(S2-bar): end of the Translate bar column
 }
 
 @Composable

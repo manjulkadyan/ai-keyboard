@@ -292,6 +292,7 @@ dependencies {
     // FORK(S2-mlkit): translation core and the ML Kit engine (its MlKitInitProvider is removed in that module)
     implementation(projects.core.translate)
     implementation(projects.core.translateMlkit)
+    implementation(projects.ime.translateUi) // FORK(S2-bar): the in-keyboard Translate bar
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)

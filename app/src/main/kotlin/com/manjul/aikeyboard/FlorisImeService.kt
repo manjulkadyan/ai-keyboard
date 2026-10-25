@@ -116,6 +116,8 @@ import dev.patrickgold.jetpref.datastore.model.observeAsState
 import android.app.KeyguardManager
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.fork.voice.VoiceImeSession // FORK(S1-voice)
+import com.manjul.aikeyboard.fork.translate.TranslateImeSession // FORK(S2-bar)
+import com.manjul.aikeyboard.core.analytics.EndReason // FORK(S2-bar)
 import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
 import com.manjul.aikeyboard.fork.analytics.ImeSessionStartReporter // FORK(S1-analytics)
 import java.lang.ref.WeakReference
@@ -167,6 +169,12 @@ class FlorisImeService : LifecycleInputMethodService() {
         fun voiceSessionOrNull(): VoiceImeSession? {
             val service = FlorisImeServiceReference.get() ?: return null
             return if (service::voiceSession.isInitialized) service.voiceSession else null
+        }
+
+        // FORK(S2-bar): the Translate bar of the running service (chip, key routing, smartbar)
+        fun translateSessionOrNull(): TranslateImeSession? {
+            val service = FlorisImeServiceReference.get() ?: return null
+            return if (service::translateSession.isInitialized) service.translateSession else null
         }
 
         fun currentInputConnection(): InputConnection? {
@@ -299,6 +307,9 @@ class FlorisImeService : LifecycleInputMethodService() {
     private lateinit var policyController: ImePolicyController
     // FORK(S1-voice): in-keyboard voice typing; cancelled by every policy restriction and when the keyboard hides
     private lateinit var voiceSession: VoiceImeSession
+    // FORK(S2-bar): the Translate bar; closed by every policy restriction, on hide and on field change. Its
+    // controller and the translation core are created on the first chip tap, never when the keyboard shows.
+    private lateinit var translateSession: TranslateImeSession
     // FORK(S1-analytics): sampled ime_session_start from onStartInputView (R36)
     private lateinit var imeSessionReporter: ImeSessionStartReporter
 
@@ -332,6 +343,20 @@ class FlorisImeService : LifecycleInputMethodService() {
             setOwnsComposing = { editorInstance.voiceOwnsComposing = it },
             lang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
             scope = lifecycleScope,
+            barTarget = { translateSessionOrNull()?.voiceTarget() }, // FORK(S2-bar): dictate into the open bar
+        )
+        // FORK(S2-bar): see the translateSession declaration
+        translateSession = TranslateImeSession(
+            context = this,
+            policy = policyController,
+            store = featureSettingsStore().value,
+            analytics = appContext().value.analytics.value::log,
+            connection = { currentInputConnection },
+            isRawInputEditor = { editorInstance.activeInfo.isRawInputEditor },
+            setOwnsComposing = { editorInstance.voiceOwnsComposing = it },
+            scope = lifecycleScope,
+            subtypeLang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
+            beforeToggle = { voiceSession.controller.cancel(EndReason.FIELD_CHANGE.value) },
         )
         // FORK(S1-analytics): see the imeSessionReporter declaration
         imeSessionReporter = ImeSessionStartReporter(System::currentTimeMillis, appContext().value.analytics.value::log)
@@ -401,6 +426,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         unregisterReceiver(wallpaperChangeReceiver)
         policyController.onFinishInput() // FORK(S1-policy): drop in-flight work for the closed field
         voiceSession.destroy() // FORK(S1-voice)
+        translateSession.destroy() // FORK(S2-bar)
         FlorisImeServiceReference = WeakReference(null)
         inputWindowView = null
     }
@@ -409,6 +435,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
         super.onStartInput(info, restarting)
         voiceSession.onStartInput(restarting) // FORK(S1-voice): a new field's connection holds no region of ours
+        translateSession.onStartInput(restarting) // FORK(S2-bar): same for the bar's live preview
         policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
@@ -422,6 +449,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         val editorInfo = FlorisEditorInfo.wrap(info)
         // FORK(S1-analytics): the decision for this field is already set by onStartInput
         imeSessionReporter.onStartInputView(policyController.decision.value, subtypeManager.activeSubtype.primaryLocale.languageTag())
+        translateSession.onStartInputView() // FORK(S2-bar): the keyboard is back, keep the bar text kept on hide
         activeState.batchEdit {
             // FORK(S1-policy): a restart never keeps the clipboard panel open where history is denied
             activeState.imeUiMode = ClipboardPanelGate.onStartInputView(
@@ -452,6 +480,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         flogInfo { "old={start=$oldSelStart,end=$oldSelEnd} new={start=$newSelStart,end=$newSelEnd} composing={start=$candidatesStart,end=$candidatesEnd}" }
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         voiceSession.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd) // FORK(S1-voice)
+        translateSession.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd) // FORK(S2-bar)
         activeState.batchEdit {
             activeState.isSelectionMode = (newSelEnd - newSelStart) != 0
             editorInstance.handleSelectionUpdate(
@@ -467,12 +496,14 @@ class FlorisImeService : LifecycleInputMethodService() {
         super.onFinishInputView(finishingInput)
         policyController.onFinishInputView() // FORK(S1-policy)
         voiceSession.onFinishInputView() // FORK(S1-voice): hiding the keyboard ends dictation
+        translateSession.onFinishInputView() // FORK(S2-bar): hiding closes the bar, pair and mode are kept
         editorInstance.handleFinishInputView()
     }
 
     override fun onFinishInput() {
         flogInfo { "(no args)" }
         voiceSession.onFinishInput() // FORK(S1-voice): discard the partial before super finishes composing (R39)
+        translateSession.onFinishInput() // FORK(S2-bar): before policy's "no field", so a sensitive field drops the cache
         super.onFinishInput()
         policyController.onFinishInput() // FORK(S1-policy)
         editorInstance.handleFinishInput()

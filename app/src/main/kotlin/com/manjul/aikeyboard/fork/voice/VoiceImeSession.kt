@@ -31,6 +31,7 @@ import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.whisperVoice
 import com.manjul.aikeyboard.ime.editing.ComposingSpanController
+import com.manjul.aikeyboard.ime.editing.TextTarget
 import com.manjul.aikeyboard.ime.voiceui.FirstDictationFlag
 import com.manjul.aikeyboard.ime.voiceui.VoiceController
 import com.manjul.aikeyboard.ime.voiceui.VoiceEngines
@@ -65,8 +66,11 @@ class VoiceImeSession(
         }
     },
     private val online: () -> Boolean = { isOnline(context) },
+    /** S2-bar: the Translate bar's buffer while the bar is open; voice output goes there instead of the host. */
+    private val barTarget: () -> TextTarget? = { null },
 ) {
-    private val target = ImeTextTarget(connection, isRawInputEditor, setOwnsComposing)
+    private val hostTarget = ImeTextTarget(connection, isRawInputEditor, setOwnsComposing)
+    private val target = RoutingTextTarget(hostTarget, barTarget)
 
     val span = ComposingSpanController(target)
 
@@ -131,7 +135,7 @@ class VoiceImeSession(
      * before the policy controller's onStartInput, whose restriction cancels the session.
      */
     fun onStartInput(restarting: Boolean) {
-        if (!restarting) target.forgetOwnedRegion()
+        if (!restarting) hostTarget.forgetOwnedRegion()
     }
 
     /**
@@ -147,6 +151,8 @@ class VoiceImeSession(
     }
 
     fun onSelectionUpdate(newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {
+        // While dictating into the bar, host selection changes say nothing about our region.
+        if (target.routedToBar) return
         span.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd)
     }
 
@@ -168,6 +174,45 @@ class VoiceImeSession(
                 recognizer.destroy()
             }
         }
+    }
+}
+
+/**
+ * Sends voice output to the Translate bar while it is open, else to the host (S2-bar). A removal only ever goes to
+ * the target that received the writes: after the destination changed, [clearComposing] and
+ * [deleteBeforeCursorIfEquals] remove nothing, so dictation never deletes host text it did not write.
+ */
+private class RoutingTextTarget(private val host: TextTarget, private val bar: () -> TextTarget?) : TextTarget {
+    private var written: TextTarget? = null
+
+    val routedToBar: Boolean get() = bar() != null
+
+    private fun destination(): TextTarget = bar() ?: host
+
+    override fun setComposing(text: String): Boolean = destination().also { written = it }.setComposing(text)
+
+    override fun commit(text: String, removeSpaceBefore: Boolean): Boolean {
+        val d = destination()
+        val ok = d.commit(text, removeSpaceBefore && written === d)
+        written = d
+        return ok
+    }
+
+    override fun finishComposing(): Boolean = (written ?: destination()).finishComposing()
+
+    override fun clearComposing(expected: String): Boolean {
+        val d = destination()
+        if (written != null && written !== d) {
+            written?.finishComposing()
+            written = null
+            return false
+        }
+        return d.clearComposing(expected)
+    }
+
+    override fun deleteBeforeCursorIfEquals(expected: String): Boolean {
+        val d = destination()
+        return if (written === d) d.deleteBeforeCursorIfEquals(expected) else false
     }
 }
 

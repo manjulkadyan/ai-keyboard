@@ -162,6 +162,9 @@ fun QuickActionsEditorPanel() {
         // FORK(S1-smartbar): the sticky mic cannot be dragged
         if (stickyActionIndex != ItemNotFound && PinnedActions.isMic(stickyAction)) {
             return
+        // FORK(S2-bar): nor can the fixed Translate action
+        } else if (dynamicActionIndex != ItemNotFound && PinnedActions.isTranslate(dynamicActions[dynamicActionIndex])) {
+            return
         } else if (stickyActionIndex != ItemNotFound && stickyAction != NoopAction) {
             activeDragAction = stickyAction
             stickyAction = DragMarkerAction

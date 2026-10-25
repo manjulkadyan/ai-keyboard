@@ -27,7 +27,7 @@ import kotlinx.coroutines.SupervisorJob
  * ML Kit is initialised by the first translate, detect or model-presence call (TRD §2.3), and at most one
  * `Translator` is loaded, closed after 60 s idle or on memory trim (TRD §6.4).
  */
-class TranslationCore(context: Context) {
+class TranslationCore(context: Context, wifiOnly: () -> Boolean = { true }) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val pool = TranslatorPool<LangPair, TranslatorHandle>(scope = scope, open = mlKitTranslatorOpener(context))
@@ -45,4 +45,7 @@ class TranslationCore(context: Context) {
         resolver = SourceResolver(detector),
         cache = cache,
     )
+
+    /** The bar's model presence snapshot and user-started downloads (S2-bar; Task 5 replaces it). */
+    val models: TranslateModels = MlKitTranslateModels(context.applicationContext, presence, scope, wifiOnly)
 }

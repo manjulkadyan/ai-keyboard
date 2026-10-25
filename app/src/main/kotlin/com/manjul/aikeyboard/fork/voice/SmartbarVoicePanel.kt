@@ -70,7 +70,7 @@ private const val VOICE_SETTINGS_DEEPLINK = "ui://florisboard/settings/voice"
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
-private fun BackDismisses(view: View, onBack: () -> Unit) {
+internal fun BackDismisses(view: View, onBack: () -> Unit) {
     val current by rememberUpdatedState(onBack)
     DisposableEffect(view) {
         val dispatcher = view.findOnBackInvokedDispatcher()

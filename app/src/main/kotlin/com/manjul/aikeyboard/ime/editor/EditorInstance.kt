@@ -23,6 +23,7 @@ import android.view.KeyEvent
 import androidx.core.view.inputmethod.InputConnectionCompat
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import com.manjul.aikeyboard.FlorisImeService
+import com.manjul.aikeyboard.fork.translate.BarKeyRouter // FORK(S2-bar)
 // FORK(S1-policy): imports for the policy decision
 import com.manjul.aikeyboard.fork.policy.PolicyStateDerivation
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
@@ -323,6 +324,10 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      */
     fun commitClipboardItem(item: ClipboardItem?): Boolean {
         if (item == null) return false
+        // FORK(S2-bar): every paste route ends here; while the Translate bar is open, text goes to its buffer and
+        // images or video are dropped, so nothing reaches the editor
+        val barText = if (item.type == ItemType.TEXT) item.text.toString() else null
+        if (BarKeyRouter.onPaste(FlorisImeService.translateSessionOrNull(), barText)) return true
         val mimeTypes = item.mimeTypes
         return when (item.type) {
             ItemType.TEXT -> {

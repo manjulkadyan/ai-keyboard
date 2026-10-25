@@ -34,6 +34,8 @@
     <string name="private_lock__make_private" tools:ignore="MissingTranslation">Make this app private</string>
     <string name="quick_action__toggle_private_app" tools:ignore="MissingTranslation">Make private</string>
     <string name="quick_action__toggle_private_app__tooltip" tools:ignore="MissingTranslation">Make this app private</string>
+    <string name="quick_action__toggle_translate_bar" tools:ignore="MissingTranslation">Translate</string>
+    <string name="quick_action__toggle_translate_bar__tooltip" tools:ignore="MissingTranslation">Translate as you type</string>
 
     <!-- Private apps settings screen. -->
     <string name="private_apps__title" tools:ignore="MissingTranslation">Private apps</string>

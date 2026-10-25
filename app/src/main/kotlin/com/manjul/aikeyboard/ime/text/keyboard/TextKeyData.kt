@@ -150,6 +150,7 @@ data class TextKeyData(
                 TOGGLE_INCOGNITO_MODE,
                 TOGGLE_AUTOCORRECT,
                 TOGGLE_PRIVATE_APP, // FORK(S1-smartbar)
+                TOGGLE_TRANSLATE_BAR, // FORK(S2-bar)
             )
         }
 
@@ -519,6 +520,12 @@ data class TextKeyData(
             type = KeyType.FUNCTION,
             code = KeyCode.TOGGLE_PRIVATE_APP,
             label = "toggle_private_app",
+        )
+        // FORK(S2-bar): predefined key data for [KeyCode.TOGGLE_TRANSLATE_BAR]
+        val TOGGLE_TRANSLATE_BAR = TextKeyData(
+            type = KeyType.FUNCTION,
+            code = KeyCode.TOGGLE_TRANSLATE_BAR,
+            label = "toggle_translate_bar",
         )
         /** Predefined key data for [KeyCode.TOGGLE_AUTOCORRECT] */
         val TOGGLE_AUTOCORRECT = TextKeyData(
