@@ -78,6 +78,8 @@ include(":core:translate")
 include(":core:translate-mlkit")
 // FORK(S2-bar): composing-span helpers shared by voice and the translate bar, pure JVM
 include(":ime:editing")
+// FORK(S2-bar): in-keyboard Translate bar (controller, bar buffer, Compose bar)
+include(":ime:translate-ui")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 AI Keyboard contributors. Licensed under the Apache License, Version 2.0 -->
+<!-- The in-keyboard Translate bar. Language names are filled in from the system (Locale.getDisplayName). -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Status chip: the language packs of the pair are missing. %1$s and %2$s are language names, %3$d the download size in megabytes. Tapping starts the download. -->
+    <string name="translate_bar__status_download" tools:ignore="MissingTranslation">Download %1$s↔%2$s (about %3$d MB)</string>
+    <!-- Status chip: no connection and no offline packs. Tapping opens the Offline languages screen. -->
+    <string name="translate_bar__status_offline" tools:ignore="MissingTranslation">Offline: download languages</string>
+    <!-- Status chip: the last translation failed; tapping tries again. -->
+    <string name="translate_bar__status_retry" tools:ignore="MissingTranslation">Retry</string>
+    <!-- Status chip: only online translation supports this pair, and that needs a Pro subscription. -->
+    <string name="translate_bar__status_cloud_pro" tools:ignore="MissingTranslation">Needs internet (Pro)</string>
+    <!-- Status chip: no translation engine supports this language pair. -->
+    <string name="translate_bar__status_unsupported" tools:ignore="MissingTranslation">This language pair is not supported</string>
+    <!-- Button (check mark) that puts the translation into the app's text field. -->
+    <string name="translate_bar__insert" tools:ignore="MissingTranslation">Insert</string>
+    <!-- TalkBack label of the check-mark button. -->
+    <string name="translate_bar__insert_cd" tools:ignore="MissingTranslation">Insert translation</string>
+    <!-- Chip shown for a few seconds after inserting; removes the inserted translation again. -->
+    <string name="translate_bar__undo" tools:ignore="MissingTranslation">Undo</string>
+    <!-- TalkBack label of the undo chip. -->
+    <string name="translate_bar__undo_cd" tools:ignore="MissingTranslation">Undo inserted translation</string>
+    <!-- TalkBack label of the button that closes the Translate bar. -->
+    <string name="translate_bar__close_cd" tools:ignore="MissingTranslation">Close translate bar</string>
+    <!-- TalkBack label of the swap button. %1$s is the current source language name, %2$s the current target language name. -->
+    <string name="translate_bar__swap_cd" tools:ignore="MissingTranslation">Swap languages, now %1$s to %2$s</string>
+    <!-- TalkBack label of the language pair chip. %1$s is the source language name, %2$s the target language name. -->
+    <string name="translate_bar__pair_cd" tools:ignore="MissingTranslation">Translating from %1$s to %2$s</string>
+    <!-- Placeholder in the empty bar input line. -->
+    <string name="translate_bar__buffer_hint" tools:ignore="MissingTranslation">Type to translate</string>
+    <!-- TalkBack label of the bar input line. -->
+    <string name="translate_bar__buffer_cd" tools:ignore="MissingTranslation">Text to translate</string>
+    <!-- TalkBack label of the translation preview line. -->
+    <string name="translate_bar__preview_cd" tools:ignore="MissingTranslation">Translation</string>
+    <!-- Spoken by TalkBack when the preview changes. %1$s is the translated text. -->
+    <string name="translate_bar__preview_announcement" tools:ignore="MissingTranslation">Translation: %1$s</string>
+    <!-- TalkBack label of the progress indicator while a translation is running. -->
+    <string name="translate_bar__translating_cd" tools:ignore="MissingTranslation">Translating…</string>
+    <!-- Mode toggle: the app's text field changes only when the user taps Insert. -->
+    <string name="translate_bar__mode_preview" tools:ignore="MissingTranslation">Preview first</string>
+    <!-- Mode toggle: the translation is typed into the app's text field as the user types. -->
+    <string name="translate_bar__mode_live" tools:ignore="MissingTranslation">Type live</string>
+</resources>
