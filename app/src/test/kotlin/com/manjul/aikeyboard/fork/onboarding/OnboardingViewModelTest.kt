@@ -5,13 +5,21 @@
 
 package com.manjul.aikeyboard.fork.onboarding
 
+import android.text.InputType
+import android.view.inputmethod.EditorInfo
 import app.cash.turbine.test
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.datastore.LanguagePair
+import com.manjul.aikeyboard.core.translate.FailKind
 import com.manjul.aikeyboard.core.translate.Lang
 import com.manjul.aikeyboard.core.translate.LangPair
 import com.manjul.aikeyboard.core.translate.ModelSizes
+import com.manjul.aikeyboard.core.translate.TranslateResult
+import com.manjul.aikeyboard.fork.policy.ImePolicyController
+import com.manjul.aikeyboard.fork.translate.TranslateImeSession
+import com.manjul.aikeyboard.fork.translate.TranslateModels
+import com.manjul.aikeyboard.ime.translateui.BarUiState
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +51,12 @@ private class FakeOffer(private val present: Set<Lang> = emptySet()) : OfflinePa
     override fun download(pair: LangPair) {
         downloads += pair
     }
+}
+
+private object NoModels : TranslateModels {
+    override fun downloaded(): Set<Lang> = emptySet()
+    override suspend fun refresh() = Unit
+    override fun download(pair: LangPair) = Unit
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -133,6 +147,39 @@ class OnboardingViewModelTest {
         assertEquals(mapOf<String, Any>("count" to 2, "has_rtl" to true), named("languages_set").single().params)
         assertEquals(OnboardingStep.TRY_IT, vm.state.value.step)
         assertEquals(LanguagePair("en", "ur"), store.flow.first { it.translatePair != null }.translatePair)
+    }
+
+    @Test
+    fun theO4PairIsThePairTheKeyboardBarOpensWith() = runTest {
+        val vm = vm(FakeIme(enabled = true, selected = true))
+        vm.next()
+        vm.onLanguagesChosen(listOf("en-US", "ur-PK"), "en" to "ur")
+        store.flow.first { it.translatePair != null }
+
+        // The keyboard's bar, wired as FlorisImeService wires it, over the same settings store.
+        val policy = ImePolicyController(store, keyguard = { false }, forcedPackages = { emptySet() }, scope = scope)
+        val session = TranslateImeSession(
+            context = RuntimeEnvironment.getApplication(),
+            policy = policy,
+            store = store,
+            translation = { error("translation core resolved") },
+            models = { NoModels },
+            analytics = {},
+            connection = { null },
+            isRawInputEditor = { false },
+            setOwnsComposing = {},
+            scope = scope,
+            // An Arabic subtype must not win over the stored pair.
+            subtypeLang = { "ar" },
+            lowTier = { false },
+            engine = { _, _, _ -> TranslateResult.Failed(FailKind.UNSUPPORTED) },
+            cache = { null },
+            openOfflineLanguages = {},
+        )
+        policy.onStartInput(EditorInfo().apply { inputType = InputType.TYPE_CLASS_TEXT }, false)
+        session.toggle()
+        assertEquals(LangPair(Lang.English, Lang.of("ur")), (session.ui as BarUiState.Open).pair)
+        session.destroy()
     }
 
     @Test

@@ -6,6 +6,7 @@
 package com.manjul.aikeyboard.fork.settings
 
 import android.text.format.Formatter
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +33,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
+import com.manjul.aikeyboard.app.LocalNavController
+import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.core.datastore.FeatureSettings
 import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
 import com.manjul.aikeyboard.core.voice.whisper.ModelState
@@ -60,6 +63,7 @@ fun VoiceSettingsScreen() = FlorisScreen {
     scrollable = false
 
     val context = LocalContext.current
+    val navController = LocalNavController.current
     val store = remember { context.featureSettingsStore().value }
     val whisper = remember { context.whisperVoice().value }
     val scope = rememberCoroutineScope()
@@ -77,6 +81,7 @@ fun VoiceSettingsScreen() = FlorisScreen {
             models = models,
             onDownload = { whisper.models.download(it, settings.whisperWifiOnly) },
             onDelete = { whisper.models.delete(it) },
+            onOpenOfflineLanguages = { navController.navigate(Routes.Settings.OfflineLanguages) },
         )
     }
 }
@@ -89,7 +94,10 @@ private fun offeredModels(manager: WhisperModelManager): Map<WhisperModelSpec, M
     return states.filterKeys { it in offered }
 }
 
-/** The screen body; [models] lists the models this device can run. */
+/**
+ * The screen body; [models] lists the models this device can run. [onOpenOfflineLanguages] opens Offline languages,
+ * which also lists the voice packs (Whisper models and the system recognizer's offline languages).
+ */
 @Composable
 internal fun VoiceSettingsContent(
     settings: FeatureSettings,
@@ -98,6 +106,7 @@ internal fun VoiceSettingsContent(
     models: Map<WhisperModelSpec, ModelState>,
     onDownload: (WhisperModelSpec) -> Unit,
     onDelete: (WhisperModelSpec) -> Unit,
+    onOpenOfflineLanguages: () -> Unit,
 ) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -199,6 +208,12 @@ internal fun VoiceSettingsContent(
                 onChange = { on -> onUpdate { it.copy(whisperWifiOnly = on) } },
             )
         }
+
+        ListItem(
+            modifier = Modifier.clickable(onClick = onOpenOfflineLanguages),
+            headlineContent = { Text(stringRes(R.string.offline_languages__title)) },
+            supportingContent = { Text(stringRes(R.string.voice_settings__offline_languages_summary)) },
+        )
     }
 }
 

@@ -107,4 +107,37 @@ class PolicyChipFilterTest {
             assertFalse(translateAction.isAllowedBy(d, true), name)
         }
     }
+
+    @Test
+    fun `registering translate leaves the other chips' visibility unchanged`() {
+        val decisions = listOf(
+            PolicyDecision.Unrestricted, PolicyDecision.Locked, password,
+            decide(InputType.TYPE_CLASS_PHONE),
+            decide(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS),
+            decide(InputType.TYPE_CLASS_TEXT, privateApp = true),
+        )
+        val withoutTranslate = ChipId.registered - TRANSLATE
+        for (d in decisions) for (clipboard in listOf(true, false)) {
+            assertEquals(
+                ChipArrangement.visible(all, withoutTranslate, d, clipboard),
+                ChipArrangement.visible(all, ChipId.registered, d, clipboard) - TRANSLATE,
+            )
+        }
+    }
+
+    @Test
+    fun `the private lock shows only where translation, voice and learning are off`() {
+        val decisions = listOf(
+            PolicyDecision.Locked, password,
+            decide(InputType.TYPE_CLASS_TEXT, privateApp = true),
+            decide(InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD),
+            decide(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS),
+            decide(InputType.TYPE_CLASS_PHONE),
+            PolicyDecision.Unrestricted,
+        )
+        for (d in decisions.filter { it.showsPrivateLock() }) {
+            assertFalse(d.allowTranslate || d.allowVoice || d.allowLearning, d.reasons.toString())
+        }
+        assertTrue(decisions.count { it.showsPrivateLock() } >= 4)
+    }
 }

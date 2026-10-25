@@ -49,6 +49,7 @@ class VoiceSettingsTest {
 
     private var settings by mutableStateOf(FeatureSettings())
     private val downloads = mutableListOf<Pair<WhisperModelSpec, Boolean>>()
+    private var offlineLanguagesOpened = 0
 
     private fun show(
         whisperOffered: Boolean = true,
@@ -62,6 +63,7 @@ class VoiceSettingsTest {
                 models = models,
                 onDownload = { downloads += it to settings.whisperWifiOnly },
                 onDelete = {},
+                onOpenOfflineLanguages = { offlineLanguagesOpened++ },
             )
         }
     }
@@ -119,6 +121,18 @@ class VoiceSettingsTest {
         compose.onNodeWithText("Auto").assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("Offline (Whisper)").isEmpty())
         assertTrue(compose.onAllNodesWithText("Offline models").isEmpty())
+    }
+
+    @Test fun offlineLanguagesLinkOpensTheScreen() {
+        show()
+        compose.onNodeWithText("Offline languages").performScrollTo().performClick()
+        assertEquals(1, offlineLanguagesOpened)
+    }
+
+    @Test fun offlineLanguagesLinkShowsWithoutWhisperToo() {
+        show(whisperOffered = false)
+        compose.onNodeWithText("Offline languages").performScrollTo().performClick()
+        assertEquals(1, offlineLanguagesOpened)
     }
 
     @Test fun spokenPunctuationCopyKeepsItsQuotes() {

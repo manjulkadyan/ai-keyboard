@@ -30,7 +30,7 @@
     <string name="subtype__hi_in" tools:ignore="MissingTranslation">हिन्दी</string>
 
     <!-- Smartbar private lock indicator and the "Make this app private" quick action. -->
-    <string name="private_lock__description" tools:ignore="MissingTranslation">Private field</string>
+    <string name="private_lock__description" tools:ignore="MissingTranslation">Private field. Translation, voice and learning are off</string>
     <string name="private_lock__make_private" tools:ignore="MissingTranslation">Make this app private</string>
     <string name="quick_action__toggle_private_app" tools:ignore="MissingTranslation">Make private</string>
     <string name="quick_action__toggle_private_app__tooltip" tools:ignore="MissingTranslation">Make this app private</string>
@@ -106,6 +106,7 @@
     <string name="voice_settings__cancel_base" tools:ignore="MissingTranslation">Cancel Base download</string>
     <string name="voice_settings__cancel_small" tools:ignore="MissingTranslation">Cancel Small download</string>
     <string name="voice_settings__wifi_only" tools:ignore="MissingTranslation">Download on Wi-Fi only</string>
+    <string name="voice_settings__offline_languages_summary" tools:ignore="MissingTranslation">Voice and translation packs for typing without internet</string>
 
     <!-- Smartbar actions editor (PRD FR-07): the dynamic actions are the pinned chips, at most {max}. -->
     <string name="quick_actions_editor__subheader_pinned" tools:ignore="MissingTranslation">Pinned ({n}/{max})</string>

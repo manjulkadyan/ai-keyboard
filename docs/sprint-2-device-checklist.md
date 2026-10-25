@@ -89,6 +89,14 @@ No UI of its own: run these once the Translator screen (T10) or the selection sh
 | [ ] T11.10 | `adb shell am start -a android.intent.action.VIEW -d "ui://florisboard/settings/offline-languages"`, then `-d "app://settings/voice"`, `-d "ui://florisboard/devtools"`, `-d "app://paywall"`, and `adb shell am start -n com.manjul.aikeyboard/.app.FlorisAppActivity --es open_screen settings/voice` (and `--es open_screen devtools`). | Listed routes open their screen; unlisted ones open Home (onboarding if not finished), and the debug analytics log shows `deeplink_unknown` with no value. No crash. | T11, FR-32 AC1 |
 | [ ] T11.11 | `adb shell am start -n com.manjul.aikeyboard/.fork.processtext.TranslateTextActivity -a android.intent.action.VIEW`, and again with `-a android.intent.action.SEND -t image/png`. | Nothing shows and nothing crashes. | T11, FR-32 AC1 |
 
+## T13. Sprint 1 integration (onboarding pair, settings link, lock copy)
+
+| # | Steps | Expected | From |
+|---|---|---|---|
+| [ ] T13.1 | Fresh install: in onboarding pick English and Urdu (en→ur), finish, then open a text field with an Arabic or other non-English subtype active and tap the Translate chip. | The bar opens with en→ur, the pair chosen in onboarding, not the subtype's language. | T13, decision 2 |
+| [ ] T13.2 | Settings > Voice: scroll to the bottom and tap "Offline languages", with and without a Whisper-enabled build (debug vs release). | The row is there in both builds and opens the Offline languages screen; back returns to Voice. | T13, FR-36 |
+| [ ] T13.3 | TalkBack on; focus the lock in a password field and in a private app. | TalkBack reads "Private field. Translation, voice and learning are off", and the long-press action "Make this app private" where it applies. | T13 |
+
 ## Q. Translation quality eval (ur/hi/ar/bn)
 
 | # | Steps | Expected | From |
