@@ -59,3 +59,11 @@ No UI of its own: run these once the Translator screen (T10) or the selection sh
 | [ ] T9.1 | Speak a long translation (over 4,000 chars) in English, then an Urdu and a Hindi one, on a device with Google TTS. Leave the screen while speaking. | Speech covers the whole text with no gap or cut word at chunk joins; speaking stops and the engine shuts down when the last screen using it closes (one TextToSpeech per process). | T9, FR-26 |
 | [ ] T9.2 | On a device with no voice data for a language (e.g. bn), tap speak. | The app offers to install voice data and the button opens the system TTS data installer. | T9, FR-26 |
 | [ ] T9.3 | Translate a few texts, then run `adb shell bmgr backupnow com.manjul.aikeyboard` (or a device transfer) and inspect the backup. Install a later build over the old one. | `databases/app_database*` is not in the backup. History survives the app update (no destructive migration). | T9, TRD §6.3 |
+
+## Q. Translation quality eval (ur/hi/ar/bn)
+
+| # | Steps | Expected | From |
+|---|---|---|---|
+| [ ] Q.1 | Run `TranslateEvalHarness` on any API 26+ phone with network, as in `docs/translation/quality-ur-hi-ar-bn.md` ("How to run"), then `adb pull` the `eval/` folder. | Four `eval-<lang>-<date>.csv` files, 250 rows each, with ML Kit output and latency; the `error` column is empty for nearly every row. The `am instrument` output shows only counts and paths. | T12, decision 10 |
+| [ ] Q.2 | Give each language's CSV to two native raters with `docs/translation/eval-rating-template.csv`; aggregate and fill the results and routing tables. | Every language and direction has a pass or "Beta" verdict under the FR-11 AC5 rule; the status line in the quality doc no longer says "Pending". | T12, PRD FR-11 AC5 |
+| [ ] Q.3 | While the harness (or Offline languages) downloads a model, capture traffic (for example a proxy or `tcpdump` on an emulator). | Only Google model-download hosts and ML Kit telemetry are contacted; no request carries corpus text. Record the hosts in `docs/data-flows.md`. | T12, decision 11 |

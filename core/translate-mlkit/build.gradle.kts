@@ -34,7 +34,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testRuntimeOnly(libs.junit.vintage.engine)
 
-    // Day-1 latency check (TRD §8, R-03): built in CI, run on a device with the models downloaded.
+    // Device-only checks: day-1 latency (TRD §8, R-03) and the Task 12 quality eval; built in CI, run by hand on a phone.
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.junit4)

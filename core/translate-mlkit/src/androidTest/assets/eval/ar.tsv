@@ -1,0 +1,256 @@
+# AI Keyboard translation quality corpus: Arabic (ar). Plan Task 12, docs/translation/quality-ur-hi-ar-bn.md.
+# Authored by the AI Keyboard team for this evaluation. Not taken from any app, test set or published corpus.
+# Rows en-001..en-200: the same English sources in all four files (direction en-ar).
+# Rows ar-001..ar-050: native-script sources for the reverse direction (ar-en).
+# reference: left empty; native raters may add a reference translation. Columns are tab-separated.
+id	direction	register	source	reference
+en-001	en-ar	chat	hey, are you coming tonight?	
+en-002	en-ar	chat	running 10 mins late, sorry!	
+en-003	en-ar	chat	lol that's exactly what I said	
+en-004	en-ar	chat	can you send me the photos from yesterday?	
+en-005	en-ar	chat	I'm outside, come down	
+en-006	en-ar	chat	did you eat yet?	
+en-007	en-ar	chat	call me when you're free	
+en-008	en-ar	chat	happy birthday! have an amazing day	
+en-009	en-ar	chat	where should we meet for lunch?	
+en-010	en-ar	chat	my phone is about to die, will text later	
+en-011	en-ar	chat	ok sounds good	
+en-012	en-ar	chat	no worries, take your time	
+en-013	en-ar	chat	are you still at the office?	
+en-014	en-ar	chat	I just woke up, give me twenty minutes	
+en-015	en-ar	chat	the match starts at eight, don't be late	
+en-016	en-ar	chat	can you pick up some milk on the way home?	
+en-017	en-ar	chat	I miss you guys so much	
+en-018	en-ar	chat	what time does the movie start?	
+en-019	en-ar	chat	thanks a lot, you saved my day	
+en-020	en-ar	chat	send me the address please	
+en-021	en-ar	chat	I can't find my keys anywhere	
+en-022	en-ar	chat	is it raining over there?	
+en-023	en-ar	chat	let's go for a walk after dinner	
+en-024	en-ar	chat	congrats on the new job!!	
+en-025	en-ar	chat	who else is coming to the party?	
+en-026	en-ar	chat	I'll be there in five	
+en-027	en-ar	chat	did mom call you today?	
+en-028	en-ar	chat	the wifi here is terrible	
+en-029	en-ar	chat	just reached home safely	
+en-030	en-ar	chat	do you want tea or coffee?	
+en-031	en-ar	chat	haha you're crazy	
+en-032	en-ar	chat	let me check and get back to you	
+en-033	en-ar	chat	good morning, have a nice day	
+en-034	en-ar	chat	my exam went better than I expected	
+en-035	en-ar	chat	can we talk tomorrow instead?	
+en-036	en-ar	chat	I'm stuck in traffic again	
+en-037	en-ar	chat	please don't tell anyone yet	
+en-038	en-ar	chat	which train are you taking?	
+en-039	en-ar	chat	that restaurant was really good, we should go again	
+en-040	en-ar	chat	I forgot my charger at your place	
+en-041	en-ar	chat	how is your father feeling now?	
+en-042	en-ar	chat	the baby finally fell asleep	
+en-043	en-ar	chat	bring a jacket, it's cold tonight	
+en-044	en-ar	chat	I sent you the money, check your account	
+en-045	en-ar	chat	are we still on for Saturday?	
+en-046	en-ar	chat	I'm so tired I could sleep for a week	
+en-047	en-ar	chat	what are you cooking today?	
+en-048	en-ar	chat	see you at the station	
+en-049	en-ar	chat	good night, sleep well	
+en-050	en-ar	chat	tell your sister I said hi	
+en-051	en-ar	email	Thank you for your email. I will reply in detail by Friday.	
+en-052	en-ar	email	Please find the updated invoice attached.	
+en-053	en-ar	email	Could we move our meeting to Tuesday afternoon?	
+en-054	en-ar	email	I am writing to follow up on my previous message.	
+en-055	en-ar	email	Let me know if you have any questions.	
+en-056	en-ar	email	The report is ready for your review.	
+en-057	en-ar	email	Unfortunately, I will not be able to attend the workshop next week.	
+en-058	en-ar	email	Could you confirm the delivery date for our order?	
+en-059	en-ar	email	I have shared the document with the whole team.	
+en-060	en-ar	email	Please accept my apologies for the delay in responding.	
+en-061	en-ar	email	Our office will be closed on Monday for the public holiday.	
+en-062	en-ar	email	I would like to request two days of leave next month.	
+en-063	en-ar	email	The payment was received on the third of this month.	
+en-064	en-ar	email	Kindly sign the form and return it by the end of the week.	
+en-065	en-ar	email	We are happy to offer you the position of sales coordinator.	
+en-066	en-ar	email	Please do not reply to this message; this inbox is not monitored.	
+en-067	en-ar	email	I am attaching my CV for your consideration.	
+en-068	en-ar	email	Could you share the slides from yesterday's presentation?	
+en-069	en-ar	email	The new schedule starts from the first of next month.	
+en-070	en-ar	email	We noticed an error in your last statement and have corrected it.	
+en-071	en-ar	email	Please call me at your earliest convenience.	
+en-072	en-ar	email	I look forward to working with you.	
+en-073	en-ar	email	The shipment has been delayed due to bad weather.	
+en-074	en-ar	email	Can you send me a quote for five hundred units?	
+en-075	en-ar	email	Your appointment is confirmed for Thursday at 10 a.m.	
+en-076	en-ar	email	Thank you for your patience while we resolve this issue.	
+en-077	en-ar	email	I have updated the budget figures in the spreadsheet.	
+en-078	en-ar	email	Please let me know which date works best for you.	
+en-079	en-ar	email	We would appreciate your feedback on our service.	
+en-080	en-ar	email	The contract will be renewed automatically unless you cancel it.	
+en-081	en-ar	email	I am out of the office until Wednesday with limited access to email.	
+en-082	en-ar	email	Please forward this message to anyone who may be interested.	
+en-083	en-ar	email	The training session has been rescheduled to next Monday.	
+en-084	en-ar	email	Could you remind me of the password policy for new accounts?	
+en-085	en-ar	email	We regret to inform you that the item is out of stock.	
+en-086	en-ar	email	Thank you for choosing our company.	
+en-087	en-ar	email	I have reviewed the draft and added a few comments.	
+en-088	en-ar	email	The minutes of the meeting are attached for your records.	
+en-089	en-ar	email	Please make sure all receipts are submitted before the deadline.	
+en-090	en-ar	email	I am happy to help with the onboarding of the new staff.	
+en-091	en-ar	email	Our team will contact you within two working days.	
+en-092	en-ar	email	Could you check whether the hotel booking includes breakfast?	
+en-093	en-ar	email	Please treat this information as confidential.	
+en-094	en-ar	email	I would be grateful if you could extend the deadline by one week.	
+en-095	en-ar	email	The meeting room on the second floor is booked for us.	
+en-096	en-ar	email	We have received your complaint and are looking into it.	
+en-097	en-ar	email	Please update your contact details in the portal.	
+en-098	en-ar	email	I am pleased to confirm that your application has been approved.	
+en-099	en-ar	email	Let us schedule a short call to discuss the next steps.	
+en-100	en-ar	email	Best regards, and thank you again for your support.	
+en-101	en-ar	everyday	The shop on the corner opens at nine in the morning.	
+en-102	en-ar	everyday	I need to buy vegetables and rice for the week.	
+en-103	en-ar	everyday	How much does this shirt cost?	
+en-104	en-ar	everyday	The bus to the city centre leaves every fifteen minutes.	
+en-105	en-ar	everyday	My grandmother makes the best bread in the village.	
+en-106	en-ar	everyday	Please turn off the lights when you leave the room.	
+en-107	en-ar	everyday	The children are playing cricket in the park.	
+en-108	en-ar	everyday	It is very hot today, so drink plenty of water.	
+en-109	en-ar	everyday	Where is the nearest pharmacy?	
+en-110	en-ar	everyday	I would like a table for four, please.	
+en-111	en-ar	everyday	The doctor told me to rest for three days.	
+en-112	en-ar	everyday	Our neighbours have a small garden full of roses.	
+en-113	en-ar	everyday	Can you help me carry these bags upstairs?	
+en-114	en-ar	everyday	The train was crowded because of the festival.	
+en-115	en-ar	everyday	I lost my wallet at the market yesterday.	
+en-116	en-ar	everyday	She is learning to drive this summer.	
+en-117	en-ar	everyday	The water bill is higher than last month.	
+en-118	en-ar	everyday	We are planning a trip to the mountains in December.	
+en-119	en-ar	everyday	My son starts school next week.	
+en-120	en-ar	everyday	Is this seat taken?	
+en-121	en-ar	everyday	The electricity went out during the storm last night.	
+en-122	en-ar	everyday	I usually walk to work when the weather is nice.	
+en-123	en-ar	everyday	Could you speak a little more slowly, please?	
+en-124	en-ar	everyday	The library is closed on Sundays.	
+en-125	en-ar	everyday	He fixed the broken chair with some glue and nails.	
+en-126	en-ar	everyday	We ran out of sugar, so I made tea without it.	
+en-127	en-ar	everyday	The price of tomatoes has gone up again.	
+en-128	en-ar	everyday	Please wash your hands before eating.	
+en-129	en-ar	everyday	I have an appointment with the dentist at four.	
+en-130	en-ar	everyday	The new bridge has made the journey much shorter.	
+en-131	en-ar	everyday	They got married last spring in a small ceremony.	
+en-132	en-ar	everyday	My laptop is very slow, I think it needs repairing.	
+en-133	en-ar	everyday	Which platform does the train to the airport leave from?	
+en-134	en-ar	everyday	I am allergic to peanuts.	
+en-135	en-ar	everyday	The cat sleeps on the windowsill all afternoon.	
+en-136	en-ar	everyday	We celebrated Eid with the whole family this year.	
+en-137	en-ar	everyday	Excuse me, how do I get to the post office?	
+en-138	en-ar	everyday	The museum has a special exhibition about old coins.	
+en-139	en-ar	everyday	I prefer tea with a little milk and no sugar.	
+en-140	en-ar	everyday	The road is closed for repairs until next month.	
+en-141	en-ar	everyday	My brother works as a nurse at the city hospital.	
+en-142	en-ar	everyday	Please keep the receipt in case you want to return it.	
+en-143	en-ar	everyday	It took us two hours to find a parking space.	
+en-144	en-ar	everyday	The mangoes this season are very sweet.	
+en-145	en-ar	everyday	I will clean the kitchen after we finish dinner.	
+en-146	en-ar	everyday	There is a long queue at the bank today.	
+en-147	en-ar	everyday	The flight was cancelled, so we stayed at a hotel near the airport.	
+en-148	en-ar	everyday	Do you know a good tailor around here?	
+en-149	en-ar	everyday	Our football team won the final by two goals.	
+en-150	en-ar	everyday	I forgot to water the plants before leaving for the holidays.	
+en-151	en-ar	formal	The government has announced new measures to reduce air pollution.	
+en-152	en-ar	formal	All passengers must present a valid ticket upon request.	
+en-153	en-ar	formal	The committee will publish its findings at the end of the year.	
+en-154	en-ar	formal	Applicants are required to submit proof of identity and address.	
+en-155	en-ar	formal	The university offers scholarships to students from low-income families.	
+en-156	en-ar	formal	Smoking is strictly prohibited inside this building.	
+en-157	en-ar	formal	The annual general meeting will be held on 14 March at the head office.	
+en-158	en-ar	formal	The terms and conditions may change without prior notice.	
+en-159	en-ar	formal	Personal data will be processed in accordance with applicable law.	
+en-160	en-ar	formal	The hospital is seeking volunteers for its blood donation campaign.	
+en-161	en-ar	formal	Economic growth slowed in the second quarter due to lower exports.	
+en-162	en-ar	formal	Visitors are requested to switch off their mobile phones during the ceremony.	
+en-163	en-ar	formal	The court adjourned the hearing until next Thursday.	
+en-164	en-ar	formal	The board approved the proposal by a majority vote.	
+en-165	en-ar	formal	Please read the safety instructions carefully before operating the machine.	
+en-166	en-ar	formal	The ministry of health recommends vaccination for all children under five.	
+en-167	en-ar	formal	The project aims to provide clean drinking water to rural communities.	
+en-168	en-ar	formal	Late submissions will not be accepted under any circumstances.	
+en-169	en-ar	formal	The company reported a significant increase in quarterly revenue.	
+en-170	en-ar	formal	The conference brings together researchers from more than thirty countries.	
+en-171	en-ar	formal	Citizens may file their tax returns online until the end of July.	
+en-172	en-ar	formal	This agreement shall remain in force for a period of three years.	
+en-173	en-ar	formal	The city council has approved funding for a new public library.	
+en-174	en-ar	formal	Employees must complete the security training within thirty days of joining.	
+en-175	en-ar	formal	The museum will remain closed for renovation until further notice.	
+en-176	en-ar	formal	Heavy rainfall is expected in the northern regions over the weekend.	
+en-177	en-ar	formal	The results of the examination will be announced on the official website.	
+en-178	en-ar	formal	We are committed to providing equal opportunities to all applicants.	
+en-179	en-ar	formal	The bank has revised its interest rates on savings accounts.	
+en-180	en-ar	formal	The parties agreed to resolve the dispute through mediation.	
+en-181	en-ar	formal	Food and drinks are not permitted in the reading room.	
+en-182	en-ar	formal	The report highlights the need for greater investment in primary education.	
+en-183	en-ar	formal	Candidates who pass the written test will be invited for an interview.	
+en-184	en-ar	formal	The festival attracts thousands of visitors from across the region every year.	
+en-185	en-ar	formal	The police have advised drivers to avoid the highway during the repairs.	
+en-186	en-ar	formal	Membership fees are payable at the beginning of each academic year.	
+en-187	en-ar	formal	The new law comes into effect on the first of January.	
+en-188	en-ar	formal	Patients are advised to arrive fifteen minutes before their appointment.	
+en-189	en-ar	formal	The organisation provides free legal advice to refugees.	
+en-190	en-ar	formal	The construction of the metro line is expected to be completed in two years.	
+en-191	en-ar	formal	Any changes to the booking must be made at least 48 hours in advance.	
+en-192	en-ar	formal	The minister expressed concern over the rising cost of living.	
+en-193	en-ar	formal	The study found a strong link between sleep and academic performance.	
+en-194	en-ar	formal	Further information is available from the reception desk.	
+en-195	en-ar	formal	The election commission has published the final list of candidates.	
+en-196	en-ar	formal	The factory has reduced its water consumption by twenty percent.	
+en-197	en-ar	formal	The embassy will be closed on national holidays.	
+en-198	en-ar	formal	All students are expected to follow the code of conduct.	
+en-199	en-ar	formal	The charity distributed food parcels to more than two thousand families.	
+en-200	en-ar	formal	The authorities are investigating the cause of the fire.	
+ar-001	ar-en	chat	أين أنت؟ أنا أنتظرك منذ نصف ساعة.	
+ar-002	ar-en	chat	هل نذهب إلى السينما هذا المساء؟	
+ar-003	ar-en	chat	بطارية هاتفي على وشك النفاد، سأكلمك لاحقًا.	
+ar-004	ar-en	chat	هل تناولت الغداء؟	
+ar-005	ar-en	chat	نلتقي غدًا، تصبح على خير.	
+ar-006	ar-en	chat	أرسل لي الصور من فضلك.	
+ar-007	ar-en	chat	سأصل خلال عشر دقائق.	
+ar-008	ar-en	chat	عيد ميلاد سعيد! كل عام وأنت بخير.	
+ar-009	ar-en	chat	أمي تسأل إن كنت ستأتي على العشاء.	
+ar-010	ar-en	chat	المطر غزير جدًا، ابقَ في البيت.	
+ar-011	ar-en	chat	ما أجمل هذا الخبر!	
+ar-012	ar-en	chat	أعطني بعض الوقت وسأخبرك.	
+ar-013	ar-en	chat	القطار متأخر، ربما ساعة أخرى.	
+ar-014	ar-en	chat	هل رأيت رسالتي؟	
+ar-015	ar-en	chat	لا تقلق، كل شيء سيكون على ما يرام.	
+ar-016	ar-en	everyday	اشترِ كيلو طماطم ونصف كيلو بصل من السوق.	
+ar-017	ar-en	everyday	هل تذهب هذه الحافلة إلى محطة القطار؟	
+ar-018	ar-en	everyday	الجو حار جدًا اليوم، اشرب الكثير من الماء.	
+ar-019	ar-en	everyday	ابنتي في الصف الخامس.	
+ar-020	ar-en	everyday	نصحني الطبيب بالراحة لمدة يومين.	
+ar-021	ar-en	everyday	انقطعت الكهرباء، أين الشموع؟	
+ar-022	ar-en	everyday	سنزور جدتي في القرية خلال العطلة.	
+ar-023	ar-en	everyday	كم سعر هذا القميص؟	
+ar-024	ar-en	everyday	المشي في الصباح مفيد للصحة.	
+ar-025	ar-en	everyday	الشاي جاهز، هل تريد كوبًا؟	
+ar-026	ar-en	everyday	فُتح مخبز جديد في حينا.	
+ar-027	ar-en	everyday	من فضلك تكلم ببطء، لم أفهم.	
+ar-028	ar-en	everyday	أضعت محفظتي في مكان ما.	
+ar-029	ar-en	everyday	الأطفال يلعبون كرة القدم في الحديقة.	
+ar-030	ar-en	everyday	ستفتح المدارس أبوابها الأسبوع القادم.	
+ar-031	ar-en	email	شكرًا على رسالتك، سأرد عليك قريبًا.	
+ar-032	ar-en	email	يرجى الاطلاع على التقرير المرفق وإبداء رأيكم.	
+ar-033	ar-en	email	هل يمكننا تأجيل الاجتماع إلى يوم الخميس؟	
+ar-034	ar-en	email	أعتذر عن التأخير في الرد.	
+ar-035	ar-en	email	مرفق مع هذه الرسالة إيصال الدفع.	
+ar-036	ar-en	email	سأكون خارج المكتب حتى يوم الاثنين القادم.	
+ar-037	ar-en	email	يرجى إرسال المستندات قبل يوم الجمعة.	
+ar-038	ar-en	email	تمت الموافقة على طلبكم.	
+ar-039	ar-en	email	لا تترددوا في التواصل معنا لأي استفسار.	
+ar-040	ar-en	email	تم إرسال محضر الاجتماع إلى جميع الأعضاء.	
+ar-041	ar-en	formal	أعلنت الحكومة عن برنامج جديد لدعم المزارعين.	
+ar-042	ar-en	formal	يُرجى من جميع المسافرين الاحتفاظ بتذاكرهم.	
+ar-043	ar-en	formal	ستُعلن نتائج الامتحانات الشهر المقبل.	
+ar-044	ar-en	formal	التدخين ممنوع منعًا باتًا داخل هذا المبنى.	
+ar-045	ar-en	formal	يدخل القانون الجديد حيز التنفيذ في الأول من يناير.	
+ar-046	ar-en	formal	تتوقع الأرصاد الجوية أمطارًا غزيرة خلال اليومين القادمين.	
+ar-047	ar-en	formal	يجب على المتقدمين تقديم نسخة من بطاقة الهوية.	
+ar-048	ar-en	formal	حققت الشركة نموًا ملحوظًا في أرباحها هذا العام.	
+ar-049	ar-en	formal	المكتبة مغلقة يوم الأحد.	
+ar-050	ar-en	formal	نناشد المواطنين ترشيد استهلاك المياه.	

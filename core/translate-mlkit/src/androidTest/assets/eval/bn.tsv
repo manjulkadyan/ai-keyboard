@@ -1,0 +1,256 @@
+# AI Keyboard translation quality corpus: Bengali (bn). Plan Task 12, docs/translation/quality-ur-hi-ar-bn.md.
+# Authored by the AI Keyboard team for this evaluation. Not taken from any app, test set or published corpus.
+# Rows en-001..en-200: the same English sources in all four files (direction en-bn).
+# Rows bn-001..bn-050: native-script sources for the reverse direction (bn-en).
+# reference: left empty; native raters may add a reference translation. Columns are tab-separated.
+id	direction	register	source	reference
+en-001	en-bn	chat	hey, are you coming tonight?	
+en-002	en-bn	chat	running 10 mins late, sorry!	
+en-003	en-bn	chat	lol that's exactly what I said	
+en-004	en-bn	chat	can you send me the photos from yesterday?	
+en-005	en-bn	chat	I'm outside, come down	
+en-006	en-bn	chat	did you eat yet?	
+en-007	en-bn	chat	call me when you're free	
+en-008	en-bn	chat	happy birthday! have an amazing day	
+en-009	en-bn	chat	where should we meet for lunch?	
+en-010	en-bn	chat	my phone is about to die, will text later	
+en-011	en-bn	chat	ok sounds good	
+en-012	en-bn	chat	no worries, take your time	
+en-013	en-bn	chat	are you still at the office?	
+en-014	en-bn	chat	I just woke up, give me twenty minutes	
+en-015	en-bn	chat	the match starts at eight, don't be late	
+en-016	en-bn	chat	can you pick up some milk on the way home?	
+en-017	en-bn	chat	I miss you guys so much	
+en-018	en-bn	chat	what time does the movie start?	
+en-019	en-bn	chat	thanks a lot, you saved my day	
+en-020	en-bn	chat	send me the address please	
+en-021	en-bn	chat	I can't find my keys anywhere	
+en-022	en-bn	chat	is it raining over there?	
+en-023	en-bn	chat	let's go for a walk after dinner	
+en-024	en-bn	chat	congrats on the new job!!	
+en-025	en-bn	chat	who else is coming to the party?	
+en-026	en-bn	chat	I'll be there in five	
+en-027	en-bn	chat	did mom call you today?	
+en-028	en-bn	chat	the wifi here is terrible	
+en-029	en-bn	chat	just reached home safely	
+en-030	en-bn	chat	do you want tea or coffee?	
+en-031	en-bn	chat	haha you're crazy	
+en-032	en-bn	chat	let me check and get back to you	
+en-033	en-bn	chat	good morning, have a nice day	
+en-034	en-bn	chat	my exam went better than I expected	
+en-035	en-bn	chat	can we talk tomorrow instead?	
+en-036	en-bn	chat	I'm stuck in traffic again	
+en-037	en-bn	chat	please don't tell anyone yet	
+en-038	en-bn	chat	which train are you taking?	
+en-039	en-bn	chat	that restaurant was really good, we should go again	
+en-040	en-bn	chat	I forgot my charger at your place	
+en-041	en-bn	chat	how is your father feeling now?	
+en-042	en-bn	chat	the baby finally fell asleep	
+en-043	en-bn	chat	bring a jacket, it's cold tonight	
+en-044	en-bn	chat	I sent you the money, check your account	
+en-045	en-bn	chat	are we still on for Saturday?	
+en-046	en-bn	chat	I'm so tired I could sleep for a week	
+en-047	en-bn	chat	what are you cooking today?	
+en-048	en-bn	chat	see you at the station	
+en-049	en-bn	chat	good night, sleep well	
+en-050	en-bn	chat	tell your sister I said hi	
+en-051	en-bn	email	Thank you for your email. I will reply in detail by Friday.	
+en-052	en-bn	email	Please find the updated invoice attached.	
+en-053	en-bn	email	Could we move our meeting to Tuesday afternoon?	
+en-054	en-bn	email	I am writing to follow up on my previous message.	
+en-055	en-bn	email	Let me know if you have any questions.	
+en-056	en-bn	email	The report is ready for your review.	
+en-057	en-bn	email	Unfortunately, I will not be able to attend the workshop next week.	
+en-058	en-bn	email	Could you confirm the delivery date for our order?	
+en-059	en-bn	email	I have shared the document with the whole team.	
+en-060	en-bn	email	Please accept my apologies for the delay in responding.	
+en-061	en-bn	email	Our office will be closed on Monday for the public holiday.	
+en-062	en-bn	email	I would like to request two days of leave next month.	
+en-063	en-bn	email	The payment was received on the third of this month.	
+en-064	en-bn	email	Kindly sign the form and return it by the end of the week.	
+en-065	en-bn	email	We are happy to offer you the position of sales coordinator.	
+en-066	en-bn	email	Please do not reply to this message; this inbox is not monitored.	
+en-067	en-bn	email	I am attaching my CV for your consideration.	
+en-068	en-bn	email	Could you share the slides from yesterday's presentation?	
+en-069	en-bn	email	The new schedule starts from the first of next month.	
+en-070	en-bn	email	We noticed an error in your last statement and have corrected it.	
+en-071	en-bn	email	Please call me at your earliest convenience.	
+en-072	en-bn	email	I look forward to working with you.	
+en-073	en-bn	email	The shipment has been delayed due to bad weather.	
+en-074	en-bn	email	Can you send me a quote for five hundred units?	
+en-075	en-bn	email	Your appointment is confirmed for Thursday at 10 a.m.	
+en-076	en-bn	email	Thank you for your patience while we resolve this issue.	
+en-077	en-bn	email	I have updated the budget figures in the spreadsheet.	
+en-078	en-bn	email	Please let me know which date works best for you.	
+en-079	en-bn	email	We would appreciate your feedback on our service.	
+en-080	en-bn	email	The contract will be renewed automatically unless you cancel it.	
+en-081	en-bn	email	I am out of the office until Wednesday with limited access to email.	
+en-082	en-bn	email	Please forward this message to anyone who may be interested.	
+en-083	en-bn	email	The training session has been rescheduled to next Monday.	
+en-084	en-bn	email	Could you remind me of the password policy for new accounts?	
+en-085	en-bn	email	We regret to inform you that the item is out of stock.	
+en-086	en-bn	email	Thank you for choosing our company.	
+en-087	en-bn	email	I have reviewed the draft and added a few comments.	
+en-088	en-bn	email	The minutes of the meeting are attached for your records.	
+en-089	en-bn	email	Please make sure all receipts are submitted before the deadline.	
+en-090	en-bn	email	I am happy to help with the onboarding of the new staff.	
+en-091	en-bn	email	Our team will contact you within two working days.	
+en-092	en-bn	email	Could you check whether the hotel booking includes breakfast?	
+en-093	en-bn	email	Please treat this information as confidential.	
+en-094	en-bn	email	I would be grateful if you could extend the deadline by one week.	
+en-095	en-bn	email	The meeting room on the second floor is booked for us.	
+en-096	en-bn	email	We have received your complaint and are looking into it.	
+en-097	en-bn	email	Please update your contact details in the portal.	
+en-098	en-bn	email	I am pleased to confirm that your application has been approved.	
+en-099	en-bn	email	Let us schedule a short call to discuss the next steps.	
+en-100	en-bn	email	Best regards, and thank you again for your support.	
+en-101	en-bn	everyday	The shop on the corner opens at nine in the morning.	
+en-102	en-bn	everyday	I need to buy vegetables and rice for the week.	
+en-103	en-bn	everyday	How much does this shirt cost?	
+en-104	en-bn	everyday	The bus to the city centre leaves every fifteen minutes.	
+en-105	en-bn	everyday	My grandmother makes the best bread in the village.	
+en-106	en-bn	everyday	Please turn off the lights when you leave the room.	
+en-107	en-bn	everyday	The children are playing cricket in the park.	
+en-108	en-bn	everyday	It is very hot today, so drink plenty of water.	
+en-109	en-bn	everyday	Where is the nearest pharmacy?	
+en-110	en-bn	everyday	I would like a table for four, please.	
+en-111	en-bn	everyday	The doctor told me to rest for three days.	
+en-112	en-bn	everyday	Our neighbours have a small garden full of roses.	
+en-113	en-bn	everyday	Can you help me carry these bags upstairs?	
+en-114	en-bn	everyday	The train was crowded because of the festival.	
+en-115	en-bn	everyday	I lost my wallet at the market yesterday.	
+en-116	en-bn	everyday	She is learning to drive this summer.	
+en-117	en-bn	everyday	The water bill is higher than last month.	
+en-118	en-bn	everyday	We are planning a trip to the mountains in December.	
+en-119	en-bn	everyday	My son starts school next week.	
+en-120	en-bn	everyday	Is this seat taken?	
+en-121	en-bn	everyday	The electricity went out during the storm last night.	
+en-122	en-bn	everyday	I usually walk to work when the weather is nice.	
+en-123	en-bn	everyday	Could you speak a little more slowly, please?	
+en-124	en-bn	everyday	The library is closed on Sundays.	
+en-125	en-bn	everyday	He fixed the broken chair with some glue and nails.	
+en-126	en-bn	everyday	We ran out of sugar, so I made tea without it.	
+en-127	en-bn	everyday	The price of tomatoes has gone up again.	
+en-128	en-bn	everyday	Please wash your hands before eating.	
+en-129	en-bn	everyday	I have an appointment with the dentist at four.	
+en-130	en-bn	everyday	The new bridge has made the journey much shorter.	
+en-131	en-bn	everyday	They got married last spring in a small ceremony.	
+en-132	en-bn	everyday	My laptop is very slow, I think it needs repairing.	
+en-133	en-bn	everyday	Which platform does the train to the airport leave from?	
+en-134	en-bn	everyday	I am allergic to peanuts.	
+en-135	en-bn	everyday	The cat sleeps on the windowsill all afternoon.	
+en-136	en-bn	everyday	We celebrated Eid with the whole family this year.	
+en-137	en-bn	everyday	Excuse me, how do I get to the post office?	
+en-138	en-bn	everyday	The museum has a special exhibition about old coins.	
+en-139	en-bn	everyday	I prefer tea with a little milk and no sugar.	
+en-140	en-bn	everyday	The road is closed for repairs until next month.	
+en-141	en-bn	everyday	My brother works as a nurse at the city hospital.	
+en-142	en-bn	everyday	Please keep the receipt in case you want to return it.	
+en-143	en-bn	everyday	It took us two hours to find a parking space.	
+en-144	en-bn	everyday	The mangoes this season are very sweet.	
+en-145	en-bn	everyday	I will clean the kitchen after we finish dinner.	
+en-146	en-bn	everyday	There is a long queue at the bank today.	
+en-147	en-bn	everyday	The flight was cancelled, so we stayed at a hotel near the airport.	
+en-148	en-bn	everyday	Do you know a good tailor around here?	
+en-149	en-bn	everyday	Our football team won the final by two goals.	
+en-150	en-bn	everyday	I forgot to water the plants before leaving for the holidays.	
+en-151	en-bn	formal	The government has announced new measures to reduce air pollution.	
+en-152	en-bn	formal	All passengers must present a valid ticket upon request.	
+en-153	en-bn	formal	The committee will publish its findings at the end of the year.	
+en-154	en-bn	formal	Applicants are required to submit proof of identity and address.	
+en-155	en-bn	formal	The university offers scholarships to students from low-income families.	
+en-156	en-bn	formal	Smoking is strictly prohibited inside this building.	
+en-157	en-bn	formal	The annual general meeting will be held on 14 March at the head office.	
+en-158	en-bn	formal	The terms and conditions may change without prior notice.	
+en-159	en-bn	formal	Personal data will be processed in accordance with applicable law.	
+en-160	en-bn	formal	The hospital is seeking volunteers for its blood donation campaign.	
+en-161	en-bn	formal	Economic growth slowed in the second quarter due to lower exports.	
+en-162	en-bn	formal	Visitors are requested to switch off their mobile phones during the ceremony.	
+en-163	en-bn	formal	The court adjourned the hearing until next Thursday.	
+en-164	en-bn	formal	The board approved the proposal by a majority vote.	
+en-165	en-bn	formal	Please read the safety instructions carefully before operating the machine.	
+en-166	en-bn	formal	The ministry of health recommends vaccination for all children under five.	
+en-167	en-bn	formal	The project aims to provide clean drinking water to rural communities.	
+en-168	en-bn	formal	Late submissions will not be accepted under any circumstances.	
+en-169	en-bn	formal	The company reported a significant increase in quarterly revenue.	
+en-170	en-bn	formal	The conference brings together researchers from more than thirty countries.	
+en-171	en-bn	formal	Citizens may file their tax returns online until the end of July.	
+en-172	en-bn	formal	This agreement shall remain in force for a period of three years.	
+en-173	en-bn	formal	The city council has approved funding for a new public library.	
+en-174	en-bn	formal	Employees must complete the security training within thirty days of joining.	
+en-175	en-bn	formal	The museum will remain closed for renovation until further notice.	
+en-176	en-bn	formal	Heavy rainfall is expected in the northern regions over the weekend.	
+en-177	en-bn	formal	The results of the examination will be announced on the official website.	
+en-178	en-bn	formal	We are committed to providing equal opportunities to all applicants.	
+en-179	en-bn	formal	The bank has revised its interest rates on savings accounts.	
+en-180	en-bn	formal	The parties agreed to resolve the dispute through mediation.	
+en-181	en-bn	formal	Food and drinks are not permitted in the reading room.	
+en-182	en-bn	formal	The report highlights the need for greater investment in primary education.	
+en-183	en-bn	formal	Candidates who pass the written test will be invited for an interview.	
+en-184	en-bn	formal	The festival attracts thousands of visitors from across the region every year.	
+en-185	en-bn	formal	The police have advised drivers to avoid the highway during the repairs.	
+en-186	en-bn	formal	Membership fees are payable at the beginning of each academic year.	
+en-187	en-bn	formal	The new law comes into effect on the first of January.	
+en-188	en-bn	formal	Patients are advised to arrive fifteen minutes before their appointment.	
+en-189	en-bn	formal	The organisation provides free legal advice to refugees.	
+en-190	en-bn	formal	The construction of the metro line is expected to be completed in two years.	
+en-191	en-bn	formal	Any changes to the booking must be made at least 48 hours in advance.	
+en-192	en-bn	formal	The minister expressed concern over the rising cost of living.	
+en-193	en-bn	formal	The study found a strong link between sleep and academic performance.	
+en-194	en-bn	formal	Further information is available from the reception desk.	
+en-195	en-bn	formal	The election commission has published the final list of candidates.	
+en-196	en-bn	formal	The factory has reduced its water consumption by twenty percent.	
+en-197	en-bn	formal	The embassy will be closed on national holidays.	
+en-198	en-bn	formal	All students are expected to follow the code of conduct.	
+en-199	en-bn	formal	The charity distributed food parcels to more than two thousand families.	
+en-200	en-bn	formal	The authorities are investigating the cause of the fire.	
+bn-001	bn-en	chat	তুমি কোথায়? আমি অনেকক্ষণ ধরে অপেক্ষা করছি।	
+bn-002	bn-en	chat	আজ সন্ধ্যায় সিনেমা দেখতে যাবে?	
+bn-003	bn-en	chat	আমার ফোনের চার্জ শেষ হয়ে যাচ্ছে, পরে কথা বলব।	
+bn-004	bn-en	chat	খেয়েছ?	
+bn-005	bn-en	chat	কাল দেখা হবে, শুভ রাত্রি।	
+bn-006	bn-en	chat	নোটগুলো একটু পাঠিয়ে দিও।	
+bn-007	bn-en	chat	আমি দশ মিনিটের মধ্যে পৌঁছে যাব।	
+bn-008	bn-en	chat	শুভ জন্মদিন! অনেক শুভেচ্ছা রইল।	
+bn-009	bn-en	chat	মা জিজ্ঞেস করছে তুমি রাতে খেতে আসবে কি না।	
+bn-010	bn-en	chat	খুব জোরে বৃষ্টি হচ্ছে, বাড়িতেই থাকো।	
+bn-011	bn-en	chat	বাহ, এটা তো দারুণ খবর!	
+bn-012	bn-en	chat	আমাকে একটু সময় দাও, ভেবে জানাচ্ছি।	
+bn-013	bn-en	chat	ট্রেন দেরিতে চলছে, হয়তো আরও এক ঘণ্টা লাগবে।	
+bn-014	bn-en	chat	তুমি কি আমার মেসেজটা দেখেছ?	
+bn-015	bn-en	chat	চিন্তা কোরো না, সব ঠিক হয়ে যাবে।	
+bn-016	bn-en	everyday	বাজার থেকে এক কেজি টমেটো আর আধা কেজি পেঁয়াজ নিয়ে এসো।	
+bn-017	bn-en	everyday	এই বাসটা কি রেলস্টেশনে যায়?	
+bn-018	bn-en	everyday	আজ খুব গরম, বেশি করে পানি খাও।	
+bn-019	bn-en	everyday	আমার মেয়ে পঞ্চম শ্রেণিতে পড়ে।	
+bn-020	bn-en	everyday	ডাক্তার দুই দিন বিশ্রাম নিতে বলেছেন।	
+bn-021	bn-en	everyday	বিদ্যুৎ চলে গেছে, মোমবাতি কোথায়?	
+bn-022	bn-en	everyday	ছুটিতে আমরা দাদুর গ্রামে যাচ্ছি।	
+bn-023	bn-en	everyday	এই শার্টটার দাম কত?	
+bn-024	bn-en	everyday	সকালে হাঁটা স্বাস্থ্যের জন্য ভালো।	
+bn-025	bn-en	everyday	চা হয়ে গেছে, তুমিও খাবে?	
+bn-026	bn-en	everyday	পাড়ায় একটা নতুন মিষ্টির দোকান খুলেছে।	
+bn-027	bn-en	everyday	দয়া করে একটু আস্তে বলুন, আমি বুঝতে পারিনি।	
+bn-028	bn-en	everyday	আমার মানিব্যাগটা কোথাও হারিয়ে গেছে।	
+bn-029	bn-en	everyday	বাচ্চারা মাঠে ফুটবল খেলছে।	
+bn-030	bn-en	everyday	আগামী সপ্তাহ থেকে স্কুল আবার খুলবে।	
+bn-031	bn-en	email	আপনার ইমেইলের জন্য ধন্যবাদ, আমি শীঘ্রই উত্তর দেব।	
+bn-032	bn-en	email	অনুগ্রহ করে সংযুক্ত প্রতিবেদনটি দেখে আপনার মতামত জানান।	
+bn-033	bn-en	email	আমরা কি সভাটি বৃহস্পতিবার পর্যন্ত পিছিয়ে দিতে পারি?	
+bn-034	bn-en	email	দেরিতে উত্তর দেওয়ার জন্য দুঃখিত।	
+bn-035	bn-en	email	এই ইমেইলের সাথে পেমেন্টের রসিদ পাঠানো হলো।	
+bn-036	bn-en	email	আমি আগামী সোমবার পর্যন্ত অফিসের বাইরে থাকব।	
+bn-037	bn-en	email	অনুগ্রহ করে শুক্রবারের মধ্যে আপনার কাগজপত্র জমা দিন।	
+bn-038	bn-en	email	আপনার আবেদন গৃহীত হয়েছে।	
+bn-039	bn-en	email	যেকোনো প্রশ্নের জন্য নির্দ্বিধায় যোগাযোগ করুন।	
+bn-040	bn-en	email	সভার কার্যবিবরণী সব সদস্যকে পাঠানো হয়েছে।	
+bn-041	bn-en	formal	সরকার কৃষকদের জন্য একটি নতুন প্রকল্প ঘোষণা করেছে।	
+bn-042	bn-en	formal	সকল যাত্রীকে টিকিট সঙ্গে রাখার অনুরোধ করা হচ্ছে।	
+bn-043	bn-en	formal	পরীক্ষার ফলাফল আগামী মাসে প্রকাশ করা হবে।	
+bn-044	bn-en	formal	এই ভবনে ধূমপান সম্পূর্ণ নিষিদ্ধ।	
+bn-045	bn-en	formal	নতুন আইনটি পয়লা জানুয়ারি থেকে কার্যকর হবে।	
+bn-046	bn-en	formal	আবহাওয়া অধিদপ্তর আগামী দুই দিনে ভারী বৃষ্টির পূর্বাভাস দিয়েছে।	
+bn-047	bn-en	formal	আবেদনকারীদের জাতীয় পরিচয়পত্রের একটি কপি জমা দিতে হবে।	
+bn-048	bn-en	formal	এ বছর কোম্পানির মুনাফা উল্লেখযোগ্যভাবে বেড়েছে।	
+bn-049	bn-en	formal	গ্রন্থাগারটি রবিবার বন্ধ থাকে।	
+bn-050	bn-en	formal	নাগরিকদের পানি অপচয় না করার অনুরোধ জানানো হচ্ছে।	

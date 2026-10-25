@@ -1,0 +1,256 @@
+# AI Keyboard translation quality corpus: Hindi (hi). Plan Task 12, docs/translation/quality-ur-hi-ar-bn.md.
+# Authored by the AI Keyboard team for this evaluation. Not taken from any app, test set or published corpus.
+# Rows en-001..en-200: the same English sources in all four files (direction en-hi).
+# Rows hi-001..hi-050: native-script sources for the reverse direction (hi-en).
+# reference: left empty; native raters may add a reference translation. Columns are tab-separated.
+id	direction	register	source	reference
+en-001	en-hi	chat	hey, are you coming tonight?	
+en-002	en-hi	chat	running 10 mins late, sorry!	
+en-003	en-hi	chat	lol that's exactly what I said	
+en-004	en-hi	chat	can you send me the photos from yesterday?	
+en-005	en-hi	chat	I'm outside, come down	
+en-006	en-hi	chat	did you eat yet?	
+en-007	en-hi	chat	call me when you're free	
+en-008	en-hi	chat	happy birthday! have an amazing day	
+en-009	en-hi	chat	where should we meet for lunch?	
+en-010	en-hi	chat	my phone is about to die, will text later	
+en-011	en-hi	chat	ok sounds good	
+en-012	en-hi	chat	no worries, take your time	
+en-013	en-hi	chat	are you still at the office?	
+en-014	en-hi	chat	I just woke up, give me twenty minutes	
+en-015	en-hi	chat	the match starts at eight, don't be late	
+en-016	en-hi	chat	can you pick up some milk on the way home?	
+en-017	en-hi	chat	I miss you guys so much	
+en-018	en-hi	chat	what time does the movie start?	
+en-019	en-hi	chat	thanks a lot, you saved my day	
+en-020	en-hi	chat	send me the address please	
+en-021	en-hi	chat	I can't find my keys anywhere	
+en-022	en-hi	chat	is it raining over there?	
+en-023	en-hi	chat	let's go for a walk after dinner	
+en-024	en-hi	chat	congrats on the new job!!	
+en-025	en-hi	chat	who else is coming to the party?	
+en-026	en-hi	chat	I'll be there in five	
+en-027	en-hi	chat	did mom call you today?	
+en-028	en-hi	chat	the wifi here is terrible	
+en-029	en-hi	chat	just reached home safely	
+en-030	en-hi	chat	do you want tea or coffee?	
+en-031	en-hi	chat	haha you're crazy	
+en-032	en-hi	chat	let me check and get back to you	
+en-033	en-hi	chat	good morning, have a nice day	
+en-034	en-hi	chat	my exam went better than I expected	
+en-035	en-hi	chat	can we talk tomorrow instead?	
+en-036	en-hi	chat	I'm stuck in traffic again	
+en-037	en-hi	chat	please don't tell anyone yet	
+en-038	en-hi	chat	which train are you taking?	
+en-039	en-hi	chat	that restaurant was really good, we should go again	
+en-040	en-hi	chat	I forgot my charger at your place	
+en-041	en-hi	chat	how is your father feeling now?	
+en-042	en-hi	chat	the baby finally fell asleep	
+en-043	en-hi	chat	bring a jacket, it's cold tonight	
+en-044	en-hi	chat	I sent you the money, check your account	
+en-045	en-hi	chat	are we still on for Saturday?	
+en-046	en-hi	chat	I'm so tired I could sleep for a week	
+en-047	en-hi	chat	what are you cooking today?	
+en-048	en-hi	chat	see you at the station	
+en-049	en-hi	chat	good night, sleep well	
+en-050	en-hi	chat	tell your sister I said hi	
+en-051	en-hi	email	Thank you for your email. I will reply in detail by Friday.	
+en-052	en-hi	email	Please find the updated invoice attached.	
+en-053	en-hi	email	Could we move our meeting to Tuesday afternoon?	
+en-054	en-hi	email	I am writing to follow up on my previous message.	
+en-055	en-hi	email	Let me know if you have any questions.	
+en-056	en-hi	email	The report is ready for your review.	
+en-057	en-hi	email	Unfortunately, I will not be able to attend the workshop next week.	
+en-058	en-hi	email	Could you confirm the delivery date for our order?	
+en-059	en-hi	email	I have shared the document with the whole team.	
+en-060	en-hi	email	Please accept my apologies for the delay in responding.	
+en-061	en-hi	email	Our office will be closed on Monday for the public holiday.	
+en-062	en-hi	email	I would like to request two days of leave next month.	
+en-063	en-hi	email	The payment was received on the third of this month.	
+en-064	en-hi	email	Kindly sign the form and return it by the end of the week.	
+en-065	en-hi	email	We are happy to offer you the position of sales coordinator.	
+en-066	en-hi	email	Please do not reply to this message; this inbox is not monitored.	
+en-067	en-hi	email	I am attaching my CV for your consideration.	
+en-068	en-hi	email	Could you share the slides from yesterday's presentation?	
+en-069	en-hi	email	The new schedule starts from the first of next month.	
+en-070	en-hi	email	We noticed an error in your last statement and have corrected it.	
+en-071	en-hi	email	Please call me at your earliest convenience.	
+en-072	en-hi	email	I look forward to working with you.	
+en-073	en-hi	email	The shipment has been delayed due to bad weather.	
+en-074	en-hi	email	Can you send me a quote for five hundred units?	
+en-075	en-hi	email	Your appointment is confirmed for Thursday at 10 a.m.	
+en-076	en-hi	email	Thank you for your patience while we resolve this issue.	
+en-077	en-hi	email	I have updated the budget figures in the spreadsheet.	
+en-078	en-hi	email	Please let me know which date works best for you.	
+en-079	en-hi	email	We would appreciate your feedback on our service.	
+en-080	en-hi	email	The contract will be renewed automatically unless you cancel it.	
+en-081	en-hi	email	I am out of the office until Wednesday with limited access to email.	
+en-082	en-hi	email	Please forward this message to anyone who may be interested.	
+en-083	en-hi	email	The training session has been rescheduled to next Monday.	
+en-084	en-hi	email	Could you remind me of the password policy for new accounts?	
+en-085	en-hi	email	We regret to inform you that the item is out of stock.	
+en-086	en-hi	email	Thank you for choosing our company.	
+en-087	en-hi	email	I have reviewed the draft and added a few comments.	
+en-088	en-hi	email	The minutes of the meeting are attached for your records.	
+en-089	en-hi	email	Please make sure all receipts are submitted before the deadline.	
+en-090	en-hi	email	I am happy to help with the onboarding of the new staff.	
+en-091	en-hi	email	Our team will contact you within two working days.	
+en-092	en-hi	email	Could you check whether the hotel booking includes breakfast?	
+en-093	en-hi	email	Please treat this information as confidential.	
+en-094	en-hi	email	I would be grateful if you could extend the deadline by one week.	
+en-095	en-hi	email	The meeting room on the second floor is booked for us.	
+en-096	en-hi	email	We have received your complaint and are looking into it.	
+en-097	en-hi	email	Please update your contact details in the portal.	
+en-098	en-hi	email	I am pleased to confirm that your application has been approved.	
+en-099	en-hi	email	Let us schedule a short call to discuss the next steps.	
+en-100	en-hi	email	Best regards, and thank you again for your support.	
+en-101	en-hi	everyday	The shop on the corner opens at nine in the morning.	
+en-102	en-hi	everyday	I need to buy vegetables and rice for the week.	
+en-103	en-hi	everyday	How much does this shirt cost?	
+en-104	en-hi	everyday	The bus to the city centre leaves every fifteen minutes.	
+en-105	en-hi	everyday	My grandmother makes the best bread in the village.	
+en-106	en-hi	everyday	Please turn off the lights when you leave the room.	
+en-107	en-hi	everyday	The children are playing cricket in the park.	
+en-108	en-hi	everyday	It is very hot today, so drink plenty of water.	
+en-109	en-hi	everyday	Where is the nearest pharmacy?	
+en-110	en-hi	everyday	I would like a table for four, please.	
+en-111	en-hi	everyday	The doctor told me to rest for three days.	
+en-112	en-hi	everyday	Our neighbours have a small garden full of roses.	
+en-113	en-hi	everyday	Can you help me carry these bags upstairs?	
+en-114	en-hi	everyday	The train was crowded because of the festival.	
+en-115	en-hi	everyday	I lost my wallet at the market yesterday.	
+en-116	en-hi	everyday	She is learning to drive this summer.	
+en-117	en-hi	everyday	The water bill is higher than last month.	
+en-118	en-hi	everyday	We are planning a trip to the mountains in December.	
+en-119	en-hi	everyday	My son starts school next week.	
+en-120	en-hi	everyday	Is this seat taken?	
+en-121	en-hi	everyday	The electricity went out during the storm last night.	
+en-122	en-hi	everyday	I usually walk to work when the weather is nice.	
+en-123	en-hi	everyday	Could you speak a little more slowly, please?	
+en-124	en-hi	everyday	The library is closed on Sundays.	
+en-125	en-hi	everyday	He fixed the broken chair with some glue and nails.	
+en-126	en-hi	everyday	We ran out of sugar, so I made tea without it.	
+en-127	en-hi	everyday	The price of tomatoes has gone up again.	
+en-128	en-hi	everyday	Please wash your hands before eating.	
+en-129	en-hi	everyday	I have an appointment with the dentist at four.	
+en-130	en-hi	everyday	The new bridge has made the journey much shorter.	
+en-131	en-hi	everyday	They got married last spring in a small ceremony.	
+en-132	en-hi	everyday	My laptop is very slow, I think it needs repairing.	
+en-133	en-hi	everyday	Which platform does the train to the airport leave from?	
+en-134	en-hi	everyday	I am allergic to peanuts.	
+en-135	en-hi	everyday	The cat sleeps on the windowsill all afternoon.	
+en-136	en-hi	everyday	We celebrated Eid with the whole family this year.	
+en-137	en-hi	everyday	Excuse me, how do I get to the post office?	
+en-138	en-hi	everyday	The museum has a special exhibition about old coins.	
+en-139	en-hi	everyday	I prefer tea with a little milk and no sugar.	
+en-140	en-hi	everyday	The road is closed for repairs until next month.	
+en-141	en-hi	everyday	My brother works as a nurse at the city hospital.	
+en-142	en-hi	everyday	Please keep the receipt in case you want to return it.	
+en-143	en-hi	everyday	It took us two hours to find a parking space.	
+en-144	en-hi	everyday	The mangoes this season are very sweet.	
+en-145	en-hi	everyday	I will clean the kitchen after we finish dinner.	
+en-146	en-hi	everyday	There is a long queue at the bank today.	
+en-147	en-hi	everyday	The flight was cancelled, so we stayed at a hotel near the airport.	
+en-148	en-hi	everyday	Do you know a good tailor around here?	
+en-149	en-hi	everyday	Our football team won the final by two goals.	
+en-150	en-hi	everyday	I forgot to water the plants before leaving for the holidays.	
+en-151	en-hi	formal	The government has announced new measures to reduce air pollution.	
+en-152	en-hi	formal	All passengers must present a valid ticket upon request.	
+en-153	en-hi	formal	The committee will publish its findings at the end of the year.	
+en-154	en-hi	formal	Applicants are required to submit proof of identity and address.	
+en-155	en-hi	formal	The university offers scholarships to students from low-income families.	
+en-156	en-hi	formal	Smoking is strictly prohibited inside this building.	
+en-157	en-hi	formal	The annual general meeting will be held on 14 March at the head office.	
+en-158	en-hi	formal	The terms and conditions may change without prior notice.	
+en-159	en-hi	formal	Personal data will be processed in accordance with applicable law.	
+en-160	en-hi	formal	The hospital is seeking volunteers for its blood donation campaign.	
+en-161	en-hi	formal	Economic growth slowed in the second quarter due to lower exports.	
+en-162	en-hi	formal	Visitors are requested to switch off their mobile phones during the ceremony.	
+en-163	en-hi	formal	The court adjourned the hearing until next Thursday.	
+en-164	en-hi	formal	The board approved the proposal by a majority vote.	
+en-165	en-hi	formal	Please read the safety instructions carefully before operating the machine.	
+en-166	en-hi	formal	The ministry of health recommends vaccination for all children under five.	
+en-167	en-hi	formal	The project aims to provide clean drinking water to rural communities.	
+en-168	en-hi	formal	Late submissions will not be accepted under any circumstances.	
+en-169	en-hi	formal	The company reported a significant increase in quarterly revenue.	
+en-170	en-hi	formal	The conference brings together researchers from more than thirty countries.	
+en-171	en-hi	formal	Citizens may file their tax returns online until the end of July.	
+en-172	en-hi	formal	This agreement shall remain in force for a period of three years.	
+en-173	en-hi	formal	The city council has approved funding for a new public library.	
+en-174	en-hi	formal	Employees must complete the security training within thirty days of joining.	
+en-175	en-hi	formal	The museum will remain closed for renovation until further notice.	
+en-176	en-hi	formal	Heavy rainfall is expected in the northern regions over the weekend.	
+en-177	en-hi	formal	The results of the examination will be announced on the official website.	
+en-178	en-hi	formal	We are committed to providing equal opportunities to all applicants.	
+en-179	en-hi	formal	The bank has revised its interest rates on savings accounts.	
+en-180	en-hi	formal	The parties agreed to resolve the dispute through mediation.	
+en-181	en-hi	formal	Food and drinks are not permitted in the reading room.	
+en-182	en-hi	formal	The report highlights the need for greater investment in primary education.	
+en-183	en-hi	formal	Candidates who pass the written test will be invited for an interview.	
+en-184	en-hi	formal	The festival attracts thousands of visitors from across the region every year.	
+en-185	en-hi	formal	The police have advised drivers to avoid the highway during the repairs.	
+en-186	en-hi	formal	Membership fees are payable at the beginning of each academic year.	
+en-187	en-hi	formal	The new law comes into effect on the first of January.	
+en-188	en-hi	formal	Patients are advised to arrive fifteen minutes before their appointment.	
+en-189	en-hi	formal	The organisation provides free legal advice to refugees.	
+en-190	en-hi	formal	The construction of the metro line is expected to be completed in two years.	
+en-191	en-hi	formal	Any changes to the booking must be made at least 48 hours in advance.	
+en-192	en-hi	formal	The minister expressed concern over the rising cost of living.	
+en-193	en-hi	formal	The study found a strong link between sleep and academic performance.	
+en-194	en-hi	formal	Further information is available from the reception desk.	
+en-195	en-hi	formal	The election commission has published the final list of candidates.	
+en-196	en-hi	formal	The factory has reduced its water consumption by twenty percent.	
+en-197	en-hi	formal	The embassy will be closed on national holidays.	
+en-198	en-hi	formal	All students are expected to follow the code of conduct.	
+en-199	en-hi	formal	The charity distributed food parcels to more than two thousand families.	
+en-200	en-hi	formal	The authorities are investigating the cause of the fire.	
+hi-001	hi-en	chat	तुम कहाँ हो? मैं कब से इंतज़ार कर रहा हूँ।	
+hi-002	hi-en	chat	आज शाम को फ़िल्म देखने चलें?	
+hi-003	hi-en	chat	मेरा फ़ोन बंद हो रहा है, बाद में बात करते हैं।	
+hi-004	hi-en	chat	खाना खा लिया क्या?	
+hi-005	hi-en	chat	कल मिलते हैं, शुभ रात्रि।	
+hi-006	hi-en	chat	भाई, नोट्स भेज देना प्लीज़।	
+hi-007	hi-en	chat	मैं दस मिनट में पहुँच जाऊँगी।	
+hi-008	hi-en	chat	जन्मदिन की बहुत-बहुत शुभकामनाएँ!	
+hi-009	hi-en	chat	मम्मी पूछ रही हैं कि तुम खाने पर आओगे या नहीं।	
+hi-010	hi-en	chat	बारिश बहुत तेज़ हो रही है, घर पर ही रहो।	
+hi-011	hi-en	chat	अरे वाह, यह तो बहुत अच्छी खबर है!	
+hi-012	hi-en	chat	मुझे थोड़ा समय दो, मैं सोचकर बताता हूँ।	
+hi-013	hi-en	chat	ट्रेन लेट है, शायद एक घंटा और लगेगा।	
+hi-014	hi-en	chat	क्या तुमने मेरा मैसेज देखा?	
+hi-015	hi-en	chat	चिंता मत करो, सब ठीक हो जाएगा।	
+hi-016	hi-en	everyday	बाज़ार से एक किलो टमाटर और आधा किलो प्याज़ ले आना।	
+hi-017	hi-en	everyday	क्या यह बस रेलवे स्टेशन जाती है?	
+hi-018	hi-en	everyday	आज बहुत गर्मी है, पानी पीते रहना।	
+hi-019	hi-en	everyday	मेरी बेटी पाँचवीं कक्षा में पढ़ती है।	
+hi-020	hi-en	everyday	डॉक्टर ने दो दिन आराम करने को कहा है।	
+hi-021	hi-en	everyday	बिजली चली गई है, मोमबत्ती कहाँ रखी है?	
+hi-022	hi-en	everyday	हम छुट्टियों में दादी के गाँव जा रहे हैं।	
+hi-023	hi-en	everyday	इस कमीज़ की कीमत कितनी है?	
+hi-024	hi-en	everyday	सुबह की सैर सेहत के लिए अच्छी होती है।	
+hi-025	hi-en	everyday	रसोई में चाय बन रही है, तुम भी लोगे?	
+hi-026	hi-en	everyday	पड़ोस में मिठाई की एक नई दुकान खुली है।	
+hi-027	hi-en	everyday	कृपया धीरे बोलिए, मुझे समझ नहीं आया।	
+hi-028	hi-en	everyday	मेरा बटुआ कहीं खो गया है।	
+hi-029	hi-en	everyday	बच्चे पार्क में फ़ुटबॉल खेल रहे हैं।	
+hi-030	hi-en	everyday	अगले हफ़्ते से स्कूल फिर से खुलेंगे।	
+hi-031	hi-en	email	आपके ईमेल के लिए धन्यवाद, मैं जल्द ही जवाब दूँगा।	
+hi-032	hi-en	email	कृपया संलग्न रिपोर्ट देखें और अपनी राय बताएँ।	
+hi-033	hi-en	email	क्या हम बैठक को गुरुवार तक टाल सकते हैं?	
+hi-034	hi-en	email	देरी के लिए मैं क्षमा चाहता हूँ।	
+hi-035	hi-en	email	भुगतान की रसीद इस ईमेल के साथ भेजी जा रही है।	
+hi-036	hi-en	email	मैं अगले सोमवार तक कार्यालय से बाहर रहूँगा।	
+hi-037	hi-en	email	कृपया अपने दस्तावेज़ शुक्रवार तक जमा करें।	
+hi-038	hi-en	email	आपका आवेदन स्वीकार कर लिया गया है।	
+hi-039	hi-en	email	किसी भी प्रश्न के लिए बेझिझक संपर्क करें।	
+hi-040	hi-en	email	बैठक का विवरण सभी सदस्यों को भेज दिया गया है।	
+hi-041	hi-en	formal	सरकार ने किसानों के लिए एक नई योजना की घोषणा की है।	
+hi-042	hi-en	formal	सभी यात्रियों से अनुरोध है कि वे अपना टिकट साथ रखें।	
+hi-043	hi-en	formal	परीक्षा के परिणाम अगले महीने घोषित किए जाएँगे।	
+hi-044	hi-en	formal	इस भवन में धूम्रपान करना सख्त मना है।	
+hi-045	hi-en	formal	नया कानून एक जनवरी से लागू होगा।	
+hi-046	hi-en	formal	मौसम विभाग ने अगले दो दिनों में भारी बारिश की चेतावनी दी है।	
+hi-047	hi-en	formal	आवेदकों को पहचान पत्र की एक प्रति जमा करनी होगी।	
+hi-048	hi-en	formal	इस वर्ष कंपनी के मुनाफ़े में उल्लेखनीय वृद्धि हुई है।	
+hi-049	hi-en	formal	पुस्तकालय रविवार को बंद रहता है।	
+hi-050	hi-en	formal	नागरिकों से अपील है कि वे पानी का सोच-समझकर उपयोग करें।	
