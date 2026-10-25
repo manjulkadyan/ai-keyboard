@@ -146,4 +146,61 @@
     <!-- Onboarding O4 (plan decision 12): optional, never blocks finishing onboarding. -->
     <string name="onboarding__offline_offer" tools:ignore="MissingTranslation">Download for offline (about {size})</string>
     <string name="onboarding__offline_offer_summary" tools:ignore="MissingTranslation">Translate without internet. Downloads on Wi-Fi only unless you change it in Offline languages.</string>
+    <!-- Translator screen (PRD FR-12, FORK S2-translator). Placeholders are curly ({language}). -->
+    <string name="translator__title" tools:ignore="MissingTranslation">Translate</string>
+    <string name="translator__home_entry" tools:ignore="MissingTranslation">Translate</string>
+    <string name="translator__detect" tools:ignore="MissingTranslation">Detect language</string>
+    <string name="translator__detected" tools:ignore="MissingTranslation">Detected: {language}</string>
+    <string name="translator__source_cd" tools:ignore="MissingTranslation">Translate from {language}</string>
+    <string name="translator__target_cd" tools:ignore="MissingTranslation">Translate to {language}</string>
+    <string name="translator__swap_cd" tools:ignore="MissingTranslation">Swap languages</string>
+    <string name="translator__input_hint" tools:ignore="MissingTranslation">Enter text</string>
+    <string name="translator__counter" tools:ignore="MissingTranslation">{count} / {max}</string>
+    <string name="translator__clear_cd" tools:ignore="MissingTranslation">Clear text</string>
+    <string name="translator__paste" tools:ignore="MissingTranslation">Paste</string>
+    <string name="translator__mic_cd" tools:ignore="MissingTranslation">Speak to translate</string>
+    <string name="translator__mic_stop_cd" tools:ignore="MissingTranslation">Stop listening</string>
+    <string name="translator__mic_unavailable" tools:ignore="MissingTranslation">Voice input is not available for this language right now</string>
+    <string name="translator__mic_no_permission" tools:ignore="MissingTranslation">Allow the microphone to speak your text</string>
+    <string name="translator__mic_error" tools:ignore="MissingTranslation">Could not hear that. Try again</string>
+    <string name="translator__result_cd" tools:ignore="MissingTranslation">Translation</string>
+    <string name="translator__translating" tools:ignore="MissingTranslation">Translating</string>
+    <string name="translator__copy" tools:ignore="MissingTranslation">Copy translation</string>
+    <string name="translator__copied" tools:ignore="MissingTranslation">Copied</string>
+    <string name="translator__share" tools:ignore="MissingTranslation">Share translation</string>
+    <string name="translator__share_chooser" tools:ignore="MissingTranslation">Share translation</string>
+    <string name="translator__speak" tools:ignore="MissingTranslation">Read aloud</string>
+    <string name="translator__stop_speaking" tools:ignore="MissingTranslation">Stop reading</string>
+    <string name="translator__install_voice" tools:ignore="MissingTranslation">Install voice</string>
+    <string name="translator__voice_missing" tools:ignore="MissingTranslation">The {language} voice is not installed</string>
+    <string name="translator__voice_unsupported" tools:ignore="MissingTranslation">Reading aloud is not available for {language}</string>
+    <string name="translator__favorite_add" tools:ignore="MissingTranslation">Add to favourites</string>
+    <string name="translator__favorite_remove" tools:ignore="MissingTranslation">Remove from favourites</string>
+    <string name="translator__download" tools:ignore="MissingTranslation">Download {source} and {target} (about {size})</string>
+    <string name="translator__retry" tools:ignore="MissingTranslation">Retry</string>
+    <string name="translator__history" tools:ignore="MissingTranslation">History</string>
+    <string name="translator__more_cd" tools:ignore="MissingTranslation">More options</string>
+    <string name="translator__save_history" tools:ignore="MissingTranslation">Save history</string>
+    <string name="translator__picker_source" tools:ignore="MissingTranslation">Translate from</string>
+    <string name="translator__picker_target" tools:ignore="MissingTranslation">Translate to</string>
+    <string name="translator__picker_search" tools:ignore="MissingTranslation">Search languages</string>
+    <string name="translator__error_no_pack" tools:ignore="MissingTranslation">Download this language pair to translate offline</string>
+    <string name="translator__error_offline" tools:ignore="MissingTranslation">You are offline. Connect to translate this pair</string>
+    <string name="translator__error_timeout" tools:ignore="MissingTranslation">Translation took too long. Try again</string>
+    <string name="translator__error_quota" tools:ignore="MissingTranslation">Too many translations for now. Try again later</string>
+    <string name="translator__error_unsupported" tools:ignore="MissingTranslation">This language pair is not supported yet</string>
+    <string name="translator__error_cloud_pro" tools:ignore="MissingTranslation">This language pair needs cloud translation (Pro)</string>
+    <string name="translator__error_policy" tools:ignore="MissingTranslation">Translation is not allowed for this text</string>
+    <string name="translator__error_engine" tools:ignore="MissingTranslation">Something went wrong. Try again</string>
+    <string name="history__title" tools:ignore="MissingTranslation">Translation history</string>
+    <string name="history__search" tools:ignore="MissingTranslation">Search history</string>
+    <string name="history__favorites_only" tools:ignore="MissingTranslation">Favourites</string>
+    <string name="history__empty" tools:ignore="MissingTranslation">No translations yet</string>
+    <string name="history__clear_all" tools:ignore="MissingTranslation">Clear history</string>
+    <string name="history__clear_title" tools:ignore="MissingTranslation">Clear translation history?</string>
+    <string name="history__clear_body" tools:ignore="MissingTranslation">This deletes your saved translations from this phone.</string>
+    <string name="history__keep_favorites" tools:ignore="MissingTranslation">Keep favourites</string>
+    <string name="history__clear_confirm" tools:ignore="MissingTranslation">Clear</string>
+    <string name="history__cancel" tools:ignore="MissingTranslation">Cancel</string>
+    <string name="history__delete_cd" tools:ignore="MissingTranslation">Delete</string>
 </resources>

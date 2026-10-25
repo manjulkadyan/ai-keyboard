@@ -74,6 +74,8 @@ import com.manjul.aikeyboard.app.settings.smartbar.SmartbarScreen
 import com.manjul.aikeyboard.fork.privacy.PrivateAppsScreen // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.settings.VoiceSettingsScreen // FORK(S1-whisper)
 import com.manjul.aikeyboard.fork.settings.OfflineLanguagesScreen // FORK(S2-packs)
+import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator)
+import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
 import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
@@ -105,6 +107,15 @@ object Routes {
         @Serializable
         object Screen
     }
+
+    // FORK(S2-translator): the Translator screen (PRD FR-12) and its history, outside the settings tree
+    @Serializable
+    @Deeplink("translator")
+    object Translator
+
+    @Serializable
+    @Deeplink("translator/history")
+    object TranslatorHistory // FORK(S2-translator)
 
     object Settings {
         @Serializable
@@ -323,6 +334,8 @@ object Routes {
             composableWithDeepLink(Settings.PrivateApps::class) { PrivateAppsScreen() } // FORK(S1-smartbar)
             composableWithDeepLink(Settings.Voice::class) { VoiceSettingsScreen() } // FORK(S1-whisper)
             composableWithDeepLink(Settings.OfflineLanguages::class) { OfflineLanguagesScreen() } // FORK(S2-packs)
+            composableWithDeepLink(Translator::class) { TranslatorScreen() } // FORK(S2-translator)
+            composableWithDeepLink(TranslatorHistory::class) { HistoryScreen() } // FORK(S2-translator)
 
             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
 

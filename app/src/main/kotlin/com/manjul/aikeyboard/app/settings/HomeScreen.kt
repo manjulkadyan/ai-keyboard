@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Mic // FORK(S1-whisper)
 import androidx.compose.material.icons.filled.DownloadForOffline // FORK(S2-packs)
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.SmartButton
+import androidx.compose.material.icons.filled.Translate // FORK(S2-translator)
 import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Info
@@ -109,6 +110,12 @@ fun HomeScreen() = FlorisScreen {
                 }
             }
         }*/
+        // FORK(S2-translator): "Translate" entry at the top, opening the Translator screen
+        Preference(
+            icon = Icons.Default.Translate,
+            title = stringRes(R.string.translator__home_entry),
+            onClick = { navController.navigate(Routes.Translator) },
+        )
         Preference(
             icon = Icons.Default.Language,
             title = stringRes(R.string.settings__localization__title),

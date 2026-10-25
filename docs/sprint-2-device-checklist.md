@@ -60,6 +60,19 @@ No UI of its own: run these once the Translator screen (T10) or the selection sh
 | [ ] T9.2 | On a device with no voice data for a language (e.g. bn), tap speak. | The app offers to install voice data and the button opens the system TTS data installer. | T9, FR-26 |
 | [ ] T9.3 | Translate a few texts, then run `adb shell bmgr backupnow com.manjul.aikeyboard` (or a device transfer) and inspect the backup. Install a later build over the old one. | `databases/app_database*` is not in the backup. History survives the app update (no destructive migration). | T9, TRD §6.3 |
 
+## T10. Translator screen
+
+| # | Steps | Expected | From |
+|---|---|---|---|
+| [ ] T10.1 | Open the app; tap "Translate" at the top of Home. Type a sentence in English with en→ur. | The Urdu result appears about 600 ms after typing stops, right-aligned (RTL), with copy, share, speak and star. No ad or interstitial at any point. | T10, FR-12 AC2 |
+| [ ] T10.2 | Tap speak with a Google TTS voice installed, then on a language with no voice data (e.g. bn). | Speech covers the whole text; for the missing voice the speak button is greyed out with "Install voice", which opens the system TTS installer. | T10, FR-12 AC4 |
+| [ ] T10.3 | Airplane mode on, on a device with an on-device recognizer that has the source language. Tap the mic (first time: agree to the voice notice, then allow the microphone). | The notice comes before the permission prompt. Dictated words fill the input and are translated offline. On a device with no on-device recognizer, offline shows "Voice input is not available". | T10, FR-12 AC3, decision 7 |
+| [ ] T10.4 | Tap share on a result. | The system share sheet opens with the translation as plain text. | T10 |
+| [ ] T10.5 | Choose "Detect language" as the source and type Urdu text. | "Detected: Urdu" shows under the pickers; swap makes Urdu the target. | T10 |
+| [ ] T10.6 | Translate a few texts, star one, open History (top bar). Search, swipe a row away, then Clear history with "Keep favourites" on. Turn "Save history" off in the overflow menu and translate again. | Search filters; swiping deletes; clear keeps only the starred row. With history off nothing new is saved. | T10, FR-12 AC1 |
+| [ ] T10.7 | Install a later build over this one. | History and favourites are still there. | T10, FR-12 AC5 |
+| [ ] T10.8 | Open a pair with no downloaded model, offline. | "Download this language pair to translate offline" with a Download button showing the size; the previous result stays. | T10 |
+
 ## Q. Translation quality eval (ur/hi/ar/bn)
 
 | # | Steps | Expected | From |
