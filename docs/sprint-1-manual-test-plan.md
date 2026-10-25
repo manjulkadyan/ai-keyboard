@@ -40,9 +40,11 @@ Already verified on the Pixel 9 on 2026-10-25 (don't repeat):
 
 ### Decisions needed
 
-- [ ] **16 KB alignment of ML Kit's 32-bit libs.** The prebuilt `libtranslate_jni.so` and
+- [x] **16 KB alignment of ML Kit's 32-bit libs.** The prebuilt `libtranslate_jni.so` and
   `liblanguage_id_l2c_jni.so` for armeabi-v7a and x86 fail the 16 KB page-alignment check. Pick a fix. Blocks
   Sprint 2 Task 3 step 5 and Task 4.
+  Resolved: follow [Google's guide](https://developer.android.com/guide/practices/page-sizes) (16 KB is required
+  on 64-bit only); the check now fails only for arm64-v8a/x86_64 and lists the 32-bit libs as info (Sprint 2 decision 14).
 - [ ] **"Make this app private" and the 3-pin limit.** Does it stay exempt (PRD FR-07)?
 - [ ] **Long-press lock.** Is "long-press = add to private immediately" the intended behaviour?
 - [ ] **Working branch.** Keep `sprint-1-close-sprint-2-start` or move its commits to main (local only, none
