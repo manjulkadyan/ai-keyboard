@@ -23,6 +23,12 @@ Manual checks left (test-plan step → checklist row):
   - [ ] Switch into a password field mid-partial (step 5.5 → checklist 2.5)
   - [ ] Move the cursor mid-partial (step 5.6 → checklist 2.6)
   - [ ] Audio focus with music (step 5.7 → checklist 4.8)
+- [ ] **Voice re-check after the Sprint 2 host-safety fix** (commit `ba22e4a4`, rebuild first): voice now
+  replaces its own composing text, or joins punctuation onto its last commit, only while the cursor is still
+  right after what it wrote; otherwise it just finishes composing. In Messages and Chrome: dictate two sentences
+  with a pause (the ", " / ". " join still lands right after the first); dictate, then tap into the middle of the
+  partial and type a letter before it settles (your letter stays, nothing of yours is deleted); dictate at the end
+  of existing text (the existing text is untouched).
 
 Already verified on the Pixel 9 on 2026-10-25 (don't repeat):
 
@@ -39,8 +45,12 @@ Already verified on the Pixel 9 on 2026-10-25 (don't repeat):
   Sprint 2 Task 3 step 5 and Task 4.
 - [ ] **"Make this app private" and the 3-pin limit.** Does it stay exempt (PRD FR-07)?
 - [ ] **Long-press lock.** Is "long-press = add to private immediately" the intended behaviour?
-- [ ] **Working branch.** Keep `sprint-1-close-sprint-2-start` or move its commits to main (14 local commits,
-  none pushed).
+- [ ] **Working branch.** Keep `sprint-1-close-sprint-2-start` or move its commits to main (local only, none
+  pushed).
+- [ ] **Voice trailing-space edge case.** If the host types text identical to our last voice commit right after
+  it, before the selection update arrives, the ", " join can delete the host's space instead of ours (found by the
+  `:ime:editing` property test at 30,000 seeds, seed 1326; not caught at the default 1,000). Closing it means
+  changing how voice adds trailing spaces. Accept for now, or change it?
 
 ## 0. Setup (once)
 
