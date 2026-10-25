@@ -8,9 +8,9 @@ package com.manjul.aikeyboard.ime.voiceui
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -65,13 +65,11 @@ fun VoicePanel(
                 StopButton(onStop)
             }
             VoiceUiState.NeedsPermission -> {
-                VoiceChip(stringResource(R.string.voice__allow_mic), onAllowMic, Modifier.weight(1f, fill = false))
-                Spacer(Modifier.weight(1f))
+                WideChip(stringResource(R.string.voice__allow_mic), onAllowMic)
                 CloseButton(onDismiss)
             }
             VoiceUiState.TapToResume -> {
-                VoiceChip(stringResource(R.string.voice__tap_to_resume), onResume, Modifier.weight(1f, fill = false))
-                Spacer(Modifier.weight(1f))
+                WideChip(stringResource(R.string.voice__tap_to_resume), onResume)
                 CloseButton(onDismiss)
             }
             is VoiceUiState.Message -> {
@@ -110,6 +108,17 @@ private fun RowScope.Status(@StringRes text: Int) {
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
     )
+}
+
+/**
+ * A chip that may use all the width left of the close button, wrapping to two lines before it is ellipsized.
+ * (A weighted spacer next to it would cap it at half of that width.)
+ */
+@Composable
+private fun RowScope.WideChip(label: String, onClick: () -> Unit) {
+    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+        VoiceChip(label, onClick, maxLines = 2)
+    }
 }
 
 @Composable

@@ -17,11 +17,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
-/** A tappable pill in the voice panel ("Allow microphone…", "Tap to resume", download offers). */
+/**
+ * A tappable pill in the voice panel ("Allow microphone…", "Tap to resume", download offers). With [maxLines] above
+ * 1 the padding and line height shrink so two lines still fit the smartbar height.
+ */
 @Composable
-fun VoiceChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun VoiceChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, maxLines: Int = 1) {
+    val multiLine = maxLines > 1
     val color = LocalContentColor.current
     Surface(
         onClick = onClick,
@@ -33,9 +39,12 @@ fun VoiceChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier)
     ) {
         Text(
             text = label,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            style = TextStyle(textDirection = TextDirection.Content),
-            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = if (multiLine) 2.dp else 6.dp),
+            style = TextStyle(
+                textDirection = TextDirection.Content,
+                lineHeight = if (multiLine) 16.sp else TextUnit.Unspecified,
+            ),
+            maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
         )
     }
