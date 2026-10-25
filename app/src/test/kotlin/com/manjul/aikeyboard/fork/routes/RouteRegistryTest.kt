@@ -48,11 +48,6 @@ class RouteRegistryTest {
     fun everyEntryMapsToADestinationRegisteredInTheNavGraph() {
         for ((name, path) in RouteRegistry.routes) {
             val destination = deeplinks[path]
-            if (destination == null && name == RouteRegistry.TRANSLATOR) {
-                // Task 10 adds Routes.Translator (@Deeplink("translator")); until then the activity's graph check
-                // sends this route to Home. Checked like every other entry as soon as it exists.
-                continue
-            }
             if (destination == null) fail("Route '$name' -> '$path' has no @Deeplink destination in Routes")
             assertTrue(
                 "composableWithDeepLink($destination::class)" in routesSource,

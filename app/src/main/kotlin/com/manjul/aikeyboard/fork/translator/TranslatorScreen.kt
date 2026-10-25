@@ -81,6 +81,7 @@ import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.fork.onboarding.DisclosureEngineKind
 import com.manjul.aikeyboard.fork.onboarding.VoiceDisclosureSheet
+import com.manjul.aikeyboard.fork.routes.TranslatorHandoff
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.translation
 import com.manjul.aikeyboard.translationHistory
@@ -145,7 +146,11 @@ fun TranslatorScreen() = FlorisScreen {
     val navController = LocalNavController.current
     val holder = viewModel<TranslatorHolder>(factory = viewModelFactory { initializer { TranslatorHolder(context) } })
     val vm = holder.vm
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        vm.refresh()
+        // Text from the Translate sheet's "Open in app" (Task 11), taken once
+        TranslatorHandoff.take()?.let(vm::onInput)
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.onLeave() }
     val state by vm.state.collectAsState()
 
