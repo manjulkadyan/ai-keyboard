@@ -200,7 +200,8 @@ class HanShapeBasedLanguageProvider(val context: Context) : SpellingProvider, Su
             flogError { "Invalid layout '${layout}' not found" }
             return emptyList();
         } catch (e: SQLiteException) {
-            flogError { "SQLiteException: layout=$layout, composing=${content.composingText}, error='${e}'" }
+            // FORK(S1-privacy-logs): the composing text is user content, keep it out of the log
+            flogError { "SQLiteException: layout=$layout, error='${e}'" }
             return emptyList();
         }
     }

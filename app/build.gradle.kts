@@ -86,6 +86,9 @@ android {
         // are SHA-256 pinned in WhisperModelSpec) and the languages Whisper may serve ("*" = all; release: none)
         buildConfigField("String", "WHISPER_MODEL_BASE_URL", "\"https://example.com/models/\"")
         buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"*\"")
+        // FORK(S1-privacy-logs): info/debug Flog lines carry key labels, spell-check text and editor info, so they
+        // are off unless a developer opts in locally with -Paikb.verboseFlog=true (never on CI or for testers)
+        buildConfigField("boolean", "VERBOSE_FLOG", (project.findProperty("aikb.verboseFlog") == "true").toString())
 
         sourceSets {
             maybeCreate("main").apply {

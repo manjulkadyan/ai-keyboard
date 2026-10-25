@@ -829,7 +829,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                             editorInstance.commitChar(text)
                         }
                         else -> {
-                            flogError(LogTopic.KEY_EVENTS) { "Received unknown key: $data" }
+                            // FORK(S1-privacy-logs): the key label can be typed text, log only its type
+                            flogError(LogTopic.KEY_EVENTS) { "Received unknown key of type ${data.type}" }
                         }
                     }
                 }

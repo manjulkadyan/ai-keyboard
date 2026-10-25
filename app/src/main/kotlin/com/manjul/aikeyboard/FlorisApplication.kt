@@ -128,7 +128,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
                 context = this,
                 isFloggingEnabled = BuildConfig.DEBUG,
                 flogTopics = LogTopic.ALL,
-                flogLevels = Flog.LEVEL_ALL,
+                // FORK(S1-privacy-logs): no user content in any log (PC-10); see VERBOSE_FLOG in app/build.gradle.kts
+                flogLevels = if (BuildConfig.VERBOSE_FLOG) Flog.LEVEL_ALL else Flog.LEVEL_ERROR or Flog.LEVEL_WARNING,
                 flogOutputs = Flog.OUTPUT_CONSOLE,
             )
             CrashUtility.install(this)
