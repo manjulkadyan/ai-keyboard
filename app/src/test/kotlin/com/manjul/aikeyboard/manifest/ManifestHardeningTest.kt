@@ -174,6 +174,22 @@ class ManifestHardeningTest {
         }
     }
 
+    @Test
+    fun `backup rules never include the translation history database`() {
+        val sections = listOf(xmlRes(applicationResource("fullBackupContent")).documentElement) +
+            listOf("cloud-backup", "device-transfer").map {
+                xmlRes(applicationResource("dataExtractionRules")).documentElement.children(it).single()
+            }
+        for (section in sections) {
+            for (rule in section.children("include")) {
+                val domain = rule.getAttribute("domain")
+                val path = rule.getAttribute("path")
+                assertFalse(domain == "database", "${section.tagName} includes the database domain ($path)")
+                assertFalse(path.contains("app_database"), "${section.tagName} includes $path")
+            }
+        }
+    }
+
     /**
      * A section must be include-based (so everything else is excluded) and must not include
      * databases, shared prefs or any clipboard/dictionary data (user-typed content).

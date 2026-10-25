@@ -71,6 +71,10 @@ import com.manjul.aikeyboard.core.translate.mlkit.MlKitRemoteModels
 import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelDownloadWorkerFactory
 import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelStore
 import kotlinx.coroutines.SupervisorJob
+// FORK(S2-translator): imports for Translator history and the shared TextToSpeech
+import com.manjul.aikeyboard.core.database.AppDatabase
+import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
+import com.manjul.aikeyboard.core.tts.TtsManager
 import java.lang.ref.WeakReference
 
 /**
@@ -131,6 +135,11 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     // FORK(S2-mlkit): router, ML Kit engine, language ID and translator pool; ML Kit itself starts on first use
     // FORK(S2-packs): model presence and the bar's downloads go through the model store
     val translation = lazy { TranslationCore(this) { translateModelStore.value } }
+    // FORK(S2-translator): fork Room database (databases/app_database, never backed up), opened on first use
+    val appDatabase = lazy { AppDatabase.new(this) }
+    val translationHistory = lazy { TranslationHistoryRepository(appDatabase.value.translationHistoryDao()) }
+    // FORK(S2-translator): the process's one TextToSpeech holder; the engine binds on the first acquire()
+    val ttsManager = lazy { TtsManager(this) }
 
     // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
     override val workManagerConfiguration: Configuration
@@ -270,3 +279,8 @@ fun Context.translation() = this.florisApplication().translation
 
 // FORK(S2-packs): accessor for the offline translation packs
 fun Context.translateModelStore() = this.florisApplication().translateModelStore
+
+// FORK(S2-translator): accessors for Translator history and the shared TextToSpeech
+fun Context.translationHistory() = this.florisApplication().translationHistory
+
+fun Context.ttsManager() = this.florisApplication().ttsManager

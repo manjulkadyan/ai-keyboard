@@ -49,3 +49,13 @@ Method, commands and the results table: `docs/translation/latency.md`. Record th
 | [ ] 2.6 | Fresh install: go through onboarding to the languages step, pick English and Urdu. Leave the "Download for offline" switch off and continue; repeat (clear data) with the switch on. | The offer shows "about 31 MB" (about 94 MB for Urdu + Hindi). With the switch off nothing downloads. With it on, the Wi-Fi-only download starts and onboarding moves on without waiting. Skip still completes onboarding. | T5, decision 12 |
 | [ ] 2.7 | Offline languages, Voice typing section, on a device with and one without an on-device recognizer. Tap Settings on the recognizer row. | The row text matches the device. Settings opens the system voice input screen. Whisper rows appear only in builds with Whisper on. | T5 |
 | [ ] 2.8 | TalkBack on Offline languages: move through a row and its button. | Each button reads "Download Urdu", "Stop downloading Urdu" or "Delete Urdu". | T5 |
+
+## T9. Translation history database and shared TTS
+
+No UI of its own: run these once the Translator screen (T10) or the selection sheet (T11) uses them.
+
+| # | Steps | Expected | From |
+|---|---|---|---|
+| [ ] T9.1 | Speak a long translation (over 4,000 chars) in English, then an Urdu and a Hindi one, on a device with Google TTS. Leave the screen while speaking. | Speech covers the whole text with no gap or cut word at chunk joins; speaking stops and the engine shuts down when the last screen using it closes (one TextToSpeech per process). | T9, FR-26 |
+| [ ] T9.2 | On a device with no voice data for a language (e.g. bn), tap speak. | The app offers to install voice data and the button opens the system TTS data installer. | T9, FR-26 |
+| [ ] T9.3 | Translate a few texts, then run `adb shell bmgr backupnow com.manjul.aikeyboard` (or a device transfer) and inspect the backup. Install a later build over the old one. | `databases/app_database*` is not in the backup. History survives the app update (no destructive migration). | T9, TRD §6.3 |

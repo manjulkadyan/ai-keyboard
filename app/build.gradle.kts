@@ -295,6 +295,9 @@ dependencies {
     implementation(projects.core.translate)
     implementation(projects.core.translateMlkit)
     implementation(projects.ime.translateUi) // FORK(S2-bar): the in-keyboard Translate bar
+    // FORK(S2-translator): Translator history (Room) and the shared TextToSpeech
+    implementation(projects.core.database)
+    implementation(projects.core.tts)
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)
