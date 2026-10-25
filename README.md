@@ -13,6 +13,7 @@ FlorisBoard project.
 - [`UPSTREAM.md`](UPSTREAM.md): which upstream tag and commit we forked, and how upstream releases are merged.
 - [`docs/FORK_PATCHES.md`](docs/FORK_PATCHES.md): every upstream file we changed, and why.
 - [`docs/sprint-1-device-checklist.md`](docs/sprint-1-device-checklist.md): manual on-device checks, open product decisions and the Sprint 1 exit-criteria map.
+- [`docs/sprint-2-device-checklist.md`](docs/sprint-2-device-checklist.md): Sprint 2 (translation) on-device checks and the Sprint 2 exit check.
 - [`NOTICE`](NOTICE): attribution and the statement of changes required by Apache-2.0 §4.
 
 Our own code lives in separate Gradle modules so that most upstream files stay unedited. Edits to
@@ -25,11 +26,20 @@ upstream files carry a `FORK(<ticket>): reason` marker.
 - `:app`: upstream FlorisBoard app and IME (the keyboard is not split into its own module yet).
 - `:core:common`: dispatchers and the `Outcome` result type.
 - `:ime:policy`: `SensitiveFieldPolicy` contract (pure Kotlin).
-- `:ime:voice-ui`: voice panel, composing-span and voice controllers (Compose).
+- `:ime:editing`: composing-span helpers shared by voice and the translate bar (`TextTarget`,
+  `ComposingSpanController`, `OwnWriteUndo`) and the host-safety test harness (pure Kotlin).
+- `:ime:voice-ui`: voice panel and voice controller (Compose).
+- `:ime:translate-ui`: the in-keyboard Translate bar: controller, bar buffer and Compose bar.
 - `:core:datastore`: feature settings store (consent, policy inputs, chip order, voice settings).
 - `:core:privacy`: clipboard sensitivity classifier.
 - `:core:analytics`: event catalog, limits and the consent-aware batching relay (Logcat sink in debug).
 - `:core:voice`: speech session state machine, platform recognizer, engine selection and the Whisper model manager.
+- `:core:translate`: translation engine interface, router, LRU cache, sentence chunking, translator pool,
+  the bar pipeline and the disabled cloud stub (pure Kotlin).
+- `:core:translate-mlkit`: ML Kit translation engine and language ID (started on first use), offline
+  language packs (model store and Wi-Fi-only download worker), latency test and quality-eval harness.
+- `:core:database`: Room database for translation history and favourites (schemas in `core/database/schemas/`).
+- `:core:tts`: one shared text-to-speech engine per process with sentence chunking.
 - `:lib:whisper`: vendored whisper.cpp with a 16 KB-aligned JNI bridge (model is downloaded, never bundled).
 - `:core:ads`: ads skeleton (no placements yet).
 - `:lint-rules`: custom lint checks.
