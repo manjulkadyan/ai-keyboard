@@ -51,6 +51,11 @@ Already verified on the Pixel 9 on 2026-10-25 (don't repeat):
   it, before the selection update arrives, the ", " join can delete the host's space instead of ours (found by the
   `:ime:editing` property test at 30,000 seeds, seed 1326; not caught at the default 1,000). Closing it means
   changing how voice adds trailing spaces. Accept for now, or change it?
+- [ ] **Translate bar (Sprint 2 Task 7) product questions**, listed under Task 7 in
+  `docs/plans/2026-10-25-sprint-2.md`: Enter before the preview needs a second Enter (or auto-commit when it
+  arrives?); `translate_done offline=true` means "translated on device" (or "no connection"?); a sensitive close
+  clears the whole translation cache; hiding the keyboard keeps the bar text; no Preview/Live switch in the bar
+  yet.
 
 ## 0. Setup (once)
 
