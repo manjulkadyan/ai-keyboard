@@ -57,4 +57,15 @@ class ChipArrangementTest {
         assertEquals(order, ChipArrangement.reorder(order, 1, 5))
         assertEquals(order, ChipArrangement.reorder(order, -1, 1))
     }
+
+    @Test
+    fun `translate opens the bar and is fixed, so never pinnable or movable`() {
+        assertEquals(com.manjul.aikeyboard.ime.text.key.KeyCode.TOGGLE_TRANSLATE_BAR, TRANSLATE.keyCode)
+        assertEquals(TRANSLATE, ChipId.forKeyCode(com.manjul.aikeyboard.ime.text.key.KeyCode.TOGGLE_TRANSLATE_BAR))
+        assertEquals(true, TRANSLATE in ChipId.fixed)
+        assertEquals(listOf(EMOJI, CLIPBOARD), ChipArrangement.pin(listOf(EMOJI, CLIPBOARD), TRANSLATE))
+        val order = listOf(MIC, TRANSLATE, EMOJI, CLIPBOARD)
+        assertEquals(order, ChipArrangement.reorder(order, 1, 3))
+        assertEquals(order, ChipArrangement.reorder(order, 3, 1))
+    }
 }

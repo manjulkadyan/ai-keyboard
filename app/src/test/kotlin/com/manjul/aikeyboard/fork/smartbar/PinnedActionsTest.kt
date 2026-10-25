@@ -18,6 +18,7 @@ import kotlin.test.assertTrue
 class PinnedActionsTest {
     private fun key(d: KeyData) = QuickAction.InsertKey(d)
     private val mic = key(TextKeyData.VOICE_INPUT)
+    private val translate = key(TextKeyData.TOGGLE_TRANSLATE_BAR)
     private val emoji = key(TextKeyData.IME_UI_MODE_MEDIA)
     private val clipboard = key(TextKeyData.IME_UI_MODE_CLIPBOARD)
     private val settings = key(TextKeyData.SETTINGS)
@@ -62,7 +63,7 @@ class PinnedActionsTest {
         val arrangement = QuickActionArrangement(stickyAction = undo, dynamicActions = listOf(emoji, mic), hiddenActions = listOf(redo))
         val normalized = PinnedActions.normalize(arrangement)
         assertEquals(mic, normalized.stickyAction)
-        assertEquals(listOf(emoji), normalized.dynamicActions)
+        assertEquals(listOf(translate, emoji), normalized.dynamicActions)
         assertEquals(listOf(undo, redo), normalized.hiddenActions)
     }
 
@@ -75,7 +76,7 @@ class PinnedActionsTest {
         )
         val normalized = PinnedActions.normalize(saved)
         // The private-app action does not count and stays last; the extras go to the front of the hidden actions.
-        assertEquals(listOf(emoji, clipboard, settings, makePrivate), normalized.dynamicActions)
+        assertEquals(listOf(translate, emoji, clipboard, settings, makePrivate), normalized.dynamicActions)
         assertEquals(listOf(undo, redo, key(TextKeyData.ARROW_UP)), normalized.hiddenActions)
     }
 
@@ -88,6 +89,28 @@ class PinnedActionsTest {
         )
         val once = PinnedActions.normalize(saved)
         assertEquals(once, PinnedActions.normalize(once))
+    }
+
+    @Test
+    fun `translate is fixed first, never pinnable, hidden or counted`() {
+        assertFalse(PinnedActions.canPin(emptyList(), translate))
+        assertEquals(3, PinnedActions.pinnedCount(listOf(translate, emoji, clipboard, settings)))
+        assertTrue(PinnedActions.canPin(listOf(translate, emoji, clipboard), undo))
+        val moved = QuickActionArrangement(
+            stickyAction = translate,
+            dynamicActions = listOf(emoji, clipboard, settings, undo),
+            hiddenActions = listOf(translate, redo),
+        )
+        val normalized = PinnedActions.normalize(moved)
+        assertEquals(mic, normalized.stickyAction)
+        assertEquals(listOf(translate, emoji, clipboard, settings), normalized.dynamicActions)
+        assertEquals(listOf(undo, redo), normalized.hiddenActions)
+    }
+
+    @Test
+    fun `the default has the mic sticky and translate first`() {
+        assertEquals(mic, QuickActionArrangement.Default.stickyAction)
+        assertEquals(translate, QuickActionArrangement.Default.dynamicActions.first())
     }
 
     @Test
@@ -104,7 +127,7 @@ class PinnedActionsTest {
         )
         val read = QuickActionArrangement.Serializer.deserialize(QuickActionArrangement.Serializer.serialize(saved))
         assertEquals(mic, read.stickyAction)
-        assertEquals(listOf(clipboard, settings, undo), read.dynamicActions)
+        assertEquals(listOf(translate, clipboard, settings, undo), read.dynamicActions)
         assertEquals(listOf(redo, emoji), read.hiddenActions)
     }
 }

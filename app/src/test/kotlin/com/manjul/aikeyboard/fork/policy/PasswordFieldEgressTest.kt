@@ -24,11 +24,15 @@ import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.SpeechEngine
 import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
 import com.manjul.aikeyboard.fork.clipboard.ClipboardCaptureGate
+import com.manjul.aikeyboard.fork.translate.BarKeyRouter
+import com.manjul.aikeyboard.fork.translate.TranslateImeSession
+import com.manjul.aikeyboard.ime.text.key.KeyCode
 import com.manjul.aikeyboard.fork.voice.VoiceImeSession
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -196,6 +200,61 @@ class PasswordFieldEgressTest {
         assertTrue(writes.isEmpty(), "Room writes: $writes")
         assertEquals(0, db.clipboardItemDao().getAll().size)
         assertTrue(engines.isEmpty(), "no recognizer is created in a password field")
+    }
+
+    /**
+     * Sprint 2: the Translate chip in a password field. The chip fires TOGGLE_TRANSLATE_BAR the way KeyboardManager
+     * does (guarded by the live decision), and the session's own toggle is also called directly, as a stale button
+     * would: no bar controller, no translate call, no translation core, no network and no WorkManager work.
+     */
+    @Test fun translateInAPasswordFieldCreatesNothingAndCallsNothing() = run {
+        val store = FeatureSettingsStore(app, StandardTestDispatcher(testScheduler))
+        val policy = ImePolicyController(store, keyguard = { false }, forcedPackages = { emptySet() }, scope = backgroundScope)
+        var engineCalls = 0
+        var coreResolved = 0
+        val ic = EditText(app).onCreateInputConnection(EditorInfo())
+        val translate = TranslateImeSession(
+            context = app,
+            policy = policy,
+            store = store,
+            translation = { coreResolved++; error("translation core resolved") },
+            analytics = { },
+            connection = { ic },
+            isRawInputEditor = { false },
+            setOwnsComposing = { },
+            scope = backgroundScope,
+            lowTier = { false },
+            engine = { _, _, _ -> engineCalls++; error("translate call") },
+        )
+
+        policy.onStartInput(textField(), false)
+        policy.onStartInput(passwordField(), restarting = true)
+        runCurrent()
+        for (field in listOf(null, passwordField())) {
+            if (field != null) {
+                translate.onStartInput(false)
+                policy.onStartInput(field, false)
+                translate.onStartInputView()
+            }
+            // KeyboardManager's TOGGLE_TRANSLATE_BAR handler.
+            if (policy.decision.value.allowTranslate) translate.toggle()
+            // A stale chip calling the session directly.
+            translate.toggle()
+            runCurrent()
+            // Keys still go to the field, not to a bar.
+            "hunter2".forEach { assertEquals(false, BarKeyRouter.onKey(translate, it.code, it.toString())) }
+            assertEquals(false, BarKeyRouter.onKey(translate, KeyCode.ENTER, null))
+        }
+        translate.onFinishInputView()
+        policy.onFinishInputView()
+        advanceTimeBy(120_000)
+        runCurrent()
+
+        assertEquals(null, translate.controllerOrNull.value)
+        assertEquals(0, engineCalls)
+        assertEquals(0, coreResolved)
+        assertTrue(connectionAttempts.isEmpty(), "network attempts: $connectionAttempts")
+        assertTrue(pendingWork().isEmpty(), "WorkManager has work: ${pendingWork()}")
     }
 
     @Test fun positiveControlsProveTheDetectorsFire() = run {

@@ -11,6 +11,8 @@ import com.manjul.aikeyboard.ime.policy.FieldDescriptor
 import com.manjul.aikeyboard.ime.policy.PolicyContext
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import com.manjul.aikeyboard.ime.policy.SensitiveFieldPolicy
+import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickAction
+import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -68,5 +70,41 @@ class PolicyChipFilterTest {
     fun `locked decision hides everything but emoji and settings`() {
         val visible = ChipArrangement.visible(all, allRegistered, PolicyDecision.Locked, true)
         assertEquals(listOf(EMOJI, SETTINGS), visible)
+    }
+
+    private fun decide(inputType: Int, privateApp: Boolean = false) = SensitiveFieldPolicy.evaluate(
+        FieldDescriptor(packageName = "some.app", inputType = inputType, imeOptions = 0, hintText = null, label = null),
+        PolicyContext(
+            deviceLocked = false,
+            incognitoManual = false,
+            privatePackages = if (privateApp) setOf("some.app") else emptySet(),
+            forceSensitivePackages = emptySet(),
+        ),
+    )
+
+    private val translateAction = QuickAction.InsertKey(TextKeyData.TOGGLE_TRANSLATE_BAR)
+
+    @Test
+    fun `translate is registered and visible in a text field`() {
+        val text = decide(InputType.TYPE_CLASS_TEXT)
+        assertTrue(TRANSLATE in ChipId.registered)
+        assertTrue(TRANSLATE in ChipArrangement.visible(all, ChipId.registered, text, true))
+        assertTrue(translateAction.isAllowedBy(text, true))
+    }
+
+    @Test
+    fun `translate is hidden for password, phone, email, uri and private-app fields`() {
+        val decisions = mapOf(
+            "password" to password,
+            "phone" to decide(InputType.TYPE_CLASS_PHONE),
+            "email" to decide(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS),
+            "uri" to decide(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI),
+            "private app" to decide(InputType.TYPE_CLASS_TEXT, privateApp = true),
+        )
+        for ((name, d) in decisions) {
+            assertFalse(d.allowTranslate, name)
+            assertFalse(TRANSLATE in ChipArrangement.visible(all, ChipId.registered, d, true), name)
+            assertFalse(translateAction.isAllowedBy(d, true), name)
+        }
     }
 }
