@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.fork.smartbar.policyFiltered // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.smartbar.policyFilteredOrNull // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.smartbar.SmartbarLayout
 import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
 import com.manjul.aikeyboard.keyboardManager
@@ -66,7 +67,10 @@ fun QuickActionsRow(
             actionArrangement.dynamicActions
         }
     }.policyFiltered() // FORK(S1-smartbar)
-    val showOverflowAction = actionArrangement.stickyAction != null ||
+    // FORK(S1-smartbar): a sticky action the policy removes (mic in a password field) counts as absent, as in
+    // Smartbar.StickyAction; otherwise both draw the overflow toggle
+    val stickyAction = actionArrangement.stickyAction.policyFilteredOrNull()
+    val showOverflowAction = stickyAction != null ||
         smartbarLayout != SmartbarLayout.SUGGESTIONS_ACTIONS_SHARED || !sharedActionsExpanded
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -78,7 +82,7 @@ fun QuickActionsRow(
 
         SideEffect {
             keyboardManager.smartbarVisibleDynamicActionsCount =
-                if (smartbarLayout == SmartbarLayout.ACTIONS_ONLY && actionArrangement.stickyAction != null) {
+                if (smartbarLayout == SmartbarLayout.ACTIONS_ONLY && stickyAction != null) { // FORK(S1-smartbar)
                     numActionsToShow - 1
                 } else {
                     numActionsToShow
