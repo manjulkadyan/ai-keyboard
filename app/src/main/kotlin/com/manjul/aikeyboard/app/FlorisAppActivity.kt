@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.core.net.toUri // FORK(S2-routes)
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -50,6 +51,9 @@ import com.manjul.aikeyboard.app.setup.NotificationPermissionState
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.cacheManager
 import com.manjul.aikeyboard.featureSettingsStore // FORK(S1-onboarding)
+import com.manjul.aikeyboard.fork.routes.AppIntent // FORK(S2-routes)
+import com.manjul.aikeyboard.fork.routes.AppIntents // FORK(S2-routes)
+import com.manjul.aikeyboard.fork.routes.TranslatorHandoff // FORK(S2-routes)
 import com.manjul.aikeyboard.lib.FlorisLocale
 import com.manjul.aikeyboard.lib.compose.LocalPreviewFieldController
 import com.manjul.aikeyboard.lib.compose.PreviewKeyboardField
@@ -90,7 +94,8 @@ class FlorisAppActivity : ComponentActivity() {
     private var appTheme by mutableStateOf(AppTheme.AUTO)
     private var showAppIcon = true
     private var resourcesContext by mutableStateOf(this as Context)
-    private var intentToBeHandled by mutableStateOf<Intent?>(null)
+    // FORK(S2-routes): the classified intent (allow-listed route or extension import), not the raw intent
+    private var intentToBeHandled by mutableStateOf<AppIntent?>(null)
     // FORK(S1-onboarding)
     private val featureSettingsStore by featureSettingsStore()
     private var startAtHome = false
@@ -173,21 +178,24 @@ class FlorisAppActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        setIntent(intent)
+        // FORK(S2-routes): open_screen and ui:// / app:// links go through RouteRegistry (unknown -> Home and
+        // deeplink_unknown). The activity keeps a bare intent so the nav library never handles the raw one
+        // (its own deep-link handling would bypass the allow-list), and a rotation does not navigate again.
+        intentToBeHandled = AppIntents.classify(intent) { appContext.analytics.value.log(it) }
+        setIntent(Intent(Intent.ACTION_MAIN))
+    }
 
-        if (intent.action == Intent.ACTION_VIEW && intent.categories?.contains(Intent.CATEGORY_BROWSABLE) == true) {
-            intentToBeHandled = intent
-            return
+    // FORK(S2-routes): an allow-listed route by its nav deep link; Home (or a route not in the graph yet) goes to
+    // Home only once onboarding is done, otherwise onboarding stays.
+    private fun openRoute(navController: NavController, request: AppIntent.OpenRoute) {
+        request.translatorText?.let(TranslatorHandoff::offer)
+        val uri = "ui://florisboard/${request.route.path}".toUri()
+        if (!request.route.isHome && navController.graph.hasDeepLink(uri)) {
+            navController.navigate(uri)
+        } else if (startAtHome && !navController.popBackStack(Routes.Settings.Home, inclusive = false)) {
+            navController.navigate(Routes.Settings.Home)
         }
-        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
-            intentToBeHandled = intent
-            return
-        }
-        if (intent.action == Intent.ACTION_SEND && intent.clipData != null) {
-            intentToBeHandled = intent
-            return
-        }
-        intentToBeHandled = null
+        // FORK(S2-routes): the SEND-with-clip import check moved to AppIntents.classify
     }
 
     @Composable
@@ -226,19 +234,14 @@ class FlorisAppActivity : ComponentActivity() {
         }
 
         LaunchedEffect(intentToBeHandled) {
-            val intent = intentToBeHandled
-            if (intent != null) {
-                if (intent.action == Intent.ACTION_VIEW && intent.categories?.contains(Intent.CATEGORY_BROWSABLE) == true) {
-                    navController.handleDeepLink(intent)
-                } else {
-                    val data = if (intent.action == Intent.ACTION_VIEW) {
-                        intent.data!!
-                    } else {
-                        intent.clipData!!.getItemAt(0).uri
-                    }
-                    val workspace = runCatching { cacheManager.readFromUriIntoCache(data) }.getOrNull()
+            // FORK(S2-routes): routes through the allow-list; no !! on intent data (an empty clip crashed upstream)
+            when (val request = intentToBeHandled) {
+                is AppIntent.OpenRoute -> openRoute(navController, request)
+                is AppIntent.ImportExtension -> {
+                    val workspace = runCatching { cacheManager.readFromUriIntoCache(request.uri) }.getOrNull()
                     navController.navigate(Routes.Ext.Import(ExtensionImportScreenType.EXT_ANY, workspace?.uuid))
                 }
+                null -> Unit // FORK(S2-routes)
             }
             intentToBeHandled = null
         }

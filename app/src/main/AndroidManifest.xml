@@ -158,6 +158,27 @@
             android:taskAffinity=""
             android:exported="false"/>
 
+        <!-- FORK(S2-processtext): the "Translate" text-selection action and text share target (PRD FR-14).
+             Exported with exactly these two filters, text/plain only, no data URIs (ExportedComponentRules). -->
+        <activity
+            android:name="com.manjul.aikeyboard.fork.processtext.TranslateTextActivity"
+            android:label="@string/process_text__label"
+            android:theme="@style/FlorisAppTheme.Transparent"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+        </activity>
+
         <!-- Clipboard Media File Provider -->
         <provider
             android:name="com.manjul.aikeyboard.ime.clipboard.provider.ClipboardMediaProvider"

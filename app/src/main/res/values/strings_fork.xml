@@ -203,4 +203,29 @@
     <string name="history__clear_confirm" tools:ignore="MissingTranslation">Clear</string>
     <string name="history__cancel" tools:ignore="MissingTranslation">Cancel</string>
     <string name="history__delete_cd" tools:ignore="MissingTranslation">Delete</string>
+    <!-- Translate sheet for selected or shared text (PRD FR-14, S2-processtext). -->
+    <string name="process_text__label" tools:ignore="MissingTranslation">Translate</string>
+    <string name="process_text__pair" tools:ignore="MissingTranslation">{source} to {target}</string>
+    <string name="process_text__target_a11y" tools:ignore="MissingTranslation">Translate to {language}. Change language</string>
+    <string name="process_text__truncated" tools:ignore="MissingTranslation">Only the first 5,000 characters are translated</string>
+    <string name="process_text__translating" tools:ignore="MissingTranslation">Translating…</string>
+    <string name="process_text__needs_download" tools:ignore="MissingTranslation">Download this language pair to translate offline (about {size} MB)</string>
+    <string name="process_text__download" tools:ignore="MissingTranslation">Download</string>
+    <string name="process_text__downloading" tools:ignore="MissingTranslation">Downloading the language pack…</string>
+    <string name="process_text__cloud_only" tools:ignore="MissingTranslation">This language needs cloud translation (Pro)</string>
+    <string name="process_text__unsupported" tools:ignore="MissingTranslation">This language pair is not supported</string>
+    <string name="process_text__offline" tools:ignore="MissingTranslation">No internet connection</string>
+    <string name="process_text__error" tools:ignore="MissingTranslation">Couldn\'t translate</string>
+    <string name="process_text__retry" tools:ignore="MissingTranslation">Retry</string>
+    <string name="process_text__copy" tools:ignore="MissingTranslation">Copy</string>
+    <string name="process_text__copied" tools:ignore="MissingTranslation">Copied</string>
+    <string name="process_text__replace" tools:ignore="MissingTranslation">Replace</string>
+    <string name="process_text__speak" tools:ignore="MissingTranslation">Speak</string>
+    <string name="process_text__speak_unavailable" tools:ignore="MissingTranslation">No voice for this language on this phone</string>
+    <string name="process_text__open_in_app" tools:ignore="MissingTranslation">Open in app</string>
+    <string name="process_text__close" tools:ignore="MissingTranslation">Close</string>
+    <string name="process_text__enable_keyboard_title" tools:ignore="MissingTranslation">Translate while you type</string>
+    <string name="process_text__enable_keyboard_body" tools:ignore="MissingTranslation">Turn on the keyboard to translate right in any chat.</string>
+    <string name="process_text__enable_keyboard" tools:ignore="MissingTranslation">Enable keyboard</string>
+    <string name="process_text__not_now" tools:ignore="MissingTranslation">Not now</string>
 </resources>

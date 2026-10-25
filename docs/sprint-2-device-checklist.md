@@ -73,6 +73,22 @@ No UI of its own: run these once the Translator screen (T10) or the selection sh
 | [ ] T10.7 | Install a later build over this one. | History and favourites are still there. | T10, FR-12 AC5 |
 | [ ] T10.8 | Open a pair with no downloaded model, offline. | "Download this language pair to translate offline" with a Download button showing the size; the previous result stays. | T10 |
 
+## T11. Selection "Translate" sheet, share sheet and route allow-list
+
+| # | Steps | Expected | From |
+|---|---|---|---|
+| [ ] T11.1 | On API 26, 29, 33 and 35, select text in Chrome, WhatsApp, Gmail and Messages and pick "Translate" from the selection menu (overflow if needed). | "Translate" is listed; a bottom sheet opens over the app with the translation, a target picker, Copy, Speak, Open in app and Close. No ad, no interstitial. The app is not in Recents afterwards. | T11, FR-14 |
+| [ ] T11.2 | Select text in an editable field (WhatsApp compose box, Gmail body) and tap Replace. | The selection is replaced with the translation. | T11, FR-14 AC2 |
+| [ ] T11.3 | Select read-only text (a received message, a web page) and pick Translate, then Close. | No Replace button; the page text is unchanged. | T11, FR-14 AC2 |
+| [ ] T11.4 | Share plain text to "Translate" from Chrome (Share > Translate) and from a notes app. Share an image too. | Text opens the sheet without Replace. "Translate" is not offered for images. | T11, FR-14 |
+| [ ] T11.5 | Select over 5,000 characters and Translate. | The sheet says the text was shortened and translates the first 5,000. | T11, FR-14 AC4 |
+| [ ] T11.6 | With AI Keyboard not enabled, open the sheet twice the same day; move the clock 7 days and open it again. | The "Enable keyboard" card shows the first time only, then again after 7 days. Enable keyboard opens the system keyboard settings. | T11, FR-14 AC3 |
+| [ ] T11.7 | Tap Speak with and without voice data for the target language; tap Copy. | Speech plays, or the system voice data installer opens. Copy puts the translation on the clipboard (a toast below Android 13). | T11, FR-26 |
+| [ ] T11.8 | Tap Open in app (after T10 lands). | The app opens on the Translator with the selected text. Before T10 it opens on Home. | T11, T10 |
+| [ ] T11.9 | Rotate the device while the sheet is open; open the sheet with a pair whose pack is missing and tap Download. | The translation survives rotation with no second translation. Download shows progress and then the translation. | T11, T5 |
+| [ ] T11.10 | `adb shell am start -a android.intent.action.VIEW -d "ui://florisboard/settings/offline-languages"`, then `-d "app://settings/voice"`, `-d "ui://florisboard/devtools"`, `-d "app://paywall"`, and `adb shell am start -n com.manjul.aikeyboard/.app.FlorisAppActivity --es open_screen settings/voice` (and `--es open_screen devtools`). | Listed routes open their screen; unlisted ones open Home (onboarding if not finished), and the debug analytics log shows `deeplink_unknown` with no value. No crash. | T11, FR-32 AC1 |
+| [ ] T11.11 | `adb shell am start -n com.manjul.aikeyboard/.fork.processtext.TranslateTextActivity -a android.intent.action.VIEW`, and again with `-a android.intent.action.SEND -t image/png`. | Nothing shows and nothing crashes. | T11, FR-32 AC1 |
+
 ## Q. Translation quality eval (ur/hi/ar/bn)
 
 | # | Steps | Expected | From |

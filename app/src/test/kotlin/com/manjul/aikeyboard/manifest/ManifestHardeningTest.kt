@@ -43,7 +43,10 @@ class ManifestHardeningTest {
             "com.manjul.aikeyboard.SettingsLauncherAlias" to "Launcher entry (MAIN/LAUNCHER)",
             "com.manjul.aikeyboard.ime.clipboard.FlorisCopyToClipboardActivity" to
                 "Upstream share target (SEND image/*) that copies an image into the clipboard",
+            TRANSLATE_TEXT_ACTIVITY to "Translate sheet for PROCESS_TEXT and SEND text/plain; no data URIs",
         )
+
+        const val TRANSLATE_TEXT_ACTIVITY = "com.manjul.aikeyboard.fork.processtext.TranslateTextActivity"
 
         val COMPONENT_TAGS = listOf("activity", "activity-alias", "service", "receiver", "provider")
     }
@@ -249,6 +252,37 @@ class ManifestHardeningTest {
         assertEquals("", activity.attr("taskAffinity"))
         assertTrue(activity.hasAttributeNS(androidNs, "taskAffinity"))
         assertEquals("false", activity.attr("exported"))
+    }
+
+    @Test
+    fun `translate activity accepts only process text and send of plain text`() {
+        // S2-processtext, PRD FR-14 AC5: exactly two filters, text/plain only, no data URI of any kind.
+        val activity = manifest.elements("activity").single { it.attr("name") == TRANSLATE_TEXT_ACTIVITY }
+        assertEquals("true", activity.attr("exported"))
+        assertEquals("true", activity.attr("excludeFromRecents"))
+        assertTrue(activity.hasAttributeNS(androidNs, "taskAffinity"))
+        assertEquals("", activity.attr("taskAffinity"))
+        val filters = activity.children("intent-filter").map { filter ->
+            val data = filter.children("data")
+            for (d in data) {
+                val attrs = (0 until d.attributes.length).map { d.attributes.item(it).localName }
+                assertEquals(listOf("mimeType"), attrs, "TranslateTextActivity <data> may only set mimeType")
+            }
+            Triple(
+                filter.children("action").map { it.attr("name") }.toSet(),
+                filter.children("category").map { it.attr("name") }.toSet(),
+                data.map { it.attr("mimeType") }.toSet(),
+            )
+        }
+        val default = setOf("android.intent.category.DEFAULT")
+        assertEquals(
+            setOf(
+                Triple(setOf("android.intent.action.PROCESS_TEXT"), default, setOf("text/plain")),
+                Triple(setOf("android.intent.action.SEND"), default, setOf("text/plain")),
+            ),
+            filters.toSet(),
+        )
+        assertEquals(2, filters.size)
     }
 
     @Test

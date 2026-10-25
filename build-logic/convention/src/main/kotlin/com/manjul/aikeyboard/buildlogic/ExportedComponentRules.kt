@@ -16,6 +16,18 @@ data class ExportedComponentAllowance(
     val requiredPermission: String? = null,
     /** When true, the component may only be exported in a debuggable build. */
     val debuggableOnly: Boolean = false,
+    /**
+     * When set, the component's intent filters must be exactly these (order ignored), and no filter may declare a
+     * `<data>` URI (scheme, host, port or path), only MIME types.
+     */
+    val intentFilters: Set<IntentFilterSpec>? = null,
+)
+
+/** One `<intent-filter>`: its actions, categories and `<data android:mimeType>` values. */
+data class IntentFilterSpec(
+    val actions: Set<String>,
+    val mimeTypes: Set<String>,
+    val categories: Set<String> = setOf("android.intent.category.DEFAULT"),
 )
 
 /**
@@ -29,6 +41,12 @@ object ExportedComponentRules {
     private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
 
     private val COMPONENT_TAGS = listOf("activity", "activity-alias", "service", "receiver", "provider")
+
+    /** `<data>` attributes that make a filter match URIs (PRD FR-14 AC5: no data URI handling). */
+    private val URI_ATTRIBUTES = listOf(
+        "scheme", "host", "port", "path", "pathPrefix", "pathPattern", "pathAdvancedPattern", "pathSuffix",
+        "ssp", "sspPrefix", "sspPattern", "sspSuffix", "sspAdvancedPattern",
+    )
 
     /** Exported component (fully qualified) -> why it may be exported. */
     val ALLOW_LIST: Map<String, ExportedComponentAllowance> = mapOf(
@@ -44,6 +62,14 @@ object ExportedComponentRules {
             "Settings activity referenced by method.xml/spellchecker.xml; ui:// deep links; extension import",
         ),
         "com.manjul.aikeyboard.SettingsLauncherAlias" to ExportedComponentAllowance("Launcher entry (MAIN/LAUNCHER)"),
+        // S2-processtext (PRD FR-14 AC5): the system "Translate" selection action and share target, text/plain only
+        "com.manjul.aikeyboard.fork.processtext.TranslateTextActivity" to ExportedComponentAllowance(
+            "Translate sheet for PROCESS_TEXT and SEND text/plain; no data URIs",
+            intentFilters = setOf(
+                IntentFilterSpec(setOf("android.intent.action.PROCESS_TEXT"), setOf("text/plain")),
+                IntentFilterSpec(setOf("android.intent.action.SEND"), setOf("text/plain")),
+            ),
+        ),
         "com.manjul.aikeyboard.ime.clipboard.FlorisCopyToClipboardActivity" to ExportedComponentAllowance(
             "Upstream share target (SEND image/*) that copies an image into the clipboard",
         ),
@@ -108,9 +134,36 @@ object ExportedComponentRules {
                 if (allowance.debuggableOnly && !debuggable) {
                     violations += "$tag $name is allowed in debuggable builds only"
                 }
+                if (allowance.intentFilters != null) {
+                    violations += intentFilterViolations("$tag $name", component, allowance.intentFilters)
+                }
             }
         }
         return violations
+    }
+
+    private fun intentFilterViolations(label: String, component: Element, allowed: Set<IntentFilterSpec>): List<String> {
+        val violations = mutableListOf<String>()
+        val specs = component.childElements("intent-filter").map { filter ->
+            val data = filter.childElements("data")
+            if (data.any { d -> URI_ATTRIBUTES.any { d.hasAttributeNS(ANDROID_NS, it) } }) {
+                violations += "$label declares a data URI in an intent filter; only MIME types are allowed"
+            }
+            IntentFilterSpec(
+                actions = filter.childElements("action").map { it.getAttributeNS(ANDROID_NS, "name") }.toSet(),
+                mimeTypes = data.mapNotNull { it.getAttributeNS(ANDROID_NS, "mimeType").ifEmpty { null } }.toSet(),
+                categories = filter.childElements("category").map { it.getAttributeNS(ANDROID_NS, "name") }.toSet(),
+            )
+        }
+        if (specs.size != allowed.size || specs.toSet() != allowed) {
+            violations += "$label must declare exactly the intent filters $allowed, has $specs"
+        }
+        return violations
+    }
+
+    private fun Element.childElements(tag: String): List<Element> {
+        val nodes = getElementsByTagName(tag)
+        return (0 until nodes.length).map { nodes.item(it) as Element }
     }
 
     /** Explicit android:exported wins; without it a component with an intent filter is exported. */

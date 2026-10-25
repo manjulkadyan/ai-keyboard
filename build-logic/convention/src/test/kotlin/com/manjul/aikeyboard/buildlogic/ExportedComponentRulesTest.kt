@@ -109,6 +109,70 @@ class ExportedComponentRulesTest {
         assertEquals(2, violations(open).size)
     }
 
+    private fun translateActivity(filters: String) = """
+        <activity android:name="com.manjul.aikeyboard.fork.processtext.TranslateTextActivity" android:exported="true">
+            $filters
+        </activity>
+    """
+
+    private val processTextFilter = """
+        <intent-filter>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/plain" />
+        </intent-filter>
+    """
+
+    private val sendFilter = """
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/plain" />
+        </intent-filter>
+    """
+
+    @Test
+    fun `translate activity passes with exactly the process text and send filters`() {
+        assertEquals(emptyList<String>(), violations(appComponents + translateActivity(processTextFilter + sendFilter)))
+    }
+
+    @Test
+    fun `translate activity with a data scheme fails`() {
+        val withScheme = sendFilter.replace(
+            """<data android:mimeType="text/plain" />""",
+            """<data android:mimeType="text/plain" /><data android:scheme="https" />""",
+        )
+        val result = violations(translateActivity(processTextFilter + withScheme))
+        assertTrue(result.any { it.contains("data URI") }, result.toString())
+    }
+
+    @Test
+    fun `translate activity with another mime type or a third filter fails`() {
+        val image = sendFilter.replace("text/plain", "image/*")
+        assertEquals(1, violations(translateActivity(processTextFilter + image)).size)
+        val view = """
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        """
+        assertEquals(1, violations(translateActivity(processTextFilter + sendFilter + view)).size)
+        assertEquals(1, violations(translateActivity(processTextFilter)).size)
+    }
+
+    @Test
+    fun `a new exported activity next to the translate activity still fails`() {
+        val result = violations(
+            appComponents + translateActivity(processTextFilter + sendFilter) +
+                """<activity android:name="com.manjul.aikeyboard.fork.processtext.OtherActivity" android:exported="true" />""",
+        )
+        assertEquals(
+            listOf("activity com.manjul.aikeyboard.fork.processtext.OtherActivity is exported but not on the allow-list"),
+            result,
+        )
+    }
+
     @Test
     fun `compose test host activity fails in a non-debuggable manifest`() {
         val result = violations(
