@@ -3,8 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-// :ime:voice-ui: voice typing inside the keyboard (controller, composing span, panel). Depends on :core:voice,
-// :core:analytics and :ime:policy only; the IME service in :app wires it to the editor and the platform.
+// :ime:voice-ui: voice typing inside the keyboard (controller, panel). Depends on :core:voice, :core:analytics,
+// :ime:policy and :ime:editing (composing span) only; the IME service in :app wires it to the editor and the platform.
 
 plugins {
     alias(libs.plugins.aikeyboard.android.library.compose)
@@ -24,6 +24,7 @@ dependencies {
     api(projects.core.voice)
     api(projects.core.analytics)
     api(projects.ime.policy)
+    api(projects.ime.editing)
     implementation(libs.androidx.compose.material3)
 
     testImplementation(libs.kotlinx.coroutines.test)

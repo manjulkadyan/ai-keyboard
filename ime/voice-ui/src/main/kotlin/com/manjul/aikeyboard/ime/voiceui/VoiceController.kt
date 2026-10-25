@@ -20,6 +20,7 @@ import com.manjul.aikeyboard.core.voice.VoiceState
 import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
 import com.manjul.aikeyboard.core.voice.platform.EngineChoice
 import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
+import com.manjul.aikeyboard.ime.editing.ComposingSpanController
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job

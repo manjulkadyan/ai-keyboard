@@ -76,6 +76,8 @@ include(":lib:whisper")
 include(":core:translate")
 // FORK(S2-mlkit): ML Kit translation engine and language ID behind :core:translate, initialised on first use
 include(":core:translate-mlkit")
+// FORK(S2-bar): composing-span helpers shared by voice and the translate bar, pure JVM
+include(":ime:editing")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

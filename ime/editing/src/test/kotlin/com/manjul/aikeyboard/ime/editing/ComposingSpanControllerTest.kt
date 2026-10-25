@@ -3,12 +3,12 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-package com.manjul.aikeyboard.ime.voiceui
+package com.manjul.aikeyboard.ime.editing
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ComposingSpanControllerTest {
     /** A text field with a cursor and one composing region; reports selection updates like an editor would. */
@@ -76,6 +76,8 @@ class ComposingSpanControllerTest {
             report()
             return true
         }
+
+        override fun deleteBeforeCursorIfEquals(expected: String): Boolean = false
 
         /** The host inserts [s] at [at] on its own; a region after [at] shifts with the text, as in an EditText. */
         fun hostInsert(at: Int, s: String) {

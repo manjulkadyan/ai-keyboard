@@ -30,7 +30,7 @@ import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
 import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.whisperVoice
-import com.manjul.aikeyboard.ime.voiceui.ComposingSpanController
+import com.manjul.aikeyboard.ime.editing.ComposingSpanController
 import com.manjul.aikeyboard.ime.voiceui.FirstDictationFlag
 import com.manjul.aikeyboard.ime.voiceui.VoiceController
 import com.manjul.aikeyboard.ime.voiceui.VoiceEngines

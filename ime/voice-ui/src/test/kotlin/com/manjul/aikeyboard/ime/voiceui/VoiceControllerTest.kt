@@ -16,6 +16,8 @@ import com.manjul.aikeyboard.core.voice.VoiceTimings
 import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
 import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
 import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
+import com.manjul.aikeyboard.ime.editing.ComposingSpanController
+import com.manjul.aikeyboard.ime.editing.TextTarget
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -62,6 +64,7 @@ class VoiceControllerTest {
         }
         override fun finishComposing(): Boolean { calls += "finish"; return true }
         override fun clearComposing(expected: String): Boolean { calls += "clear:$expected"; return true }
+        override fun deleteBeforeCursorIfEquals(expected: String): Boolean = false
     }
 
     private class Flag : FirstDictationFlag {
