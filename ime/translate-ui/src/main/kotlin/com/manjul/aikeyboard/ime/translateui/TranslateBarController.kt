@@ -53,6 +53,10 @@ import kotlinx.coroutines.launch
  * editing the buffer, a swap, a mode change, any close, a field change or generation bump, a policy restriction or a
  * failed request cancels it first, and nothing is written. An empty translation is never written.
  *
+ * [close] with [CloseReason.HIDDEN] keeps the buffer for the same field; if the keyboard stays hidden for
+ * [HIDDEN_CLEAR_MS] (neither [open] nor [onKeyboardShown] in between) the buffer is cleared too. Any other close, a
+ * field change or a policy restriction clears it at once.
+ *
  * Analytics: `translate_done.offline` is true when the translation ran without network, i.e. on the on-device
  * engine ([EngineId.MLKIT]); it does not say whether the device had connectivity.
  *
@@ -139,6 +143,10 @@ class TranslateBarController(
     private var bufferJob: Job? = null
     private var undoJob: Job? = null
 
+    /** When the keyboard was hidden with the buffer kept ([clock] time), and the timeout that then clears it. */
+    private var hiddenAt: Long? = null
+    private var hiddenJob: Job? = null
+
     init {
         scope.launch { pipeline.state.collect(::onPipeline) }
     }
@@ -149,6 +157,7 @@ class TranslateBarController(
     /** No-op when the live decision refuses translation. */
     fun open() {
         if (open || !decision().allowTranslate) return
+        endHiddenTimer()
         open = true
         openGeneration = generation()
         currentPair = pair()
@@ -173,9 +182,53 @@ class TranslateBarController(
                 cache?.clear()
             }
             CloseReason.USER, CloseReason.FIELD_CHANGE -> closeBar(clearBuffer = true)
-            // The keyboard went away: keep the text for when it comes back.
-            CloseReason.HIDDEN -> closeBar(clearBuffer = false)
+            // The keyboard went away: keep the text for when it comes back, but not for longer than
+            // HIDDEN_CLEAR_MS.
+            CloseReason.HIDDEN -> {
+                closeBar(clearBuffer = false)
+                startHiddenTimer()
+            }
         }
+    }
+
+    /** Starts the hidden timeout, unless it is already running since an earlier hide. */
+    private fun startHiddenTimer() {
+        if (hiddenAt != null) return
+        hiddenAt = clock()
+        hiddenJob = scope.launch {
+            delay(HIDDEN_CLEAR_MS)
+            clearKept()
+        }
+    }
+
+    /**
+     * The keyboard is back: stops the hidden timeout, first clearing the kept text if [HIDDEN_CLEAR_MS] already
+     * went by on [clock] (the delay can run late, e.g. while the device sleeps).
+     */
+    private fun endHiddenTimer() {
+        val since = hiddenAt ?: return
+        if (clock() - since >= HIDDEN_CLEAR_MS) clearKept() else cancelHiddenTimer()
+    }
+
+    private fun cancelHiddenTimer() {
+        hiddenJob?.cancel()
+        hiddenJob = null
+        hiddenAt = null
+    }
+
+    /**
+     * The keyboard stayed hidden too long: the kept buffer, any preview and pending commit go, and our live
+     * composing text only while verified ours. Pair and mode stay.
+     */
+    private fun clearKept() {
+        cancelHiddenTimer()
+        if (open) return
+        span.discard()
+        pending = null
+        good = null
+        finished = null
+        buffer.clear()
+        pipeline.reset()
     }
 
     /**
@@ -317,12 +370,21 @@ class TranslateBarController(
         }
     }
 
+    /**
+     * The keyboard is shown again (`onStartInputView` for the same field). Within [HIDDEN_CLEAR_MS] of
+     * [close] ([CloseReason.HIDDEN]) the kept buffer stays for the next [open]; after that it is cleared.
+     */
+    fun onKeyboardShown() {
+        endHiddenTimer()
+    }
+
     fun onPolicyRestricted(d: PolicyDecision) {
         if (!d.allowTranslate) close(CloseReason.SENSITIVE)
     }
 
     /** A new field: the buffer is cleared, pair and mode are kept. */
     fun onFieldChanged() {
+        cancelHiddenTimer()
         span.discard()
         ownWrite.invalidate()
         insertUpdatePending = false
@@ -352,6 +414,8 @@ class TranslateBarController(
     }
 
     private fun closeBar(clearBuffer: Boolean) {
+        // Clearing now makes the hidden timeout moot.
+        if (clearBuffer) cancelHiddenTimer()
         // Our live preview goes only while verified ours; preview mode never wrote anything.
         span.discard()
         ownWrite.invalidate()
@@ -481,6 +545,9 @@ class TranslateBarController(
     private companion object {
         /** TRD §4.1.3: undo of our insert is offered for 5 s. */
         const val UNDO_WINDOW_MS = 5_000L
+
+        /** Product decision (2026-10-25): the bar keeps its text while the keyboard is hidden for up to 60 s. */
+        const val HIDDEN_CLEAR_MS = 60_000L
 
         fun EngineId.toParam(): TranslateEngineParam = when (this) {
             EngineId.MLKIT -> TranslateEngineParam.ON_DEVICE

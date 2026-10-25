@@ -550,6 +550,141 @@ class TranslateBarControllerTest {
         assertEquals("Hi ", rig.editor.text)
     }
 
+    @Test fun `hidden for 59 s then reopened keeps the buffer`() = runTest {
+        val rig = rig()
+        typed(rig)
+        rig.controller.close(CloseReason.HIDDEN)
+        advanceTimeBy(59_000)
+        runCurrent()
+        assertEquals("hello", rig.controller.buffer.text.value)
+        rig.controller.open()
+        runCurrent()
+        assertEquals("hello", rig.open.input)
+        // The timer is gone: closing the keyboard is what restarts it, not time spent open.
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals("hello", rig.open.input)
+    }
+
+    @Test fun `the keyboard shown again within 60 s keeps the buffer`() = runTest {
+        val rig = rig()
+        typed(rig)
+        rig.controller.close(CloseReason.HIDDEN)
+        advanceTimeBy(30_000)
+        rig.controller.onKeyboardShown()
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals("hello", rig.controller.buffer.text.value)
+        rig.controller.open()
+        runCurrent()
+        assertEquals("hello", rig.open.input)
+    }
+
+    @Test fun `hidden for 61 s clears buffer and preview and leaves the host alone`() = runTest {
+        val rig = rig()
+        typed(rig)
+        rig.controller.close(CloseReason.HIDDEN)
+        advanceTimeBy(61_000)
+        runCurrent()
+        assertEquals("", rig.controller.buffer.text.value)
+        assertEquals("Hi ", rig.editor.text)
+        rig.controller.open()
+        runCurrent()
+        advanceTimeBy(DEBOUNCE + 1)
+        runCurrent()
+        assertEquals("", rig.open.input)
+        assertNull(rig.open.preview)
+        assertEquals(1, rig.engine.calls.size)
+        assertEquals("Hi ", rig.editor.text)
+        rig.checker.assertSafe()
+    }
+
+    @Test fun `the keyboard shown after 61 s hidden finds the buffer cleared`() = runTest {
+        val rig = rig()
+        typed(rig)
+        rig.controller.close(CloseReason.HIDDEN)
+        advanceTimeBy(61_000)
+        rig.controller.onKeyboardShown()
+        runCurrent()
+        assertEquals("", rig.controller.buffer.text.value)
+    }
+
+    @Test fun `hidden for 61 s in live mode removes our composing preview`() = runTest {
+        val rig = rig()
+        rig.mode = BarMode.LIVE
+        typed(rig)
+        rig.deliver()
+        assertEquals("Hi hola", rig.editor.text)
+        rig.controller.close(CloseReason.HIDDEN)
+        advanceTimeBy(61_000)
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertEquals("", rig.controller.buffer.text.value)
+        rig.checker.assertSafe()
+    }
+
+    @Test fun `hidden for 61 s in live mode keeps composing text that is no longer ours`() = runTest {
+        val rig = rig()
+        rig.mode = BarMode.LIVE
+        typed(rig)
+        rig.deliver()
+        rig.editor.hostMoveCursor(0)
+        rig.deliver()
+        rig.controller.close(CloseReason.HIDDEN)
+        advanceTimeBy(61_000)
+        runCurrent()
+        assertEquals("Hi hola", rig.editor.text)
+        assertEquals("", rig.controller.buffer.text.value)
+        rig.checker.assertSafe()
+    }
+
+    @Test fun `hidden then a new field clears the buffer at once`() = runTest {
+        val rig = rig()
+        typed(rig)
+        rig.controller.close(CloseReason.HIDDEN)
+        advanceTimeBy(1_000)
+        rig.generation++
+        rig.controller.onFieldChanged()
+        runCurrent()
+        assertEquals("", rig.controller.buffer.text.value)
+        assertEquals("Hi ", rig.editor.text)
+    }
+
+    @Test fun `hidden then a policy restriction clears the buffer at once`() = runTest {
+        val rig = rig()
+        typed(rig)
+        rig.controller.close(CloseReason.HIDDEN)
+        rig.decision = BarRig.PASSWORD
+        rig.controller.onPolicyRestricted(BarRig.PASSWORD)
+        runCurrent()
+        assertEquals("", rig.controller.buffer.text.value)
+    }
+
+    @Test fun `hidden for 61 s with a pending commit writes nothing`() = runTest {
+        delayMs = 300
+        val rig = rig()
+        rig.controller.open()
+        runCurrent()
+        rig.controller.buffer.type("hello")
+        runCurrent()
+        rig.controller.insert()
+        runCurrent()
+        assertTrue(rig.open.commitPending)
+        rig.controller.close(CloseReason.HIDDEN)
+        advanceTimeBy(61_000)
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertEquals("", rig.controller.buffer.text.value)
+        rig.controller.open()
+        runCurrent()
+        advanceTimeBy(DEBOUNCE + delayMs + 1)
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertFalse(rig.open.commitPending)
+        assertEquals(0, rig.named(EventCatalog.TRANSLATE_DONE).size)
+        rig.checker.assertSafe()
+    }
+
     @Test fun `enter before the debounce commits the translation once when it arrives, and undo works`() = runTest {
         delayMs = 300
         val rig = rig()

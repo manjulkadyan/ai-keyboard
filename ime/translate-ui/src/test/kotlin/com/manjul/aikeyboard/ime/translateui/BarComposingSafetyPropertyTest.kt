@@ -26,7 +26,7 @@ import kotlin.test.fail
 
 /**
  * Review Focus 1 and PRD FR-13 AC1/AC2 for the whole bar: random sequences of bar keys, swaps, inserts (also while a
- * commit waits for its translation), undos, closes, mode switches, host edits and cursor moves, policy restrictions
+ * commit waits for its translation), undos, closes (also staying hidden past the bar's timeout), mode switches, host edits and cursor moves, policy restrictions
  * and field changes, with engine responses delayed 0–2,000 ms (outliving cancellation for half the seeds) and random
  * engine failures, in preview and live mode. No host character may ever be deleted or changed by the bar, and the engine never has more than one request
  * in flight. A failure names the seed and the steps to replay.
@@ -82,7 +82,7 @@ class BarComposingSafetyPropertyTest {
     /** One random step; returns its name (no text) for the failure message. */
     private fun TestScope.step(random: Random, rig: BarRig): String {
         val c = rig.controller
-        return when (random.nextInt(28)) {
+        return when (random.nextInt(30)) {
             0, 1, 2 -> "type".also { c.buffer.type(word(random, maxLength = 4)) }
             3 -> "backspace".also { c.buffer.backspace() }
             4 -> "paste".also { c.buffer.paste(word(random, maxLength = 8)) }
@@ -131,6 +131,12 @@ class BarComposingSafetyPropertyTest {
                 }
                 c.insert()
             }
+            // The keyboard stays hidden past the bar's timeout, which clears what the bar kept.
+            28 -> "hiddenTimeout".also {
+                c.close(CloseReason.HIDDEN)
+                advanceTimeBy(HIDDEN_TIMEOUT_MS + 1)
+            }
+            29 -> "keyboardShown".also { c.onKeyboardShown() }
             // Long enough for the debounce and the slowest response, so inserts and undos find a preview.
             else -> "settle".also { advanceTimeBy(DEBOUNCE_MS + MAX_ENGINE_DELAY_MS + 1) }
         }.also { runCurrent() }
@@ -157,6 +163,7 @@ class BarComposingSafetyPropertyTest {
         const val MAX_ENGINE_DELAY_MS = 2_000L
         const val MAX_STEP_WAIT_MS = 700L
         const val DEBOUNCE_MS = 450L
+        const val HIDDEN_TIMEOUT_MS = 60_000L
         const val ALPHABET = "ab "
     }
 }
