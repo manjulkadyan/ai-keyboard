@@ -8,6 +8,40 @@ multi-device checklist); tick both when a step passes.
 - **Reference device:** Pixel 9, Android 17 (API 37), arm64, 4 KB pages
 - Mark each step **Pass**, **Fail** (write what you saw) or **Blocked**.
 
+## Still to do (as of 2026-10-25)
+
+Manual checks left (test-plan step → checklist row):
+
+- [ ] **Actions-editor drag checks** (step 2.6 → checklist 1.7): a 4th pin is refused with the "Up to 3 pinned"
+  hint; the mic tile can't move; pinned order survives a keyboard restart. adb can't drive the drags.
+- [ ] **Permission trampoline on a Samsung** (step 5.10 → checklist 4.7). Pixel 9 already passed.
+- [ ] **Voice checks that need your own voice:**
+  - [ ] Live partials and final text (step 5.1 → checklist 4.1)
+  - [ ] Segmented sessions with pauses (step 5.2 → checklist 4.3)
+  - [ ] Hide the keyboard mid-session (step 5.3 → checklist 4.2)
+  - [ ] Switch field mid-partial (step 5.4 → checklist 2.12)
+  - [ ] Switch into a password field mid-partial (step 5.5 → checklist 2.5)
+  - [ ] Move the cursor mid-partial (step 5.6 → checklist 2.6)
+  - [ ] Audio focus with music (step 5.7 → checklist 4.8)
+
+Already verified on the Pixel 9 on 2026-10-25 (don't repeat):
+
+- [x] **Checklist 1.8 PASS** (no test-plan step): "Make private" updates live (lock shows, mic and the action
+  hide, no field refresh); lock and smartbar icons are legible in the light theme. Long-press has no menu:
+  long-pressing the lock adds the app to the private list at once; once private the toggle is hidden and undo
+  is Settings > Private apps. The checklist wording "long-press toggle" suggests otherwise; needs product
+  confirmation (see below).
+
+### Decisions needed
+
+- [ ] **16 KB alignment of ML Kit's 32-bit libs.** The prebuilt `libtranslate_jni.so` and
+  `liblanguage_id_l2c_jni.so` for armeabi-v7a and x86 fail the 16 KB page-alignment check. Pick a fix. Blocks
+  Sprint 2 Task 3 step 5 and Task 4.
+- [ ] **"Make this app private" and the 3-pin limit.** Does it stay exempt (PRD FR-07)?
+- [ ] **Long-press lock.** Is "long-press = add to private immediately" the intended behaviour?
+- [ ] **Working branch.** Keep `sprint-1-close-sprint-2-start` or move its commits to main (14 local commits,
+  none pushed).
+
 ## 0. Setup (once)
 
 1. Unlock the phone and keep it awake: Developer options → **Stay awake** on, plugged in.
