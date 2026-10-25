@@ -252,20 +252,30 @@ class FakeEditor(initial: String = "") : TextTarget {
     // Selection updates.
 
     /** Delivers the oldest queued update, if any. */
-    fun deliverNext(span: ComposingSpanController) {
-        val u = updates.removeFirstOrNull() ?: return
-        span.onSelectionUpdate(u.selStart, u.selEnd, u.candStart, u.candEnd)
-    }
+    fun deliverNext(span: ComposingSpanController) = deliverNext(span.sink())
 
     /** Delivers all but the newest [selectionDelay] updates. */
-    fun deliverDue(span: ComposingSpanController) {
-        while (updates.size > selectionDelay) deliverNext(span)
-    }
+    fun deliverDue(span: ComposingSpanController) = deliverDue(span.sink())
 
     /** Delivers every queued update, including those queued while delivering. */
-    fun deliverAll(span: ComposingSpanController) {
-        while (updates.isNotEmpty()) deliverNext(span)
+    fun deliverAll(span: ComposingSpanController) = deliverAll(span.sink())
+
+    /** Like [deliverNext], to any receiver of `onUpdateSelection` (e.g. a controller that owns its span). */
+    fun deliverNext(sink: (SelectionUpdate) -> Unit) {
+        val u = updates.removeFirstOrNull() ?: return
+        sink(u)
     }
+
+    fun deliverDue(sink: (SelectionUpdate) -> Unit) {
+        while (updates.size > selectionDelay) deliverNext(sink)
+    }
+
+    fun deliverAll(sink: (SelectionUpdate) -> Unit) {
+        while (updates.isNotEmpty()) deliverNext(sink)
+    }
+
+    private fun ComposingSpanController.sink(): (SelectionUpdate) -> Unit =
+        { u -> onSelectionUpdate(u.selStart, u.selEnd, u.candStart, u.candEnd) }
 
     // Internals.
 
