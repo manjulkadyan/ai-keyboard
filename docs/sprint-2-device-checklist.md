@@ -25,3 +25,14 @@ Tick a box only after running it on a device. Record device, Android version and
 | [ ] 1.10 | With a hardware keyboard, open the bar from the chip and type, use backspace and Enter, and try Ctrl+A and forward delete. | Printable keys, space, backspace and Enter go to the bar. Ctrl shortcuts and forward delete do not change host text. | T8 |
 | [ ] 1.11 | Smartbar actions editor: try to drag, pin or hide the Translate action. | Translate stays first among the actions, cannot be dragged, and does not count towards the 3 pins. | T8 |
 | [ ] 1.12 | Debug build logcat while using the bar: typing, preview, insert, undo, failure chips. Filter on `AiKbAnalytics` and the app package. | No buffer, preview or translated text appears in any log line or event. | Global constraints, PC-10 |
+
+## Translation latency (T4)
+
+Method, commands and the results table: `docs/translation/latency.md`. Record the numbers there.
+
+| # | Steps | Expected | From |
+|---|---|---|---|
+| [ ] L.1 | Mid-tier phone (Pixel 6a / Galaxy A54 class): `$G ./gradlew :core:translate-mlkit:installDebugAndroidTest`, then `adb shell am instrument -w -r -e tier mid -e download true -e class com.manjul.aikeyboard.core.translate.mlkit.TranslateLatencyTest com.manjul.aikeyboard.core.translate.mlkit.test/androidx.test.runner.AndroidJUnitRunner`. | One `pair p50 p90` line per pair (en→ur/hi/ar/bn/es, ur→en, hi→en). Passes when every p90 is at most 150 ms. If any p90 is above 150 ms, apply the R-03 switch in `latency.md` (600 ms `DebouncePolicy.Default`, live composing off for all) and note it in the sprint exit. | T4, TRD §8, R-03 |
+| [ ] L.2 | 3 GB Android 10 phone: the same command with `-e tier low`. | Every p90 at most 400 ms; otherwise record it in the sprint exit and raise it with product. | T4, decision 5 |
+| [ ] L.3 | Debug app on both phones: download en, ur, hi, ar, bn, es in the app, then Devtools → enable → "Translate latency probe". Paste the copied numbers into `latency.md`. | Numbers for every pair (no `no_pack`), only a device line and numbers in the clipboard, no sentence text. Probe p90 within about 50 ms of the test's; if much slower, consider the Room mirror (decision 4). | T4 |
+| [ ] L.4 | Release build: open Devtools. | No "Translate latency probe" row. | T4 |

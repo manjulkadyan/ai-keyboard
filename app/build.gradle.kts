@@ -99,6 +99,8 @@ android {
                     srcDirs("src/main/kotlin")
                 }
             }
+            // FORK(S2-translate): the devtools latency probe reads the instrumented test's corpus (debug APK only)
+            maybeCreate("debug").assets.srcDir(rootProject.file("core/translate-mlkit/src/androidTest/assets"))
         }
     }
 

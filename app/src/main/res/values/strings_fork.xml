@@ -110,4 +110,10 @@
     <!-- Smartbar actions editor (PRD FR-07): the dynamic actions are the pinned chips, at most {max}. -->
     <string name="quick_actions_editor__subheader_pinned" tools:ignore="MissingTranslation">Pinned ({n}/{max})</string>
     <string name="quick_actions_editor__pin_limit" tools:ignore="MissingTranslation">Up to {max} pinned</string>
+
+    <!-- Devtools, debug builds only: day-1 translate latency probe (TRD §8, R-03). {pair} is like "en-ur". -->
+    <string name="devtools__translate_latency__label" tools:ignore="MissingTranslation">Translate latency probe</string>
+    <string name="devtools__translate_latency__summary" tools:ignore="MissingTranslation">Times each test language pair on this device and copies the p50/p90 numbers. Only numbers are copied, no text.</string>
+    <string name="devtools__translate_latency__running" tools:ignore="MissingTranslation">Measuring {pair}…</string>
+    <string name="devtools__translate_latency__copied" tools:ignore="MissingTranslation">Latency numbers copied</string>
 </resources>

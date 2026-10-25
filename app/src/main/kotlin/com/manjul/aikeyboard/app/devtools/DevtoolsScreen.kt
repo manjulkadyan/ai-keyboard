@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S0-licences): Apache-2.0 §4(b) change notice
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,10 +23,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import com.manjul.aikeyboard.BuildConfig // FORK(S2-translate): debug-only latency probe row
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.extensionManager
+// FORK(S2-translate): day-1 translate latency probe (TRD §8, R-03)
+import com.manjul.aikeyboard.fork.devtools.TranslateLatencyProbeRow
 import com.manjul.aikeyboard.ime.dictionary.DictionaryManager
 import com.manjul.aikeyboard.ime.dictionary.FlorisUserDictionaryDatabase
 import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickActionArrangement
@@ -138,6 +142,8 @@ fun DevtoolsScreen() = FlorisScreen {
                 onClick = { navController.navigate(Routes.Devtools.ExportDebugLog) },
                 enabledIf = { prefs.devtools.enabled isEqualTo true },
             )
+            // FORK(S2-translate): times ML Kit on the test pairs and copies p50/p90 numbers; debug builds only
+            if (BuildConfig.DEBUG) TranslateLatencyProbeRow()
             SwitchPreference(
                 prefs.glide.enabled,
                 title = "prefs.glide.enabled (debug)",
