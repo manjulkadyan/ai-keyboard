@@ -65,4 +65,23 @@ class AdAutoInitRulesTest {
         assertEquals(1, result.size)
         assertTrue(result.single().contains("AdsStartupInitializer"))
     }
+
+    @Test
+    fun `ml kit init provider is reported`() {
+        val result = violations(
+            """<provider android:name="com.google.mlkit.common.internal.MlKitInitProvider" android:authorities="x.mlkitinitprovider" />""",
+        )
+        assertEquals(1, result.size)
+        assertTrue(result.single().contains("MlKitInitProvider"))
+    }
+
+    @Test
+    fun `ml kit component discovery service is not a provider and passes`() {
+        val body = """
+            <service android:name="com.google.mlkit.common.internal.MlKitComponentDiscoveryService" android:exported="false">
+                <meta-data android:name="com.google.firebase.components:com.google.mlkit.common.internal.CommonComponentRegistrar" android:value="com.google.firebase.components.ComponentRegistrar" />
+            </service>
+        """
+        assertEquals(emptyList<String>(), violations(body))
+    }
 }

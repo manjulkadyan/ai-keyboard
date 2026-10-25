@@ -289,6 +289,9 @@ dependencies {
     // FORK(S1-whisper): on-device whisper.cpp (libaikb_whisper.so); WhisperSpeechEngine builds on it
     implementation(projects.lib.whisper)
     implementation(libs.androidx.work.runtime) // FORK(S1-whisper): model download worker, on-demand init
+    // FORK(S2-mlkit): translation core and the ML Kit engine (its MlKitInitProvider is removed in that module)
+    implementation(projects.core.translate)
+    implementation(projects.core.translateMlkit)
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (C) 2026 AI Keyboard contributors
+  Licensed under the Apache License, Version 2.0
+-->
+<!-- ML Kit merges MlKitInitProvider, which initialises ML Kit (and its Firebase components) in every
+     process at start, including the keyboard's. TRD §2.3 / §11.1: nothing heavy at process start, so the
+     provider is removed and MlKitBootstrap.ensure() initialises ML Kit on first translate use. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <provider
+            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+            android:authorities="${applicationId}.mlkitinitprovider"
+            tools:node="remove" />
+    </application>
+</manifest>

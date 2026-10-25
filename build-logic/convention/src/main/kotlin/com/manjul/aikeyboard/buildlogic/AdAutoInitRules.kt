@@ -13,16 +13,20 @@ import javax.xml.parsers.DocumentBuilderFactory
  * TRD §2.3 / §11.1 1.1: in a single process every merged `ContentProvider` (and every `androidx.startup`
  * initializer) runs at process start, including when the keyboard is what starts the process. No ad or
  * consent SDK may run code there. This finds such entries in a merged manifest.
+ *
+ * ML Kit is held to the same rule (S2-mlkit): its `MlKitInitProvider` would start ML Kit and its Firebase
+ * components in the keyboard process, so `:core:translate-mlkit` removes it and ML Kit starts on first use.
  */
 object AdAutoInitRules {
     private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
 
-    /** Packages of ad/consent SDKs (GMA, GMA next-gen, UMP) and of our own `:core:ads`. */
+    /** Packages of ad/consent SDKs (GMA, GMA next-gen, UMP), of our own `:core:ads`, and of ML Kit. */
     val FORBIDDEN_PREFIXES = listOf(
         "com.google.android.gms.ads.",
         "com.google.android.libraries.ads.",
         "com.google.android.ump.",
         "com.manjul.aikeyboard.core.ads.",
+        "com.google.mlkit.",
     )
 
     fun findViolations(manifest: InputStream): List<String> {

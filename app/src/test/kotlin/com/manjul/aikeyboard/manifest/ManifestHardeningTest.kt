@@ -234,4 +234,16 @@ class ManifestHardeningTest {
         assertTrue(activity.hasAttributeNS(androidNs, "taskAffinity"))
         assertEquals("false", activity.attr("exported"))
     }
+
+    @Test
+    fun `ml kit init provider is removed so ml kit never starts with the process`() {
+        // S2-mlkit, TRD §2.3: the merged manifest is checked by verify<Variant>NoAdAutoInit (com.google.mlkit.
+        // providers are forbidden there); this pins the removal at its source.
+        val toolsNs = "http://schemas.android.com/tools"
+        val mlKitManifest = File(mainDir, "../../../core/translate-mlkit/src/main/AndroidManifest.xml")
+        val removed = parse(mlKitManifest).elements("provider")
+            .single { it.attr("name") == "com.google.mlkit.common.internal.MlKitInitProvider" }
+        assertEquals("remove", removed.getAttributeNS(toolsNs, "node"))
+        assertTrue(manifest.elements("provider").none { it.attr("name").startsWith("com.google.mlkit.") })
+    }
 }

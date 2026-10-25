@@ -74,6 +74,8 @@ include(":ime:voice-ui")
 include(":lib:whisper")
 // FORK(S2-translate): engine-agnostic translation core (router, LRU, chunking, bar pipeline), pure JVM
 include(":core:translate")
+// FORK(S2-mlkit): ML Kit translation engine and language ID behind :core:translate, initialised on first use
+include(":core:translate-mlkit")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

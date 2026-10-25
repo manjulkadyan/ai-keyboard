@@ -60,6 +60,8 @@ import com.manjul.aikeyboard.core.analytics.NoopSink
 import androidx.work.Configuration
 import com.manjul.aikeyboard.core.voice.whisper.ModelDownloadWorkerFactory
 import com.manjul.aikeyboard.fork.voice.WhisperVoice
+// FORK(S2-mlkit): import for the translation core
+import com.manjul.aikeyboard.fork.translate.TranslationCore
 import java.lang.ref.WeakReference
 
 /**
@@ -107,6 +109,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     }
     // FORK(S1-whisper): Whisper model, idle unloader and model manager; created on first Whisper use
     val whisperVoice = lazy { WhisperVoice(this) { analytics.value::log } }
+    // FORK(S2-mlkit): router, ML Kit engine, language ID and translator pool; ML Kit itself starts on first use
+    val translation = lazy { TranslationCore(this) }
 
     // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
     override val workManagerConfiguration: Configuration
@@ -118,6 +122,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (whisperVoice.isInitialized()) whisperVoice.value.unloader.onTrimMemory(level)
+        // FORK(S2-mlkit): close the loaded ML Kit Translator at RUNNING_LOW and above; never creates the core
+        if (translation.isInitialized()) translation.value.pool.onTrimMemory(level)
     }
 
     override fun onCreate() {
@@ -217,3 +223,6 @@ fun Context.featureSettingsStore() = this.florisApplication().featureSettingsSto
 
 // FORK(S1-whisper): accessor for the app-wide Whisper pieces
 fun Context.whisperVoice() = this.florisApplication().whisperVoice
+
+// FORK(S2-mlkit): accessor for the app-wide translation core
+fun Context.translation() = this.florisApplication().translation
