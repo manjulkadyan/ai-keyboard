@@ -236,8 +236,25 @@ class TranslateBarUiTest {
         assertEquals(listOf("insert", "close"), calls)
     }
 
-    @Test fun insertIsDisabledWithoutAPreview() {
-        show(open(preview = null))
+    @Test fun insertIsDisabledWithAnEmptyBuffer() {
+        show(open(input = "", preview = null))
         compose.onNodeWithContentDescription(str(R.string.translate_bar__insert_cd)).assertIsNotEnabled()
+    }
+
+    @Test fun insertIsEnabledBeforeThePreviewArrives() {
+        // Enter or ✓ before the translation commits it when it arrives.
+        show(open(preview = null))
+        compose.onNodeWithContentDescription(str(R.string.translate_bar__insert_cd)).assertIsEnabled().performClick()
+        assertEquals(listOf("insert"), calls)
+    }
+
+    @Test fun aPendingInsertShowsProgressOnTheCheckButton() {
+        show(open(preview = null, inFlight = true).copy(commitPending = true))
+        compose.onNodeWithContentDescription(str(R.string.translate_bar__insert_pending_cd))
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+        compose.onNodeWithContentDescription(str(R.string.translate_bar__insert_cd)).assertDoesNotExist()
+        // One indicator, on ✓: the preview line's in-flight indicator steps aside.
+        compose.onNodeWithContentDescription(str(R.string.translate_bar__translating_cd)).assertDoesNotExist()
     }
 }

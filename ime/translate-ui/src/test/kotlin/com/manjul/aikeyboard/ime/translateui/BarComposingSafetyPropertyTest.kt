@@ -25,10 +25,10 @@ import kotlin.random.Random
 import kotlin.test.fail
 
 /**
- * Review Focus 1 and PRD FR-13 AC1/AC2 for the whole bar: random sequences of bar keys, swaps, inserts, undos,
- * closes, mode switches, host edits and cursor moves, policy restrictions and field changes, with engine responses
- * delayed 0–2,000 ms (outliving cancellation for half the seeds) and random engine failures, in preview and live
- * mode. No host character may ever be deleted or changed by the bar, and the engine never has more than one request
+ * Review Focus 1 and PRD FR-13 AC1/AC2 for the whole bar: random sequences of bar keys, swaps, inserts (also while a
+ * commit waits for its translation), undos, closes, mode switches, host edits and cursor moves, policy restrictions
+ * and field changes, with engine responses delayed 0–2,000 ms (outliving cancellation for half the seeds) and random
+ * engine failures, in preview and live mode. No host character may ever be deleted or changed by the bar, and the engine never has more than one request
  * in flight. A failure names the seed and the steps to replay.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -82,7 +82,7 @@ class BarComposingSafetyPropertyTest {
     /** One random step; returns its name (no text) for the failure message. */
     private fun TestScope.step(random: Random, rig: BarRig): String {
         val c = rig.controller
-        return when (random.nextInt(27)) {
+        return when (random.nextInt(28)) {
             0, 1, 2 -> "type".also { c.buffer.type(word(random, maxLength = 4)) }
             3 -> "backspace".also { c.buffer.backspace() }
             4 -> "paste".also { c.buffer.paste(word(random, maxLength = 8)) }
@@ -121,6 +121,16 @@ class BarComposingSafetyPropertyTest {
             19 -> "deliverOne".also { rig.deliverOne() }
             20 -> "deliverDue".also { rig.editor.deliverDue(rig::forward) }
             21 -> "retry".also { c.retry() }
+            // Enter again while a commit waits for its translation; without one, a key and Enter make one first.
+            24 -> "insertWhilePending".also {
+                val pending = (c.ui.value as? BarUiState.Open)?.commitPending == true
+                if (!pending) {
+                    c.buffer.type(word(random, maxLength = 4))
+                    runCurrent()
+                    c.insert()
+                }
+                c.insert()
+            }
             // Long enough for the debounce and the slowest response, so inserts and undos find a preview.
             else -> "settle".also { advanceTimeBy(DEBOUNCE_MS + MAX_ENGINE_DELAY_MS + 1) }
         }.also { runCurrent() }

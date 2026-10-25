@@ -135,7 +135,11 @@ class TranslateBarControllerTest {
         delays = { delayMs },
         supports = { support },
         results = { req ->
-            val text = if (req.text == "hello" && req.target == Lang("es")) "hola" else "<${req.target}>${req.text}"
+            val text = when {
+                req.text == "hello" && req.target == Lang("es") -> "hola"
+                req.text == "blank" -> ""
+                else -> "<${req.target}>${req.text}"
+            }
             fail?.let { TranslateResult.Failed(it) } ?: TranslateResult.Ok(text, req.source!!, EngineId.MLKIT)
         },
     )
@@ -213,22 +217,22 @@ class TranslateBarControllerTest {
         rig.checker.assertSafe()
     }
 
-    @Test fun `insert does nothing while the preview is stale or missing`() = runTest {
+    @Test fun `insert on an empty bar does nothing and a stale preview is never written`() = runTest {
         val rig = rig()
         rig.controller.open()
         runCurrent()
         rig.controller.insert()
-        rig.controller.buffer.type("hello")
         runCurrent()
-        rig.controller.insert()
-        advanceTimeBy(DEBOUNCE + 1)
-        runCurrent()
+        assertFalse(rig.open.commitPending)
+        assertTrue(rig.engine.calls.isEmpty())
+        typed(rig)
         // A newer key makes the preview stale until its own translation arrives.
         rig.controller.buffer.type("x")
         runCurrent()
         rig.controller.insert()
         assertEquals("Hi ", rig.editor.text)
         assertTrue(rig.named(EventCatalog.TRANSLATE_DONE).isEmpty())
+        assertTrue(rig.open.commitPending)
     }
 
     @Test fun `first_translate is logged once, only when the app says it is the first`() = runTest {
@@ -384,9 +388,11 @@ class TranslateBarControllerTest {
         )
         rig.controller.download()
         assertEquals(listOf(BarRig.EN_ES), rig.downloads)
-        // A stale preview is never inserted.
+        // A stale preview is never inserted; the request Enter sends fails again and nothing is written.
         rig.controller.insert()
+        runCurrent()
         assertEquals("Hi ", rig.editor.text)
+        assertFalse(rig.open.commitPending)
     }
 
     @Test fun `offline after a good preview keeps it and shows the offline chip`() = runTest {
@@ -403,13 +409,16 @@ class TranslateBarControllerTest {
         rig.controller.openOfflineLanguages()
         assertEquals(1, rig.offlineOpened)
         rig.controller.insert()
+        runCurrent()
         assertEquals("Hi ", rig.editor.text)
 
+        // The failed Enter is not remembered: a later good preview waits for the next Enter.
         fail = null
         rig.controller.retry()
         runCurrent()
         assertEquals("<es>hello!", rig.open.preview)
         assertEquals(BarStatus.Ok, rig.open.status)
+        assertEquals("Hi ", rig.editor.text)
     }
 
     @Test fun `translate_preview is sampled`() = runTest {
@@ -541,7 +550,8 @@ class TranslateBarControllerTest {
         assertEquals("Hi ", rig.editor.text)
     }
 
-    @Test fun `enter before the debounce translates now and the next enter commits`() = runTest {
+    @Test fun `enter before the debounce commits the translation once when it arrives, and undo works`() = runTest {
+        delayMs = 300
         val rig = rig()
         rig.controller.open()
         runCurrent()
@@ -550,16 +560,223 @@ class TranslateBarControllerTest {
         rig.controller.insert()
         runCurrent()
         assertEquals("Hi ", rig.editor.text)
+        assertTrue(rig.open.commitPending)
+        // Sent now, not after the debounce.
         assertEquals(listOf("hello"), rig.engine.calls.map { it.text })
-        assertEquals("hola", rig.open.preview)
-        // The debounced request for the same text is not sent again.
-        advanceTimeBy(DEBOUNCE + 1)
+        advanceTimeBy(delayMs + 1)
+        runCurrent()
+        assertEquals("Hi hola", rig.editor.text)
+        assertEquals("", rig.controller.buffer.text.value)
+        assertFalse(rig.open.commitPending)
+        assertTrue(rig.open.undoAvailable)
+        assertEquals(1, rig.named(EventCatalog.TRANSLATE_DONE).size)
+        assertEquals(1, rig.named(EventCatalog.FIRST_TRANSLATE).size)
+        // The debounced request for the same text is not sent again, and nothing is written twice.
+        advanceTimeBy(DEBOUNCE + delayMs + 1)
         runCurrent()
         assertEquals(1, rig.engine.calls.size)
+        assertEquals("Hi hola", rig.editor.text)
+        rig.deliver()
+        rig.controller.undo()
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertEquals("hello", rig.controller.buffer.text.value)
+        rig.checker.assertSafe()
+    }
+
+    @Test fun `typing after enter and before the result writes nothing`() = runTest {
+        delayMs = 300
+        val rig = rig()
+        rig.controller.open()
+        runCurrent()
+        rig.controller.buffer.type("hello")
+        runCurrent()
+        rig.controller.insert()
+        runCurrent()
+        rig.controller.buffer.type("!")
+        runCurrent()
+        assertFalse(rig.open.commitPending)
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertEquals("hello!", rig.open.input)
+        assertEquals("<es>hello!", rig.open.preview)
+        assertTrue(rig.named(EventCatalog.TRANSLATE_DONE).isEmpty())
+    }
+
+    @Test fun `a failure after enter writes nothing and shows the status chip`() = runTest {
+        delayMs = 300
+        val rig = rig()
+        typed(rig)
+        fail = FailKind.OFFLINE
+        rig.controller.buffer.type("!")
+        runCurrent()
+        rig.controller.insert()
+        runCurrent()
+        assertTrue(rig.open.commitPending)
+        advanceTimeBy(delayMs + 1)
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertFalse(rig.open.commitPending)
+        assertEquals(BarStatus.Offline, rig.open.status)
+        assertEquals("hola", rig.open.preview)
+        fail = null
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertTrue(rig.named(EventCatalog.TRANSLATE_DONE).isEmpty())
+    }
+
+    @Test fun `a sensitive field after enter writes nothing and drops the late result`() = runTest {
+        delayMs = 1_000
+        val rig = rig()
+        rig.controller.open()
+        runCurrent()
+        rig.controller.buffer.type("hello")
+        runCurrent()
+        rig.controller.insert()
+        advanceTimeBy(500)
+        runCurrent()
+        assertEquals(1, rig.engine.inFlight)
+        rig.decision = BarRig.PASSWORD
+        rig.controller.onPolicyRestricted(BarRig.PASSWORD)
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(BarUiState.Hidden, rig.controller.ui.value)
+        assertEquals("Hi ", rig.editor.text)
+        assertEquals(0, rig.cache.size)
+        rig.decision = PolicyDecision.Unrestricted
+        rig.controller.open()
+        runCurrent()
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertNull(rig.open.preview)
+        assertFalse(rig.open.commitPending)
+        assertEquals("Hi ", rig.editor.text)
+        assertTrue(rig.named(EventCatalog.TRANSLATE_DONE).isEmpty())
+    }
+
+    @Test fun `a double enter while pending still commits exactly once`() = runTest {
+        delayMs = 300
+        val rig = rig()
+        rig.controller.open()
+        runCurrent()
+        rig.controller.buffer.type("hello")
+        runCurrent()
+        rig.controller.insert()
+        rig.controller.insert()
+        runCurrent()
+        rig.controller.insert()
+        advanceTimeBy(delayMs + 1)
+        runCurrent()
+        rig.controller.insert()
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals("Hi hola", rig.editor.text)
+        assertEquals(1, rig.engine.calls.size)
+        assertEquals(1, rig.named(EventCatalog.TRANSLATE_DONE).size)
+        assertEquals(1, rig.engine.maxInFlight)
+        rig.checker.assertSafe()
+    }
+
+    @Test fun `a generation bump after enter writes nothing`() = runTest {
+        delayMs = 1_000
+        val rig = rig()
+        rig.controller.open()
+        runCurrent()
+        rig.controller.buffer.type("hello")
+        runCurrent()
+        rig.controller.insert()
+        advanceTimeBy(500)
+        runCurrent()
+        rig.generation++
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertNull(rig.open.preview)
+        assertEquals("", rig.open.input)
+        assertFalse(rig.open.commitPending)
+    }
+
+    @Test fun `swap, mode change, close or a new field after enter write nothing`() = runTest {
+        delayMs = 300
+        val actions: List<Pair<String, (BarRig) -> Unit>> = listOf(
+            "swap" to { r -> r.controller.swapPair() },
+            // There and back, so no live preview composes in the host when the result lands.
+            "mode" to { r ->
+                r.controller.setMode(BarMode.LIVE)
+                r.controller.setMode(BarMode.PREVIEW)
+            },
+            "closeHidden" to { r -> r.controller.close(CloseReason.HIDDEN) },
+            "closeUser" to { r -> r.controller.close(CloseReason.USER) },
+            "field" to { r ->
+                r.generation++
+                r.controller.onFieldChanged()
+            },
+        )
+        for ((name, action) in actions) {
+            val rig = rig()
+            rig.controller.open()
+            runCurrent()
+            rig.controller.buffer.type("hello")
+            runCurrent()
+            rig.controller.insert()
+            runCurrent()
+            action(rig)
+            advanceTimeBy(2_000)
+            runCurrent()
+            if (!rig.controller.capturingInput) {
+                rig.controller.open()
+                runCurrent()
+                advanceTimeBy(2_000)
+                runCurrent()
+            }
+            assertEquals("Hi ", rig.editor.text, name)
+            assertFalse(rig.open.commitPending, name)
+            assertTrue(rig.named(EventCatalog.TRANSLATE_DONE).isEmpty(), name)
+        }
+    }
+
+    @Test fun `an empty translation is never written`() = runTest {
+        delayMs = 300
+        val rig = rig()
+        rig.controller.open()
+        runCurrent()
+        rig.controller.buffer.type("blank")
+        runCurrent()
+        rig.controller.insert()
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertFalse(rig.open.commitPending)
+        rig.controller.insert()
+        runCurrent()
+        assertEquals("Hi ", rig.editor.text)
+        assertTrue(rig.named(EventCatalog.TRANSLATE_DONE).isEmpty())
+    }
+
+    @Test fun `live mode commits our composing span when the result lands after enter`() = runTest {
+        delayMs = 300
+        val rig = rig()
+        rig.mode = BarMode.LIVE
+        typed(rig)
+        rig.deliver()
+        assertEquals("Hi hola", rig.editor.text)
+        rig.controller.buffer.type("!")
+        runCurrent()
         rig.controller.insert()
         runCurrent()
         assertEquals("Hi hola", rig.editor.text)
+        advanceTimeBy(delayMs + 1)
+        runCurrent()
+        assertEquals("Hi <es>hello!", rig.editor.text)
+        assertEquals(-1, rig.editor.composingStart)
+        assertEquals("", rig.controller.buffer.text.value)
         assertEquals(1, rig.named(EventCatalog.TRANSLATE_DONE).size)
+        rig.deliver()
+        rig.controller.close(CloseReason.USER)
+        assertEquals("Hi <es>hello!", rig.editor.text)
+        rig.checker.assertSafe()
     }
 
     @Test fun `enter while the same text is at the engine does not send it again`() = runTest {
@@ -576,7 +793,7 @@ class TranslateBarControllerTest {
         advanceTimeBy(delayMs)
         runCurrent()
         assertEquals(listOf("hello", "hello!"), rig.engine.calls.map { it.text })
-        assertEquals("Hi ", rig.editor.text)
+        assertEquals("Hi <es>hello!", rig.editor.text)
     }
 
     @Test fun `undo in live mode removes our insert, not the preview typed since`() = runTest {

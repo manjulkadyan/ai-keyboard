@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,9 +32,9 @@ import androidx.compose.ui.unit.dp
 
 /**
  * The open Translate bar: pair chip with swap, undo chip and close on top; the buffer line; the preview line with
- * the in-flight indicator and ✓; the status chip when there is one. Colors come from [LocalContentColor] (the
- * smartbar theme), as in the voice panel. Preview changes are announced politely for TalkBack. Buffer and preview
- * are user content: never logged.
+ * the in-flight indicator and ✓ (a progress ring while a ✓ waits for its translation); the status chip when there
+ * is one. Colors come from [LocalContentColor] (the smartbar theme), as in the voice panel. Preview changes are
+ * announced politely for TalkBack. Buffer and preview are user content: never logged.
  */
 @Composable
 fun TranslateBar(
@@ -65,19 +66,25 @@ fun TranslateBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PreviewLine(state.preview, Modifier.weight(1f))
-            if (state.inFlight) {
-                val translating = stringResource(R.string.translate_bar__translating_cd)
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp).semantics { contentDescription = translating },
-                    color = LocalContentColor.current,
-                    strokeWidth = 2.dp,
-                )
+            if (state.commitPending) {
+                // ✓ came before the translation: it is inserted when it arrives. One indicator, on ✓.
+                PendingInsertButton()
+            } else {
+                if (state.inFlight) {
+                    val translating = stringResource(R.string.translate_bar__translating_cd)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp).semantics { contentDescription = translating },
+                        color = LocalContentColor.current,
+                        strokeWidth = 2.dp,
+                    )
+                }
+                // Enabled before the preview arrives too: the controller then inserts it on arrival.
+                GlyphButton(
+                    label = stringResource(R.string.translate_bar__insert_cd),
+                    onClick = onInsert,
+                    enabled = state.input.isNotBlank(),
+                ) { checkGlyph(it) }
             }
-            GlyphButton(
-                label = stringResource(R.string.translate_bar__insert_cd),
-                onClick = onInsert,
-                enabled = !state.preview.isNullOrEmpty(),
-            ) { checkGlyph(it) }
         }
         BarStatusChip(
             status = state.status,
@@ -110,6 +117,23 @@ private fun BufferLine(input: String) {
         maxLines = 1,
         overflow = if (empty) TextOverflow.Ellipsis else TextOverflow.StartEllipsis,
     )
+}
+
+/** The ✓ button while it waits for the translation to insert: disabled, with a small progress ring for the check. */
+@Composable
+private fun PendingInsertButton() {
+    val label = stringResource(R.string.translate_bar__insert_pending_cd)
+    IconButton(
+        onClick = {},
+        enabled = false,
+        modifier = Modifier.semantics { contentDescription = label },
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            color = LocalContentColor.current,
+            strokeWidth = 2.dp,
+        )
+    }
 }
 
 /** The latest good translation. A polite live region, so TalkBack reads a new preview after what it is saying. */

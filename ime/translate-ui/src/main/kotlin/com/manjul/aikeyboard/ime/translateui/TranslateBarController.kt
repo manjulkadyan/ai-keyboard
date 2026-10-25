@@ -48,6 +48,14 @@ import kotlinx.coroutines.launch
  * and the field [generation] taken when the bar opened. A result is used only if both still hold and its sequence
  * number is the latest ([TranslatePipeline]); otherwise the bar resets and the result is dropped.
  *
+ * ✓ or Enter before the preview of the buffer is ready sets a pending commit ([BarUiState.Open.commitPending]) and
+ * sends the buffer at once: the translation is written when it arrives, exactly as [insert] would write it. Typing or
+ * editing the buffer, a swap, a mode change, any close, a field change or generation bump, a policy restriction or a
+ * failed request cancels it first, and nothing is written. An empty translation is never written.
+ *
+ * Analytics: `translate_done.offline` is true when the translation ran without network, i.e. on the on-device
+ * engine ([EngineId.MLKIT]); it does not say whether the device had connectivity.
+ *
  * @param pair the shared language pair, read on [open]; [swapPair] reports the new pair through [onPairChange].
  * @param mode the bar mode, read on [open]; [setMode] reports the new mode through [onModeChange].
  * @param downloaded the languages already on the device, for the download size of the "Download" chip.
@@ -118,6 +126,13 @@ class TranslateBarController(
     /** Counts sensitive closes, so a request that spans one can drop what the router cached meanwhile. */
     private var sensitiveCloses = 0
 
+    /** ✓ or Enter came before the translation of this buffer text, pair and field: commit it when it arrives. */
+    private class Pending(val source: String, val pair: LangPair, val generation: Int) {
+        override fun toString(): String = "Pending(chars=${source.length}, pair=$pair)"
+    }
+
+    private var pending: Pending? = null
+
     /** The text of the request now at the engine, or null. User content: never logged. */
     private var requestText: String? = null
 
@@ -140,6 +155,8 @@ class TranslateBarController(
         currentMode = mode()
         bufferJob = scope.launch {
             buffer.text.collect { text ->
+                // Typing or editing after Enter: the user is not done, so nothing is written.
+                if (pending?.source != text) pending = null
                 pipeline.onInput(text)
                 refresh()
             }
@@ -163,21 +180,36 @@ class TranslateBarController(
 
     /**
      * ✓ or Enter: commits the latest good preview once. Without a preview of exactly the buffer (Enter before the
-     * debounce, or a failed request) nothing is written; the buffer is sent for translation now instead of after the
-     * debounce, so the next ✓ can commit it.
+     * debounce, or after a failed request) nothing is written yet: the commit becomes pending and the buffer is sent
+     * for translation now instead of after the debounce; its result is committed when it arrives (see the class
+     * doc for what cancels it). Another ✓ while pending changes nothing.
      */
     fun insert() {
         if (!open || !live()) return
         val source = buffer.text.value
         val state = pipeline.state.value
-        val g = good
+        val g = applied(state) ?: good
         // Only a preview of exactly what is in the buffer now, for the pair and field shown now.
-        if (g == null || g.source != source || g.pair != currentPair || g.generation != openGeneration ||
-            state.output != g.text
+        if (g != null && g.source == source && g.pair == currentPair && g.generation == openGeneration &&
+            state.output == g.text
         ) {
-            if (source.isNotBlank() && !(state.inFlight && requestText == source)) pipeline.retry()
+            pending = null
+            // An empty translation is never written.
+            if (g.text.isNotEmpty()) commit(g, source)
             return
         }
+        if (source.isBlank()) return
+        if (pending?.let { it.source == source && it.pair == currentPair && it.generation == openGeneration } == true) {
+            return
+        }
+        pending = Pending(source, currentPair, openGeneration)
+        if (!(state.inFlight && requestText == source)) pipeline.retry()
+        refresh()
+    }
+
+    /** Writes [g], the translation of [source], records the undo and logs `translate_done`. */
+    private fun commit(g: Finished, source: String) {
+        pending = null
         // Each insert stands alone: never joined to an earlier one by deleting a space.
         span.startSession()
         span.commit(g.text)
@@ -185,6 +217,7 @@ class TranslateBarController(
         inserts++
         insertUpdatePending = true
         good = null
+        finished = null
         buffer.clear()
         pipeline.reset()
         analytics(
@@ -194,6 +227,7 @@ class TranslateBarController(
                 src = g.detected.tag,
                 tgt = g.pair.target.tag,
                 chars = source.length,
+                // Translated without network: the on-device engine.
                 offline = g.engine == EngineId.MLKIT,
             ),
         )
@@ -218,6 +252,7 @@ class TranslateBarController(
         val restore = ownWrite.undo()
         insertUpdatePending = false
         if (restore != null) {
+            pending = null
             buffer.replace(restore)
         } else if (currentMode == BarMode.LIVE) {
             // Nothing was undone: the live preview comes back. (After a removal it waits for the next preview, so
@@ -230,6 +265,7 @@ class TranslateBarController(
     fun swapPair() {
         if (!open) return
         currentPair = currentPair.swapped()
+        pending = null
         onPairChange(currentPair)
         pipeline.retry()
         refresh()
@@ -238,6 +274,7 @@ class TranslateBarController(
     fun setMode(m: BarMode) {
         if (m == currentMode) return
         currentMode = m
+        pending = null
         onModeChange(m)
         if (open && live()) {
             if (m == BarMode.PREVIEW) {
@@ -289,6 +326,7 @@ class TranslateBarController(
         span.discard()
         ownWrite.invalidate()
         insertUpdatePending = false
+        pending = null
         good = null
         finished = null
         openGeneration = generation()
@@ -322,6 +360,7 @@ class TranslateBarController(
         bufferJob = null
         undoJob?.cancel()
         undoJob = null
+        pending = null
         good = null
         finished = null
         if (clearBuffer) buffer.clear()
@@ -363,8 +402,12 @@ class TranslateBarController(
                     )
                 }
             }
-            is TranslateResult.Failed -> if (result.kind != FailKind.POLICY) {
-                analytics(EventCatalog.translateError(TranslateSurface.BAR, result.kind.toReason()))
+            is TranslateResult.Failed -> {
+                // The translation Enter waits for failed: nothing is written, the status chip says why.
+                if (pending?.source == text) pending = null
+                if (result.kind != FailKind.POLICY) {
+                    analytics(EventCatalog.translateError(TranslateSurface.BAR, result.kind.toReason()))
+                }
             }
         }
         return result
@@ -377,13 +420,12 @@ class TranslateBarController(
 
     private fun onPipeline(state: PipelineState) {
         if (!open) return
-        val f = finished
-        if (state.status == BarStatus.Ok && !state.inFlight && f != null && f.seq == state.seq &&
-            f.text == state.output && f.generation == openGeneration
-        ) {
+        val f = applied(state)
+        if (f != null) {
             if (good !== f) {
                 good = f
                 if (currentMode == BarMode.LIVE && f.pair == currentPair && live()) span.update(f.text)
+                commitPending(f)
             }
         } else if (state.output == null) {
             good = null
@@ -391,6 +433,27 @@ class TranslateBarController(
             if (currentMode == BarMode.LIVE) span.discard()
         }
         refresh()
+    }
+
+    /** The latest result if the pipeline applied it (latest seq, no failure since) for this field, else null. */
+    private fun applied(state: PipelineState): Finished? = finished?.takeIf {
+        state.status == BarStatus.Ok && !state.inFlight && it.seq == state.seq && it.text == state.output &&
+            it.generation == openGeneration
+    }
+
+    /** The translation a pending ✓ waits for arrived: commit it if it is still for this buffer, pair and field. */
+    private fun commitPending(f: Finished) {
+        val p = pending ?: return
+        if (!open || !live()) return
+        val source = buffer.text.value
+        if (f.source != p.source || f.source != source || f.pair != p.pair || f.pair != currentPair ||
+            f.generation != p.generation || f.generation != openGeneration
+        ) {
+            return
+        }
+        pending = null
+        // An empty translation is never written.
+        if (f.text.isNotEmpty()) commit(f, source)
     }
 
     private fun matchingGood(): Finished? =
@@ -411,6 +474,7 @@ class TranslateBarController(
             undoAvailable = ownWrite.available,
             inFlight = state.inFlight,
             undoId = inserts,
+            commitPending = pending != null,
         )
     }
 

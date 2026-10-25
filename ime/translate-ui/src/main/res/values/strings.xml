@@ -16,6 +16,8 @@
     <string name="translate_bar__insert" tools:ignore="MissingTranslation">Insert</string>
     <!-- TalkBack label of the check-mark button. -->
     <string name="translate_bar__insert_cd" tools:ignore="MissingTranslation">Insert translation</string>
+    <!-- TalkBack label of the check-mark button while it waits for the translation to insert it. -->
+    <string name="translate_bar__insert_pending_cd" tools:ignore="MissingTranslation">Inserting when the translation is ready</string>
     <!-- Chip shown for a few seconds after inserting; removes the inserted translation again. -->
     <string name="translate_bar__undo" tools:ignore="MissingTranslation">Undo</string>
     <!-- TalkBack label of the undo chip. -->
