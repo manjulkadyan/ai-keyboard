@@ -35,6 +35,13 @@ object EventCatalog {
     const val PRIVACY_PRIVATE_APP_ADD = "privacy_private_app_add"
     const val PACK_DOWNLOAD_START = "pack_download_start"
     const val PACK_DOWNLOAD_DONE = "pack_download_done"
+    const val TRANSLATE_DONE = "translate_done"
+    const val FIRST_TRANSLATE = "first_translate"
+    const val TRANSLATE_ERROR = "translate_error"
+    const val TRANSLATE_PREVIEW = "translate_preview"
+    const val PROCESS_TEXT_OPEN = "process_text_open"
+    const val PROCESS_TEXT_REPLACE = "process_text_replace"
+    const val DEEPLINK_UNKNOWN = "deeplink_unknown"
 
     val paramRegistry: Map<String, Set<String>> = mapOf(
         ONBOARDING_START to setOf("source"),
@@ -52,6 +59,13 @@ object EventCatalog {
         PRIVACY_PRIVATE_APP_ADD to emptySet(),
         PACK_DOWNLOAD_START to setOf("lang", "kind", "size_bucket"),
         PACK_DOWNLOAD_DONE to setOf("lang", "kind", "size_bucket", "result"),
+        TRANSLATE_DONE to setOf("surface", "engine", "src", "tgt", "chars_bucket", "offline"),
+        FIRST_TRANSLATE to setOf("surface"),
+        TRANSLATE_ERROR to setOf("surface", "reason"),
+        TRANSLATE_PREVIEW to setOf("surface", "engine", "src", "tgt"),
+        PROCESS_TEXT_OPEN to setOf("action", "editable"),
+        PROCESS_TEXT_REPLACE to emptySet(),
+        DEEPLINK_UNKNOWN to emptySet(),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -117,4 +131,47 @@ object EventCatalog {
         "size_bucket" to Buckets.megabytes(bytes),
         "result" to result.value,
     )
+
+    /**
+     * A translation committed or shown as final (PRD §12). [src]/[tgt] are BCP-47 tags; [chars] is the
+     * source length and is only reported as a bucket. No param can carry the text itself.
+     */
+    fun translateDone(
+        surface: TranslateSurface,
+        engine: TranslateEngineParam,
+        src: String,
+        tgt: String,
+        chars: Int,
+        offline: Boolean,
+    ) = event(
+        TRANSLATE_DONE,
+        "surface" to surface.value,
+        "engine" to engine.value,
+        "src" to tag(src),
+        "tgt" to tag(tgt),
+        "chars_bucket" to Buckets.chars(chars),
+        "offline" to offline,
+    )
+
+    fun firstTranslate(surface: TranslateSurface) = event(FIRST_TRANSLATE, "surface" to surface.value)
+
+    fun translateError(surface: TranslateSurface, reason: TranslateErrorReason) =
+        event(TRANSLATE_ERROR, "surface" to surface.value, "reason" to reason.value)
+
+    /** One bar preview (PRD FR-13 AC7). Callers sample it at 1 % with [RateSampler]; the catalog does not. */
+    fun translatePreview(surface: TranslateSurface, engine: TranslateEngineParam, src: String, tgt: String) = event(
+        TRANSLATE_PREVIEW,
+        "surface" to surface.value,
+        "engine" to engine.value,
+        "src" to tag(src),
+        "tgt" to tag(tgt),
+    )
+
+    fun processTextOpen(action: ProcessTextAction, editable: Boolean) =
+        event(PROCESS_TEXT_OPEN, "action" to action.value, "editable" to editable)
+
+    fun processTextReplace() = event(PROCESS_TEXT_REPLACE)
+
+    /** A deep link with an unknown route (TRD §4.3.4); the URI is never sent. */
+    fun deeplinkUnknown() = event(DEEPLINK_UNKNOWN)
 }

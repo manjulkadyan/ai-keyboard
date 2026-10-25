@@ -73,7 +73,12 @@ class FeatureSettingsStore(
     suspend fun update(transform: (FeatureSettings) -> FeatureSettings) {
         val written = dataStore.updateData { old ->
             val new = transform(old)
-            new.copy(voiceSilenceMs = new.voiceSilenceMs.coerceIn(SILENCE_MS_MIN, SILENCE_MS_MAX))
+            new.copy(
+                voiceSilenceMs = new.voiceSilenceMs.coerceIn(SILENCE_MS_MIN, SILENCE_MS_MAX),
+                firstTranslateAt = new.firstTranslateAt.coerceAtLeast(0L),
+                enableKeyboardCardShownAt = new.enableKeyboardCardShownAt.coerceAtLeast(0L),
+                lastSourceLang = new.lastSourceLang?.takeIf { it.isNotBlank() },
+            )
         }
         // Read-your-writes for [current]; the collector above catches up with the same value.
         cached.value = written

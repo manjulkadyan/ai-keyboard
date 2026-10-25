@@ -25,6 +25,16 @@ object Buckets {
         else -> "51+"
     }
 
+    /** Text length in chars (translations); the length itself is never sent. */
+    fun chars(n: Int): String = when {
+        n <= 0 -> "0"
+        n <= 20 -> "1-20"
+        n <= 50 -> "21-50"
+        n <= 200 -> "51-200"
+        n <= 1000 -> "201-1000"
+        else -> "1001+"
+    }
+
     /** Download size in decimal megabytes. */
     fun megabytes(bytes: Long): String = when {
         bytes < 50_000_000 -> "0-50"

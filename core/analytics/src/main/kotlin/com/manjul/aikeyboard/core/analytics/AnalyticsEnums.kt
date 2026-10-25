@@ -22,7 +22,7 @@ enum class UnavailableReason(val value: String) {
     NO_SERVICE("no_service"), LANG_UNSUPPORTED("lang_unsupported"), OFFLINE_NO_MODEL("offline_no_model")
 }
 
-/** Kind of downloadable pack; only [WHISPER] is downloaded so far. */
+/** Kind of downloadable pack; [WHISPER] and [TRANSLATE] (ML Kit models) are downloaded so far. */
 enum class PackKind(val value: String) {
     TRANSLATE("translate"), DICT("dict"), TRANSLIT("translit"), WHISPER("whisper")
 }
@@ -30,3 +30,17 @@ enum class PackKind(val value: String) {
 enum class PackResult(val value: String) {
     OK("ok"), FAILED("failed"), HASH_MISMATCH("hash_mismatch"), CANCELLED("cancelled")
 }
+
+/** Where a translation happened; conversation and camera arrive in S5. */
+enum class TranslateSurface(val value: String) {
+    BAR("bar"), TRANSLATOR("translator"), PROCESS_TEXT("process_text")
+}
+
+enum class TranslateEngineParam(val value: String) { ON_DEVICE("on_device"), CLOUD("cloud") }
+
+/** PRD §12 reasons plus `other` for engine-internal errors and unsupported pairs (plan decision 9). */
+enum class TranslateErrorReason(val value: String) {
+    NO_PACK("no_pack"), TIMEOUT("timeout"), NET("net"), QUOTA("quota"), OTHER("other")
+}
+
+enum class ProcessTextAction(val value: String) { PROCESS_TEXT("process_text"), SEND("send") }

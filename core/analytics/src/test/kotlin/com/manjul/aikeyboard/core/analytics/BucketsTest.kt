@@ -37,4 +37,12 @@ class BucketsTest {
         )
         cases.forEach { (b, bucket) -> assertEquals(bucket, Buckets.megabytes(b), "megabytes($b)") }
     }
+
+    @Test fun chars() {
+        val cases = mapOf(
+            -1 to "0", 0 to "0", 1 to "1-20", 20 to "1-20", 21 to "21-50", 50 to "21-50", 51 to "51-200",
+            200 to "51-200", 201 to "201-1000", 1000 to "201-1000", 1001 to "1001+", Int.MAX_VALUE to "1001+",
+        )
+        cases.forEach { (n, b) -> assertEquals(b, Buckets.chars(n), "chars($n)") }
+    }
 }

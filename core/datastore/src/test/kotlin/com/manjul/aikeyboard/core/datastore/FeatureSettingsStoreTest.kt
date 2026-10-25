@@ -15,6 +15,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -30,6 +31,15 @@ class FeatureSettingsStoreTest {
         assertEquals(2000, s.voiceSilenceMs)
         assertTrue(s.spokenPunctuation)
         assertNull(s.translatePair)
+        assertEquals(BarMode.PREVIEW, s.barMode)
+        assertFalse(s.barLiveComposingSet)
+        assertTrue(s.translateWifiOnly)
+        assertFalse(s.cloudTranslateOptIn)
+        assertTrue(s.translateHistoryEnabled)
+        assertEquals(0L, s.firstTranslateAt)
+        assertNull(s.lastSourceLang)
+        assertEquals(0L, s.enableKeyboardCardShownAt)
+        assertEquals(emptySet(), s.translateStopped)
     }
 
     @Test
@@ -49,6 +59,49 @@ class FeatureSettingsStoreTest {
         // What is on disk decodes to the same value.
         val file = File(app.filesDir, "datastore/feature_settings.json")
         assertEquals(expected, file.inputStream().use { FeatureSettingsSerializer.readFrom(it) })
+    }
+
+    @Test
+    fun `translate fields round-trip`() = runTest {
+        val expected = FeatureSettings(
+            translatePair = LanguagePair("ur", "en"),
+            barMode = BarMode.LIVE,
+            barLiveComposingSet = true,
+            translateWifiOnly = false,
+            cloudTranslateOptIn = true,
+            translateHistoryEnabled = false,
+            firstTranslateAt = 1_700_000_000_000L,
+            lastSourceLang = "hi",
+            enableKeyboardCardShownAt = 1_700_000_000_001L,
+            translateStopped = setOf("ur", "bn"),
+        )
+        val store = FeatureSettingsStore(app)
+        store.update { expected }
+        assertEquals(expected, store.flow.first())
+        val file = File(app.filesDir, "datastore/feature_settings.json")
+        assertEquals(expected, file.inputStream().use { FeatureSettingsSerializer.readFrom(it) })
+    }
+
+    @Test
+    fun `sprint 1 files without the translate keys load with defaults`() = runTest {
+        val old = """{"onboardingDone":true,"translatePair":{"source":"en","target":"ur"},"whisperWifiOnly":false}"""
+        val decoded = FeatureSettingsSerializer.readFrom(old.byteInputStream())
+        assertEquals(
+            FeatureSettings(onboardingDone = true, translatePair = LanguagePair("en", "ur"), whisperWifiOnly = false),
+            decoded,
+        )
+    }
+
+    @Test
+    fun `translate fields are clamped on write`() = runTest {
+        val store = FeatureSettingsStore(app)
+        store.update {
+            it.copy(firstTranslateAt = -5L, enableKeyboardCardShownAt = -1L, lastSourceLang = "  ")
+        }
+        val s = store.flow.first()
+        assertEquals(0L, s.firstTranslateAt)
+        assertEquals(0L, s.enableKeyboardCardShownAt)
+        assertNull(s.lastSourceLang)
     }
 
     @Test
