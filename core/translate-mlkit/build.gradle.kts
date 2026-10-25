@@ -22,8 +22,13 @@ dependencies {
     api(libs.mlkit.translate)
     implementation(libs.mlkit.language.id)
     implementation(libs.kotlinx.coroutines.play.services)
+    // Offline packs (S2-packs): the model store's WorkManager job, settings and pack analytics
+    api(libs.androidx.work.runtime)
+    api(projects.core.datastore)
+    api(projects.core.analytics)
 
     testImplementation(testFixtures(projects.core.translate))
+    testImplementation(libs.androidx.work.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.junit4)
     testImplementation(libs.robolectric)
