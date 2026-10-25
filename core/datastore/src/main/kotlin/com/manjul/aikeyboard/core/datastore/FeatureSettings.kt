@@ -18,8 +18,6 @@ data class LanguagePair(val source: String, val target: String)
 data class FeatureSettings(
     val incognitoManual: Boolean = false,
     val privatePackages: Set<String> = emptySet(),
-    val smartbarPinned: List<String> = emptyList(),
-    val smartbarOrder: List<String> = emptyList(),
     val voiceEnginePreference: VoiceEnginePreference = VoiceEnginePreference.AUTO,
     val voiceSilenceMs: Int = 2000,
     val spokenPunctuation: Boolean = true,

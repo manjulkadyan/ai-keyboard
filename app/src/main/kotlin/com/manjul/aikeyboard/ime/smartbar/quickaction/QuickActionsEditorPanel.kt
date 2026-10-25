@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.fork.smartbar.ChipArrangement // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.smartbar.PinnedActions
 import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
 import com.manjul.aikeyboard.ime.text.key.KeyCode
 import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
@@ -94,6 +96,8 @@ fun QuickActionsEditorPanel() {
     var activeDragAction by remember { mutableStateOf<QuickAction?>(null) }
     var activeDragPosition by remember { mutableStateOf(IntOffset.Zero) }
     var activeDragSize by remember { mutableStateOf(IntSize.Zero) }
+    // FORK(S1-smartbar): set when a drop into the pinned (dynamic) actions was refused, to show the pin limit
+    var pinLimitHit by remember { mutableStateOf(false) }
 
     fun findItemForOffsetOrClosestInRow(offset: IntOffset): LazyGridItemInfo? {
         var closestItemInRow: LazyGridItemInfo? = null
@@ -155,7 +159,10 @@ fun QuickActionsEditorPanel() {
         val stickyActionIndex = indexOfStickyAction(item)
         val dynamicActionIndex = indexOfDynamicAction(item)
         val hiddenActionIndex = indexOfHiddenAction(item)
-        if (stickyActionIndex != ItemNotFound && stickyAction != NoopAction) {
+        // FORK(S1-smartbar): the sticky mic cannot be dragged
+        if (stickyActionIndex != ItemNotFound && PinnedActions.isMic(stickyAction)) {
+            return
+        } else if (stickyActionIndex != ItemNotFound && stickyAction != NoopAction) {
             activeDragAction = stickyAction
             stickyAction = DragMarkerAction
         } else if (dynamicActionIndex != ItemNotFound && dynamicActions[dynamicActionIndex] != NoopAction) {
@@ -179,7 +186,16 @@ fun QuickActionsEditorPanel() {
         val stickyActionIndex = indexOfStickyAction(item)
         val dynamicActionIndex = indexOfDynamicAction(item)
         val hiddenActionIndex = indexOfHiddenAction(item)
-        if (stickyActionIndex != ItemNotFound && stickyAction != DragMarkerAction) {
+        // FORK(S1-smartbar): nothing replaces the sticky mic, and a pin beyond the limit is refused (the tile
+        // stays where the marker is, so on drop it goes back where it came from)
+        if (stickyActionIndex != ItemNotFound && PinnedActions.isMic(stickyAction)) {
+            return
+        } else if (dynamicActionIndex != ItemNotFound && DragMarkerAction !in dynamicActions &&
+            !PinnedActions.canPin(dynamicActions, activeDragAction!!)
+        ) {
+            pinLimitHit = true
+            return
+        } else if (stickyActionIndex != ItemNotFound && stickyAction != DragMarkerAction) {
             if (stickyAction != NoopAction) {
                 dynamicActions.add(0, stickyAction)
             }
@@ -229,10 +245,12 @@ fun QuickActionsEditorPanel() {
     DisposableEffect(Unit) {
         onDispose {
             completeDragGestureAndCleanUp()
-            val newActionArrangement = QuickActionArrangement(
-                if (stickyAction != NoopAction && stickyAction != DragMarkerAction) stickyAction else null,
-                dynamicActions.filter { it != NoopAction && it != DragMarkerAction },
-                hiddenActions.filter { it != NoopAction && it != DragMarkerAction },
+            val newActionArrangement = PinnedActions.normalize( // FORK(S1-smartbar): mic sticky, at most 3 pins
+                QuickActionArrangement(
+                    if (stickyAction != NoopAction && stickyAction != DragMarkerAction) stickyAction else null,
+                    dynamicActions.filter { it != NoopAction && it != DragMarkerAction },
+                    hiddenActions.filter { it != NoopAction && it != DragMarkerAction },
+                ),
             )
             runBlocking {
                 prefs.smartbar.actionArrangement.set(newActionArrangement)
@@ -299,9 +317,16 @@ fun QuickActionsEditorPanel() {
                     )
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    val n = dynamicActions.count { it != NoopAction }
+                    // FORK(S1-smartbar): "Pinned (n/3)", plus the limit once a pin was refused
+                    val n = PinnedActions.pinnedCount(dynamicActions)
+                    val max = ChipArrangement.MAX_PINS
+                    val header = stringRes(R.string.quick_actions_editor__subheader_pinned, "n" to n, "max" to max)
                     Subheader(
-                        text = stringRes(R.string.quick_actions_editor__subheader_dynamic_actions, "n" to n),
+                        text = if (pinLimitHit) { // FORK(S1-smartbar)
+                            header + " · " + stringRes(R.string.quick_actions_editor__pin_limit, "max" to max)
+                        } else {
+                            header
+                        },
                     )
                 }
                 itemsIndexed(dynamicActions, key = { i, a -> keyOf(a) ?: i }) { _, action ->

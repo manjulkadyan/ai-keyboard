@@ -7,7 +7,10 @@ package com.manjul.aikeyboard.fork.smartbar
 
 import com.manjul.aikeyboard.ime.text.key.KeyCode
 
-/** Fork smartbar chips (PRD FR-20). Persisted by [name] in `FeatureSettings.smartbarPinned/Order`. */
+/**
+ * Fork smartbar chips (PRD FR-20). Not persisted themselves: the layout is upstream's
+ * `prefs.smartbar.actionArrangement`, keyed by [keyCode], with the pin rules in [PinnedActions].
+ */
 enum class ChipId {
     MIC, TRANSLATE, AI, EMOJI, CLIPBOARD, STICKERS, SETTINGS;
 
@@ -27,9 +30,6 @@ enum class ChipId {
 
         /** Chips with a handler this sprint. Translate and AI stay hidden; upstream has no stickers. */
         val registered: Set<ChipId> = setOf(MIC, EMOJI, CLIPBOARD, SETTINGS)
-
-        /** Parses persisted names, dropping unknown ones (e.g. written by a newer version). */
-        fun parse(names: List<String>): List<ChipId> = names.mapNotNull { n -> entries.firstOrNull { it.name == n } }
 
         fun forKeyCode(code: Int): ChipId? = entries.firstOrNull { it.keyCode == code }
     }

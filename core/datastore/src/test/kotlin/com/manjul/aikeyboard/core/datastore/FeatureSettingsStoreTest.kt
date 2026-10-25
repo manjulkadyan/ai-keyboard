@@ -37,7 +37,6 @@ class FeatureSettingsStoreTest {
         val expected = FeatureSettings(
             incognitoManual = true,
             privatePackages = setOf("a.b"),
-            smartbarPinned = listOf("x"),
             voiceEnginePreference = VoiceEnginePreference.WHISPER,
             translatePair = LanguagePair("en", "de"),
             onboardingStep = 3,
@@ -50,6 +49,14 @@ class FeatureSettingsStoreTest {
         // What is on disk decodes to the same value.
         val file = File(app.filesDir, "datastore/feature_settings.json")
         assertEquals(expected, file.inputStream().use { FeatureSettingsSerializer.readFrom(it) })
+    }
+
+    @Test
+    fun `files with the removed smartbar keys still decode`() = runTest {
+        // smartbarPinned/smartbarOrder were written by earlier builds; the smartbar layout lives in upstream prefs.
+        val old = """{"incognitoManual":true,"smartbarPinned":["EMOJI"],"smartbarOrder":["MIC","EMOJI"]}"""
+        val decoded = FeatureSettingsSerializer.readFrom(old.byteInputStream())
+        assertEquals(FeatureSettings(incognitoManual = true), decoded)
     }
 
     @Test

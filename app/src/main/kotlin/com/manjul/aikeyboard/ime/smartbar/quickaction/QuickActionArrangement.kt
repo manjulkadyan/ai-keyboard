@@ -16,6 +16,7 @@
 
 package com.manjul.aikeyboard.ime.smartbar.quickaction
 
+import com.manjul.aikeyboard.fork.smartbar.PinnedActions // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
 import com.manjul.aikeyboard.lib.io.DefaultJsonConfig
 import dev.patrickgold.jetpref.datastore.model.PreferenceSerializer
@@ -66,8 +67,8 @@ data class QuickActionArrangement(
 
     companion object {
         // FORK(S1-smartbar): Mic sticky, then Emoji, Clipboard and Settings (Translate and AI have no handler yet).
-        // The private-app action is last so it lands in the overflow panel. Upstream's other actions stay
-        // available through the actions editor.
+        // The private-app action is last so it lands in the overflow panel and does not count as one of the 3
+        // pins (PinnedActions). Upstream's other actions stay available through the actions editor.
         val Default = QuickActionArrangement(
             stickyAction = QuickAction.InsertKey(TextKeyData.VOICE_INPUT),
             dynamicActions = listOf(
@@ -104,7 +105,8 @@ data class QuickActionArrangement(
         }
 
         override fun deserialize(value: String): QuickActionArrangement {
-            return QuickActionJsonConfig.decodeFromString(value)
+            // FORK(S1-smartbar): mic sticky and at most 3 pins, also for arrangements saved before the rule
+            return PinnedActions.normalize(QuickActionJsonConfig.decodeFromString(value))
         }
     }
 }

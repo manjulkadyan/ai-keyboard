@@ -98,4 +98,8 @@
     <string name="voice_settings__cancel_base" tools:ignore="MissingTranslation">Cancel Base download</string>
     <string name="voice_settings__cancel_small" tools:ignore="MissingTranslation">Cancel Small download</string>
     <string name="voice_settings__wifi_only" tools:ignore="MissingTranslation">Download on Wi-Fi only</string>
+
+    <!-- Smartbar actions editor (PRD FR-07): the dynamic actions are the pinned chips, at most {max}. -->
+    <string name="quick_actions_editor__subheader_pinned" tools:ignore="MissingTranslation">Pinned ({n}/{max})</string>
+    <string name="quick_actions_editor__pin_limit" tools:ignore="MissingTranslation">Up to {max} pinned</string>
 </resources>

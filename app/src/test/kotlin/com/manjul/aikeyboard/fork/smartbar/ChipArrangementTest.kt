@@ -5,20 +5,10 @@
 
 package com.manjul.aikeyboard.fork.smartbar
 
-import android.app.Application
-import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.runTest
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
-import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import com.manjul.aikeyboard.fork.smartbar.ChipId.*
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], application = Application::class)
 class ChipArrangementTest {
     @Test
     fun `fourth pin is rejected and the list is unchanged`() {
@@ -66,20 +56,5 @@ class ChipArrangementTest {
         val order = listOf(MIC, EMOJI)
         assertEquals(order, ChipArrangement.reorder(order, 1, 5))
         assertEquals(order, ChipArrangement.reorder(order, -1, 1))
-    }
-
-    @Test
-    fun `order and pins persist through the settings store`() = runTest {
-        val store = FeatureSettingsStore(RuntimeEnvironment.getApplication(), UnconfinedTestDispatcher(testScheduler))
-        val order = listOf(MIC, EMOJI, CLIPBOARD, SETTINGS)
-        val pins = listOf(CLIPBOARD, EMOJI)
-        store.update { it.copy(smartbarOrder = order.map(ChipId::name), smartbarPinned = pins.map(ChipId::name)) }
-        assertEquals(order, ChipId.parse(store.current.smartbarOrder))
-        assertEquals(pins, ChipId.parse(store.current.smartbarPinned))
-    }
-
-    @Test
-    fun `parse drops unknown names`() {
-        assertEquals(listOf(EMOJI), ChipId.parse(listOf("GONE", "EMOJI")))
     }
 }
