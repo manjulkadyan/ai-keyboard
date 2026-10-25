@@ -69,6 +69,7 @@ class SpeechSession(
     private var sawSegment = false
     private var restarts = 0
     private var busyRetries = 0
+    private var reconnected = false
 
     private var capJob: Job? = null
     private var silenceJob: Job? = null
@@ -92,6 +93,7 @@ class SpeechSession(
         pendingPartial = null
         restarts = 0
         busyRetries = 0
+        reconnected = false
         _tapToResume.value = false
         _state.value = VoiceState.Starting
         capJob = scope.launch {
@@ -301,6 +303,16 @@ class SpeechSession(
                     fail(VoiceErrorKind.BUSY)
                 } else {
                     busyRetries++
+                    scheduleRestart(timings.busyDelayMs)
+                }
+            }
+            ERROR_SERVER_DISCONNECTED -> {
+                // The recognition service went away under us (often torn down as another client unbound it), not
+                // a network problem: reconnect once before telling the user.
+                if (reconnected) {
+                    fail(errorKind(code))
+                } else {
+                    reconnected = true
                     scheduleRestart(timings.busyDelayMs)
                 }
             }

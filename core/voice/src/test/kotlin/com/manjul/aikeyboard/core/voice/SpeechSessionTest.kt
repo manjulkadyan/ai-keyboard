@@ -193,6 +193,37 @@ class SpeechSessionTest {
         }
     }
 
+    @Test fun serverDisconnectReconnectsOnceThenFailsAsNetwork() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        r.l.onError(11)
+        assertTrue(r.engines[0].destroyed)
+        assertEquals(VoiceState.Starting, r.session.state.value)
+        advanceTimeBy(401)
+        assertEquals(2, r.engines.size)
+        r.l.onReady()
+        assertEquals(VoiceState.Listening(0f), r.session.state.value)
+        r.l.onError(11)
+        assertEquals(VoiceState.Error(VoiceErrorKind.NETWORK), r.session.state.value)
+        assertEquals(11, r.session.lastErrorCode)
+        advanceTimeBy(1000)
+        assertEquals(2, r.engines.size)
+    }
+
+    @Test fun serverDisconnectReconnectAllowanceResetsPerSession() = runSession {
+        val r = rig()
+        r.session.start("en", true)
+        runCurrent()
+        r.l.onError(11)
+        advanceTimeBy(401)
+        r.session.cancel()
+        r.session.start("en", true)
+        runCurrent()
+        r.l.onError(11)
+        assertEquals(VoiceState.Starting, r.session.state.value)
+    }
+
     @Test fun sessionCapCommitsPendingPartial() = runSession {
         val r = rig()
         r.session.output.test {

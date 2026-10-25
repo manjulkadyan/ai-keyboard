@@ -38,6 +38,14 @@ internal fun languageInstalled(lang: String, installed: Collection<String>): Boo
 private const val SUPPORT_CHECK_TIMEOUT_MS = 1_500L
 
 /**
+ * How long the support-check recognizer outlives its answer. Destroying it unbinds the system recognition
+ * service; when it is the last client the service shuts down, and a session recognizer created right after
+ * gets ERROR_SERVER_DISCONNECTED (seen on Pixel / Android 16). Holding it until the session has bound keeps the
+ * service up.
+ */
+private const val PROBE_RELEASE_DELAY_MS = 3_000L
+
+/**
  * Platform-backed capabilities. The whisper* answers come from the app (the model manager and the Whisper
  * language gate) and are false when not supplied.
  */
@@ -49,6 +57,9 @@ class PlatformRecognizerCapabilities(
 ) : RecognizerCapabilities {
     override val sdkInt: Int get() = Build.VERSION.SDK_INT
 
+    /** Languages the on-device recognizer reported as installed. Only positive answers: a model may be added later. */
+    private val supported = mutableSetOf<String>()
+
     override fun isRecognitionAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
     override fun isOnDeviceAvailable(): Boolean =
@@ -56,15 +67,26 @@ class PlatformRecognizerCapabilities(
 
     override suspend fun onDeviceSupports(lang: String): Boolean? {
         if (sdkInt < Build.VERSION_CODES.TIRAMISU) return null
-        return withTimeoutOrNull(SUPPORT_CHECK_TIMEOUT_MS) {
+        if (synchronized(supported) { lang in supported }) return true
+        val result = withTimeoutOrNull(SUPPORT_CHECK_TIMEOUT_MS) {
             suspendCancellableCoroutine { cont ->
                 // The recognizer must be created and used on the main thread.
                 mainHandler.post {
+                    if (!cont.isActive) return@post // timed out before the main thread got here
                     var recognizer: SpeechRecognizer? = null
                     runCatching {
                         val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
                         recognizer = r
-                        cont.invokeOnCancellation { mainHandler.post { r.destroy() } }
+                        // Every way out (answer, error, timeout) releases it late, and only once: a timeout is
+                        // followed by a session on this same service, and the answer may still arrive after it.
+                        var released = false
+                        val release = Runnable {
+                            if (!released) {
+                                released = true
+                                runCatching { r.destroy() }
+                            }
+                        }
+                        cont.invokeOnCancellation { mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS) }
                         val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
@@ -74,13 +96,13 @@ class PlatformRecognizerCapabilities(
                             object : RecognitionSupportCallback {
                                 override fun onSupportResult(recognitionSupport: RecognitionSupport) {
                                     val ok = languageInstalled(lang, recognitionSupport.installedOnDeviceLanguages)
-                                    r.destroy()
                                     if (cont.isActive) cont.resume(ok)
+                                    mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS)
                                 }
 
                                 override fun onError(error: Int) {
-                                    r.destroy()
                                     if (cont.isActive) cont.resume(null)
+                                    mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS)
                                 }
                             },
                         )
@@ -91,6 +113,8 @@ class PlatformRecognizerCapabilities(
                 }
             }
         }
+        if (result == true) synchronized(supported) { supported += lang }
+        return result
     }
 
     override fun whisperModelReady(lang: String): Boolean = whisperReady(lang)
