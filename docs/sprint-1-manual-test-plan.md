@@ -45,19 +45,38 @@ Already verified on the Pixel 9 on 2026-10-25 (don't repeat):
   Sprint 2 Task 3 step 5 and Task 4.
   Resolved: follow [Google's guide](https://developer.android.com/guide/practices/page-sizes) (16 KB is required
   on 64-bit only); the check now fails only for arm64-v8a/x86_64 and lists the 32-bit libs as info (Sprint 2 decision 14).
-- [ ] **"Make this app private" and the 3-pin limit.** Does it stay exempt (PRD FR-07)?
-- [ ] **Long-press lock.** Is "long-press = add to private immediately" the intended behaviour?
-- [ ] **Working branch.** Keep `sprint-1-close-sprint-2-start` or move its commits to main (local only, none
+- [x] **"Make this app private" and the 3-pin limit.** Does it stay exempt (PRD FR-07)?
+  Decided 2026-10-25: stays exempt; it is a contextual safety control, not a pinned action.
+- [x] **Long-press lock.** Is "long-press = add to private immediately" the intended behaviour?
+  Decided 2026-10-25: yes, private at once, plus an in-keyboard "App made private · Undo" message for about 5 s
+  (in progress).
+- [x] **Working branch.** Keep `sprint-1-close-sprint-2-start` or move its commits to main (local only, none
   pushed).
-- [ ] **Voice trailing-space edge case.** If the host types text identical to our last voice commit right after
+  Decided 2026-10-25: keep it until Sprint 2 is done, then merge to main in one go; back the branch up to origin.
+- [x] **Voice trailing-space edge case.** If the host types text identical to our last voice commit right after
   it, before the selection update arrives, the ", " join can delete the host's space instead of ours (found by the
   `:ime:editing` property test at 30,000 seeds, seed 1326; not caught at the default 1,000). Closing it means
   changing how voice adds trailing spaces. Accept for now, or change it?
-- [ ] **Translate bar (Sprint 2 Task 7) product questions**, listed under Task 7 in
+  Decided 2026-10-25: accepted as a known limitation (Sprint 2 plan, "Known limitations").
+- [x] **Translate bar (Sprint 2 Task 7) product questions**, listed under Task 7 in
   `docs/plans/2026-10-25-sprint-2.md`: Enter before the preview needs a second Enter (or auto-commit when it
   arrives?); `translate_done offline=true` means "translated on device" (or "no connection"?); a sensitive close
   clears the whole translation cache; hiding the keyboard keeps the bar text; no Preview/Live switch in the bar
   yet.
+  Decided 2026-10-25: Enter/✓ commits the translation when it arrives (`950bef05`); `offline` = ran on device;
+  `close(SENSITIVE)` clears the whole cache; hiding keeps the bar text, cleared after 60 s hidden (`27b4a039`);
+  Preview is the default and the switch lives in Settings (Sprint 4); an unreported field-generation change
+  clears the bar. Bar undo with identical host text accepted as a known limitation.
+- [ ] **Bar: suggestion strip while the bar is open** (Sprint 2 Task 8 note a). The strip keeps showing
+  suggestions for the host word. Recommend: hide host suggestions while the bar is open (they don't apply to the
+  bar's text, and tapping one would edit the host).
+- [ ] **Bar: arrow keys** (Task 8 note b). They still move the host cursor while the bar is open. Recommend: block
+  them while the bar is open, like the other host-editing keys Task 8 already blocks.
+- [ ] **Bar: composing layouts** (Task 8 note c). Kana, Hangul and other composer layouts type raw key text into
+  the bar. Recommend: accept as a known limitation for now (not in the ur/hi/ar/bn target markets); hide the
+  translate chip on those layouts later if needed.
+- [x] **Bar: no Preview/Live switch** (Task 8 note d). Decided 2026-10-25: covered by Sprint 2 decision 15
+  (Preview default, switch in Settings, Sprint 4).
 
 ## 0. Setup (once)
 
