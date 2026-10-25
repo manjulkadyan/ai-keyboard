@@ -1,0 +1,52 @@
+# Latency corpus, English. Authored by the AI Keyboard team for the day-1 ML Kit latency check (TRD §8).
+# One sentence per line, at most 200 characters, mixed lengths. Not derived from any third-party app or dataset.
+Hi!
+Thanks a lot.
+See you tomorrow.
+Where are you right now?
+I'm on my way, ten minutes.
+Can you call me when you are free?
+The meeting moved to four in the afternoon.
+Please send me the address of the restaurant.
+Happy birthday! Have a wonderful day with your family.
+I forgot my charger at home, can I borrow yours?
+Let's meet at the bus stop near the market.
+Did you finish the report for Monday?
+The train is late again, I will be there by seven.
+Don't forget to buy milk and bread on the way back.
+My phone battery is almost dead, I'll text you later.
+How much does this cost?
+We are going to the beach on Saturday if the weather is good. Do you want to come with us?
+The doctor said I should rest for two more days and drink plenty of water.
+Could you please check whether the package arrived at the office this morning?
+Good night, sleep well.
+I really liked the movie, especially the ending.
+The shop closes at nine, so we have to hurry.
+Mom says dinner is ready.
+Can you help me move some boxes this weekend? It should only take an hour or two.
+I'm sorry I missed your call, I was in a meeting.
+What time does the flight land?
+Please remember to bring your ID card and two passport photos to the appointment.
+The internet at home has been slow all week.
+Congratulations on your new job!
+I will transfer the money tonight.
+Is the pharmacy on the corner open on Sundays?
+We need to book the tickets before the price goes up.
+My brother is visiting us next month with his wife and kids.
+It is raining heavily here, drive carefully.
+Thank you for your help yesterday, I could not have done it without you.
+Where did you park the car?
+The teacher wants to talk to us about the exam results on Thursday.
+Let me know if you need anything from the city.
+I have a headache, I'm going to lie down for a bit.
+Could you lower the volume a little? The baby is sleeping.
+The new road to the airport is finally open and it saves almost half an hour.
+Send me a photo when you get there.
+Are you coming to the wedding in December?
+I paid the electricity bill but the gas bill is still due.
+This is the best tea I have had in a long time.
+Our neighbour's dog keeps barking every night and nobody can sleep properly anymore.
+Please call the landlord and ask him to fix the kitchen tap before the weekend.
+Okay.
+The bus was full, so I waited for the next one and arrived twenty minutes late to class.
+If you are free after work, let's grab something to eat near the station and talk about the trip.

@@ -52,6 +52,8 @@ mockwebserver = "4.12.0"
 # FORK(S2-mlkit): on-device translation and language ID (latest on Google Maven, checked 2026-10-25)
 mlkit-translate = "17.0.3"
 mlkit-language-id = "17.0.6"
+# FORK(S2-translate): AndroidJUnitRunner for the :core:translate-mlkit latency test (matches espresso 3.6.1)
+androidx-test-runner = "1.6.1"
 
 
 
@@ -134,6 +136,8 @@ mockwebserver = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "
 mlkit-translate = { module = "com.google.mlkit:translate", version.ref = "mlkit-translate" }
 mlkit-language-id = { module = "com.google.mlkit:language-id", version.ref = "mlkit-language-id" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "kotlinx-coroutines" }
+# FORK(S2-translate): instrumented day-1 latency test in :core:translate-mlkit
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 
 
 

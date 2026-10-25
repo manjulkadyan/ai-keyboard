@@ -1,0 +1,52 @@
+# Latency corpus, Spanish. Authored by the AI Keyboard team for the day-1 ML Kit latency check (TRD §8).
+# One sentence per line, at most 200 characters, mixed lengths. Not derived from any third-party app or dataset.
+¡Hola!
+Muchas gracias.
+Nos vemos mañana.
+¿Dónde estás ahora?
+Voy en camino, diez minutos.
+¿Puedes llamarme cuando estés libre?
+La reunión se cambió a las cuatro de la tarde.
+Por favor, mándame la dirección del restaurante.
+¡Feliz cumpleaños! Que pases un día maravilloso con tu familia.
+Olvidé el cargador en casa, ¿me prestas el tuyo?
+Nos vemos en la parada de autobús cerca del mercado.
+¿Terminaste el informe para el lunes?
+El tren otra vez llega tarde, estaré allí a las siete.
+No olvides comprar leche y pan de regreso.
+Me queda poca batería, te escribo luego.
+¿Cuánto cuesta esto?
+Si hace buen tiempo vamos a la playa el sábado. ¿Quieres venir con nosotros?
+El médico dijo que debo descansar dos días más y beber mucha agua.
+¿Podrías comprobar si el paquete llegó a la oficina esta mañana?
+Buenas noches, que descanses.
+Me gustó mucho la película, sobre todo el final.
+La tienda cierra a las nueve, así que tenemos que darnos prisa.
+Mamá dice que la cena está lista.
+¿Me ayudas a mover unas cajas este fin de semana? Solo tomará una o dos horas.
+Perdón por no contestar tu llamada, estaba en una reunión.
+¿A qué hora aterriza el vuelo?
+Recuerda traer tu documento de identidad y dos fotos tamaño pasaporte a la cita.
+El internet de casa ha estado lento toda la semana.
+¡Felicidades por tu nuevo trabajo!
+Te hago la transferencia esta noche.
+¿La farmacia de la esquina abre los domingos?
+Tenemos que reservar los billetes antes de que suba el precio.
+Mi hermano viene a visitarnos el mes que viene con su esposa y sus hijos.
+Aquí está lloviendo mucho, conduce con cuidado.
+Gracias por tu ayuda ayer, no lo habría logrado sin ti.
+¿Dónde aparcaste el coche?
+La profesora quiere hablar con nosotros sobre los resultados del examen el jueves.
+Avísame si necesitas algo de la ciudad.
+Me duele la cabeza, voy a acostarme un rato.
+¿Puedes bajar un poco el volumen? El bebé está dormido.
+Por fin abrieron la nueva carretera al aeropuerto y ahorra casi media hora.
+Mándame una foto cuando llegues.
+¿Vienes a la boda en diciembre?
+Pagué la factura de la luz, pero la del gas sigue pendiente.
+Es el mejor té que he tomado en mucho tiempo.
+El perro del vecino ladra todas las noches y ya nadie puede dormir bien.
+Por favor, llama al casero y pídele que arregle el grifo de la cocina antes del fin de semana.
+Vale.
+El autobús iba lleno, así que esperé el siguiente y llegué veinte minutos tarde a clase.
+Si estás libre después del trabajo, comamos algo cerca de la estación y hablemos del viaje.
