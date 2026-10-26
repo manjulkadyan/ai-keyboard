@@ -19,10 +19,11 @@ class AutocorrectPolicyTest {
         localeEnabled: Boolean = true,
         fieldAllows: Boolean = true,
         recentlyReverted: Boolean = false,
-    ) = AutocorrectPolicy.shouldAutocorrect(typed, top, minScore, localeEnabled, fieldAllows, recentlyReverted)
+        typedIsKnown: Boolean = false,
+    ) = AutocorrectPolicy.shouldAutocorrect(typed, top, minScore, localeEnabled, fieldAllows, recentlyReverted, typedIsKnown)
 
     @Test fun correctsACommonTypo() {
-        assertTrue(AutocorrectPolicy.shouldAutocorrect("teh", the, 0.7, true, true, false))
+        assertTrue(AutocorrectPolicy.shouldAutocorrect("teh", the, 0.7, true, true, false, false))
     }
 
     @Test fun localeDisabled() = assertFalse(decide(localeEnabled = false))
@@ -57,6 +58,10 @@ class AutocorrectPolicyTest {
     @Test fun topIsTypedWord() = assertFalse(decide(top = the.copy(isTypedWord = true)))
 
     @Test fun scoreBelowMinimum() = assertFalse(decide(top = the.copy(score = 0.69)))
+
+    // A known word the user removed from suggestions is not in the candidates, but it is still not a typo.
+    @Test fun typedIsAKnownWordEvenWhenNotACandidate() =
+        assertFalse(decide(typed = "hell", top = Candidate("hello", 0.95, isExactOrLearned = false, isTypedWord = false), typedIsKnown = true))
 
     @Test fun capitalisedTypoStillCorrects() = assertTrue(decide(typed = "Teh", top = the.copy(word = "The")))
 }

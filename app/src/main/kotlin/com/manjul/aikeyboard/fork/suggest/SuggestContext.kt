@@ -18,6 +18,9 @@ class SuggestContext {
     @Volatile var allowLearning: Boolean = false
     @Volatile var allowSuggestions: Boolean = false
 
+    /** Learned words and bigrams may shape the ranking (PolicyDecision.allowSuggestionHistory, TRD §4.1.2). */
+    @Volatile var allowSuggestionHistory: Boolean = false
+
     /**
      * Changes when a field starts or ends and whenever learning is turned off, so learning held back for a field
      * ([LatinSuggester]'s pending autocorrection) can tell it is no longer in the same, still-learning field.
@@ -46,6 +49,7 @@ class SuggestContext {
         if (allowLearning && !learning) epoch++
         allowLearning = learning
         allowSuggestions = hasField && decision.allowSuggestionStrip
+        allowSuggestionHistory = hasField && decision.allowSuggestionHistory
     }
 
     fun clear() {
@@ -56,5 +60,6 @@ class SuggestContext {
         fieldAllowsAutocorrect = false
         allowLearning = false
         allowSuggestions = false
+        allowSuggestionHistory = false
     }
 }

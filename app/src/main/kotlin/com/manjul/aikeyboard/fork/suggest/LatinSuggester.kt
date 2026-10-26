@@ -74,7 +74,17 @@ class LatinSuggester(
     /** `autocorrect_min_score` (decision 4), a `:core:config` default. */
     private val minScore: Double = DefaultsRemoteConfig().double(ConfigKeys.AUTOCORRECT_MIN_SCORE),
 ) {
-    private class Loaded(val language: String, val dict: SuggestDictionary, val engine: SuggestEngine)
+    /**
+     * [engine] ranks with the learned words; [plainEngine] ignores them except that blocked words stay hidden (fields
+     * whose policy forbids suggestion history); [dictEngine] knows nothing of the user (the system spell checker).
+     */
+    private class Loaded(
+        val language: String,
+        val dict: SuggestDictionary,
+        val engine: SuggestEngine,
+        val plainEngine: SuggestEngine,
+        val dictEngine: SuggestEngine,
+    )
 
     @Volatile private var loaded: Loaded? = null
     private val loadMutex = Mutex()
@@ -103,7 +113,14 @@ class LatinSuggester(
         } catch (_: Exception) {
             // The snapshot stays empty: suggestions still work, unlearned. Nothing is logged (user content).
         }
-        loaded = Loaded(language, dict, SuggestEngine(dict, KeyProximity.forLocale(language), UseCounts(repo)))
+        val proximity = KeyProximity.forLocale(language)
+        loaded = Loaded(
+            language = language,
+            dict = dict,
+            engine = SuggestEngine(dict, proximity, UseCounts(repo)),
+            plainEngine = SuggestEngine(dict, proximity, BlockedOnly(repo)),
+            dictEngine = SuggestEngine(dict, proximity, LearnedWords.NONE),
+        )
     }
 
     private fun readDictionary(language: String): SuggestDictionary? =
@@ -127,7 +144,9 @@ class LatinSuggester(
         if (!current.suggestionsEnabled) return emptyList()
         val l = loaded?.takeIf { it.language == language } ?: return emptyList()
         if (typed.isBlank()) return emptyList()
-        val candidates = l.engine.suggest(typed, previousWord, max)
+        // No personalised ranking where the policy forbids suggestion history (TRD §4.1.2, e.g. email fields).
+        val engine = if (context.allowSuggestionHistory) l.engine else l.plainEngine
+        val candidates = engine.suggest(typed, previousWord, max)
         val reverted = synchronized(lock) { recentlyReverted.containsKey(typed.lowercase()) }
         val eligible = AutocorrectPolicy.shouldAutocorrect(
             typed = typed,
@@ -136,6 +155,7 @@ class LatinSuggester(
             localeEnabled = language in current.autocorrectLocales,
             fieldAllows = context.fieldAllowsAutocorrect,
             recentlyReverted = reverted,
+            typedIsKnown = engine.isKnown(typed),
         )
         val prev = previousWord?.lowercase()
         return candidates.mapIndexed { i, c ->
@@ -194,15 +214,19 @@ class LatinSuggester(
         learned().recordAccepted(candidate.language, candidate.text.toString(), candidate.previousWord)
     }
 
+    /**
+     * The system spell checker (any app may ask): answers from the dictionary only, so it never reveals which words
+     * the user has learned or removed on this phone.
+     */
     fun spell(language: String, word: String, max: Int): SpellingResult {
         val l = loaded?.takeIf { it.language == language } ?: return SpellingResult.validWord()
         if (word.isBlank() || word.any { !isWordChar(it) }) {
             return SpellingResult.validWord()
         }
-        if (l.dict.containsExact(word) || learned().boost(language, word.lowercase()) > 0) {
+        if (l.dictEngine.isKnown(word)) {
             return SpellingResult.validWord()
         }
-        val suggestions = l.engine.suggest(word, null, max).filter { !it.isTypedWord }.map { it.word }
+        val suggestions = l.dictEngine.suggest(word, null, max).filter { !it.isTypedWord }.map { it.word }
         return SpellingResult.typo(suggestions.toTypedArray())
     }
 
@@ -219,6 +243,13 @@ class LatinSuggester(
     private class UseCounts(private val repo: UserWordRepository) : LearnedWords {
         override fun boost(locale: String, word: String): Int = repo.boost(locale, word) / UserWordRepository.BOOST_PER_USE
         override fun bigram(locale: String, prev: String, word: String): Int = repo.bigram(locale, prev, word)
+        override fun isBlocked(locale: String, word: String): Boolean = repo.isBlocked(locale, word)
+    }
+
+    /** Only the user's removals: no boost and no bigrams, so the ranking is the dictionary's. */
+    private class BlockedOnly(private val repo: UserWordRepository) : LearnedWords {
+        override fun boost(locale: String, word: String): Int = 0
+        override fun bigram(locale: String, prev: String, word: String): Int = 0
         override fun isBlocked(locale: String, word: String): Boolean = repo.isBlocked(locale, word)
     }
 

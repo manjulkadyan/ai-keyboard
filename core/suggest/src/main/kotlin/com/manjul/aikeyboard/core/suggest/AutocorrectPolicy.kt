@@ -9,7 +9,9 @@ package com.manjul.aikeyboard.core.suggest
  * Whether pressing space replaces [typed] with [top] (PRD FR-05, PC-1). Conservative by design: anything that
  * looks like a handle, path, URL, code or number, ALL CAPS, very short input, a known word, or a word the user just
  * reverted is left alone. [fieldAllows] is false for URL, email, password, number, phone and datetime fields and
- * with IME_FLAG_NO_PERSONALIZED_LEARNING; the caller decides it.
+ * with IME_FLAG_NO_PERSONALIZED_LEARNING; the caller decides it. [typedIsKnown] is [SuggestEngine.isKnown] for
+ * [typed]: a dictionary or learned word is never corrected, even when the user removed it from suggestions (it is
+ * then not among the candidates).
  */
 object AutocorrectPolicy {
     fun shouldAutocorrect(
@@ -19,8 +21,9 @@ object AutocorrectPolicy {
         localeEnabled: Boolean,
         fieldAllows: Boolean,
         recentlyReverted: Boolean,
+        typedIsKnown: Boolean,
     ): Boolean {
-        if (!localeEnabled || !fieldAllows || recentlyReverted) return false
+        if (!localeEnabled || !fieldAllows || recentlyReverted || typedIsKnown) return false
         if (typed.length < 2) return false
         if (typed.any { it.isDigit() || it == '@' || it == '/' || it == '_' }) return false
         // A dot anywhere but the last position ("e.g", ".net", "a.b") means an abbreviation, domain or code.

@@ -179,6 +179,39 @@ class LatinLanguageProviderTest {
         assertTrue(suggest("en", "hel").none { it.text.toString().equals(candidate.text.toString(), ignoreCase = true) })
     }
 
+    @Test fun `a removed dictionary word is not autocorrected to a neighbour`() = runBlocking {
+        provider.preload(subtype("en"))
+        repo.block("en", "hell")
+        val candidates = suggest("en", "hell")
+        assertTrue(candidates.none { it.text.toString() == "hell" })
+        assertTrue(candidates.none { it.isEligibleForAutoCommit }, "a real word is never a typo")
+    }
+
+    @Test fun `an email field ranks without the learned words`() = runBlocking {
+        provider.preload(subtype("en"))
+        val plain = suggest("en", "hel").map { it.text.toString() }
+        val wide = provider.suggest(subtype("en"), composing("hel"), 12, false, false).map { it.text.toString() }
+        val rare = wide.last { it !in plain }
+        repeat(20) { repo.recordAccepted("en", rare, prev = null) }
+        assertTrue(rare in suggest("en", "hel").map { it.text.toString() }, "learned words rank higher in a text field")
+
+        val email = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        context.update(
+            textField(email),
+            PolicyDecision.Unrestricted.copy(allowLearning = false, allowSuggestionHistory = false),
+        )
+        val inEmail = suggest("en", "hel").map { it.text.toString() }
+        assertTrue(inEmail.isNotEmpty(), "the strip still shows dictionary words")
+        assertFalse(rare in inEmail, "no personalised ranking where the policy forbids suggestion history")
+    }
+
+    @Test fun `spell does not reveal learned words`() = runBlocking {
+        provider.preload(subtype("en"))
+        repo.recordAccepted("en", "zqxlearned", prev = null)
+        val result = provider.spell(subtype("en"), "zqxlearned", emptyList(), emptyList(), 3, false, false)
+        assertTrue(result.isTypo, "the system spell checker answers from the dictionary only")
+    }
+
     @Test fun `preloading es after en releases en`() = runBlocking {
         provider.preload(subtype("en"))
         assertEquals("en", suggester.loadedLanguage)

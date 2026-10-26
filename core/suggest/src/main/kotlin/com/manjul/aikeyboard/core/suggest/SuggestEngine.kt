@@ -71,6 +71,16 @@ class SuggestEngine(
         return if (result.size > max) result.subList(0, max) else result
     }
 
+    /**
+     * Whether [typed] is a real word here: in the dictionary or learned. Unlike [suggest] this ignores blocking, so a
+     * word the user removed from suggestions still counts as spelled correctly (never autocorrected).
+     */
+    fun isKnown(typed: String): Boolean {
+        if (typed.isEmpty()) return false
+        val lower = typed.lowercase()
+        return dict.containsExact(typed) || dict.containsExact(lower) || learned.boost(dict.locale, lower) > 0
+    }
+
     private fun rank(
         word: String,
         key: String,

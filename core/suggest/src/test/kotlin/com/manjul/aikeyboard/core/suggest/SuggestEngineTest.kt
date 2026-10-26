@@ -56,6 +56,15 @@ class SuggestEngineTest {
         assertFalse(engine().suggest("the", null).any { it.word.equals("the", ignoreCase = true) })
     }
 
+    @Test fun aBlockedDictionaryWordIsStillKnown() {
+        learned.block("en", "the")
+        assertTrue(engine().isKnown("the"))
+        assertTrue(engine().isKnown("The"))
+        assertFalse(engine().isKnown("teh"))
+        learned.learn("en", "manjul", 1)
+        assertTrue(engine().isKnown("Manjul"))
+    }
+
     @Test fun maxIsHonoured() {
         assertEquals(1, engine().suggest("the", null, max = 1).size)
         assertTrue(engine().suggest("he", null, max = 2).size <= 2)

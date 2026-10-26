@@ -729,7 +729,7 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val enabled = boolean(
             key = "suggestion__enabled",
-            default = false,
+            default = true, // FORK(S3-suggest): word suggestions and composing on by default (PRD FR-05 AC1)
         )
         val displayMode = enum(
             key = "suggestion__display_mode",
