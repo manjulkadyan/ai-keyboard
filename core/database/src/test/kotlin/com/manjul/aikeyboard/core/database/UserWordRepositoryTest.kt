@@ -10,6 +10,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Test
@@ -89,6 +91,26 @@ class UserWordRepositoryTest {
         assertTrue(fresh.isBlocked("en", "ducking"))
         assertTrue(fresh.isBlocked("en", "never-typed"))
         assertFalse(fresh.isBlocked("en", "hello"))
+    }
+
+    @Test fun `a clear while a load is still merging is not undone in memory`() {
+        runBlocking {
+            repo.recordAccepted("en", "hello", prev = "say")
+            repo.count() // on disk
+        }
+        val fresh = newRepo()
+        // The load's caller runs only when told to, so its merge can be held after the read finished.
+        val caller = StandardTestDispatcher()
+        val loading = CoroutineScope(caller).launch { fresh.load("en") }
+        caller.scheduler.runCurrent() // the load queued its read and waits for it
+        runBlocking {
+            fresh.count() // queued after the read: the read has run and the merge is due
+            fresh.clearAll()
+        }
+        caller.scheduler.runCurrent() // the load resumes and merges what it read before the clear
+        assertTrue(loading.isCompleted)
+        assertEquals(0, fresh.boost("en", "hello"))
+        assertEquals(0, fresh.bigram("en", "say", "hello"))
     }
 
     @Test fun `clearAll empties the table and the snapshot`() = runBlocking {

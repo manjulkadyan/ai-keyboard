@@ -40,6 +40,9 @@ class UserWordRepository(
 
     private val lock = Any()
     private val snapshots = HashMap<String, LocaleSnapshot>()
+
+    /** Bumped by every [clearAll]; guarded by [lock]. */
+    private var clearGeneration = 0
     private val ops = Channel<suspend () -> Unit>(Channel.UNLIMITED)
 
     init {
@@ -57,10 +60,16 @@ class UserWordRepository(
         }
     }
 
-    /** Reads [locale]'s learned words into memory. Uses recorded meanwhile are kept. */
+    /** Reads [locale]'s learned words into memory. Uses recorded meanwhile are kept; a [clearAll] meanwhile wins. */
     suspend fun load(locale: String) {
-        val (words, bigrams) = enqueue { dao.words(locale) to dao.bigrams(locale) }
+        // The generation and the read are taken together under the lock, as clearAll bumps it and queues its delete
+        // under the lock: a read queued before a clear sees a changed generation and is dropped, not merged.
+        val (generation, read) = synchronized(lock) {
+            clearGeneration to send { dao.words(locale) to dao.bigrams(locale) }
+        }
+        val (words, bigrams) = read.await()
         synchronized(lock) {
+            if (generation != clearGeneration) return
             val snap = snapshots.getOrPut(locale) { LocaleSnapshot() }
             for (row in words) {
                 val state = snap.words[row.word]
@@ -81,7 +90,10 @@ class UserWordRepository(
     }
 
     /** Runs [block] on the worker after every operation queued before it, and returns its result. */
-    private suspend fun <T> enqueue(block: suspend () -> T): T {
+    private suspend fun <T> enqueue(block: suspend () -> T): T = send(block).await()
+
+    /** Queues [block] on the worker without waiting; the result completes once it has run. Never suspends. */
+    private fun <T> send(block: suspend () -> T): CompletableDeferred<T> {
         val result = CompletableDeferred<T>()
         ops.trySend {
             try {
@@ -91,7 +103,7 @@ class UserWordRepository(
                 if (e is CancellationException) throw e
             }
         }
-        return result.await()
+        return result
     }
 
     /** Counts one accepted use of [word] in [locale], after [prev] when there was a previous word. Never blocks. */
@@ -130,8 +142,13 @@ class UserWordRepository(
     suspend fun clearAll() {
         // Writes queued before this point are deleted by the clear; uses recorded after it are written after it,
         // so memory and disk agree.
-        synchronized(lock) { snapshots.clear() }
-        enqueue { dao.clearAll() }
+        // A load whose read was queued before this delete must not merge what it read (see [load]).
+        val cleared = synchronized(lock) {
+            snapshots.clear()
+            clearGeneration++
+            send { dao.clearAll() }
+        }
+        cleared.await()
     }
 
     /** Learned words in all languages (blocked ones included), counted after every write queued before the call. */
