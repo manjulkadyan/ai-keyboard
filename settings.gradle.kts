@@ -92,6 +92,8 @@ include(":core:config")
 include(":core:ai")
 include(":core:network")
 include(":core:firebase")
+// FORK(S3-ai): in-keyboard AI rewrite sheet (controller, preview, safe replace, undo, quota card, report)
+include(":ime:ai-ui")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

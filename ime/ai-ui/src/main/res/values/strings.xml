@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 AI Keyboard contributors. Licensed under the Apache License, Version 2.0 -->
+<!-- The in-keyboard AI rewrite sheet (PRD FR-15). The sheet never names the AI engine (FR-15 AC11). -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Sheet title above the tone chips. -->
+    <string name="ai_sheet__title" tools:ignore="MissingTranslation">Rewrite with AI</string>
+    <!-- Tone chip: fix spelling and grammar, keep the meaning. -->
+    <string name="ai_sheet__tone_fix" tools:ignore="MissingTranslation">Fix grammar</string>
+    <!-- Tone chip: rewrite in a formal tone. -->
+    <string name="ai_sheet__tone_formal" tools:ignore="MissingTranslation">Formal</string>
+    <!-- Tone chip: rewrite in a friendly tone. -->
+    <string name="ai_sheet__tone_friendly" tools:ignore="MissingTranslation">Friendly</string>
+    <!-- Tone chip: make the text shorter. -->
+    <string name="ai_sheet__tone_shorter" tools:ignore="MissingTranslation">Shorter</string>
+    <!-- Tone chip: make the text longer. -->
+    <string name="ai_sheet__tone_longer" tools:ignore="MissingTranslation">Longer</string>
+    <!-- Tone chip: add fitting emoji. -->
+    <string name="ai_sheet__tone_emojify" tools:ignore="MissingTranslation">Emojify</string>
+    <!-- Tone chip: translate and polish. %1$s is the target language name, e.g. "Spanish". -->
+    <string name="ai_sheet__tone_translate" tools:ignore="MissingTranslation">Translate &amp; polish to %1$s</string>
+    <!-- Shown while the first words of the result are on their way. -->
+    <string name="ai_sheet__working" tools:ignore="MissingTranslation">Rewriting…</string>
+    <!-- Shown when the result takes longer than usual. -->
+    <string name="ai_sheet__still_working" tools:ignore="MissingTranslation">Still working…</string>
+    <!-- Under a result that hit the length limit. -->
+    <string name="ai_sheet__trimmed" tools:ignore="MissingTranslation">The result was cut short</string>
+    <!-- Button: stop the rewrite and keep what arrived so far. -->
+    <string name="ai_sheet__stop" tools:ignore="MissingTranslation">Stop</string>
+    <!-- Button: put the result in place of the original text. -->
+    <string name="ai_sheet__replace" tools:ignore="MissingTranslation">Replace</string>
+    <!-- Button: add the result at the cursor, keeping the original text. -->
+    <string name="ai_sheet__insert" tools:ignore="MissingTranslation">Insert</string>
+    <!-- Button: copy the result to the clipboard. -->
+    <string name="ai_sheet__copy" tools:ignore="MissingTranslation">Copy</string>
+    <!-- Button: try the rewrite again. -->
+    <string name="ai_sheet__retry" tools:ignore="MissingTranslation">Retry</string>
+    <!-- Overflow menu item: report the result as offensive, wrong or unsafe. -->
+    <string name="ai_sheet__report" tools:ignore="MissingTranslation">Report</string>
+    <!-- TalkBack label of the overflow menu button. -->
+    <string name="ai_sheet__more_cd" tools:ignore="MissingTranslation">More options</string>
+    <!-- TalkBack label of the button that closes the sheet. -->
+    <string name="ai_sheet__close_cd" tools:ignore="MissingTranslation">Close AI rewrite</string>
+    <!-- TalkBack label of the result text. -->
+    <string name="ai_sheet__preview_cd" tools:ignore="MissingTranslation">Rewritten text</string>
+    <!-- Shown for a few seconds after Replace. -->
+    <string name="ai_sheet__replaced" tools:ignore="MissingTranslation">Text replaced</string>
+    <!-- Button shown for a few seconds after Replace: puts the original text back. -->
+    <string name="ai_sheet__undo" tools:ignore="MissingTranslation">Undo</string>
+    <!-- Replace was refused because the text in the app changed meanwhile. -->
+    <string name="ai_sheet__text_changed" tools:ignore="MissingTranslation">Your text changed, so it was not replaced. You can insert the result instead.</string>
+    <!-- The user has not agreed to the AI terms yet; the app opens the consent screen. -->
+    <string name="ai_sheet__needs_consent" tools:ignore="MissingTranslation">Agree to the AI terms in the app to use AI rewrite</string>
+    <!-- The text field is empty or cannot be read. -->
+    <string name="ai_sheet__nothing" tools:ignore="MissingTranslation">There is no text to rewrite</string>
+    <!-- Error: no internet connection. -->
+    <string name="ai_sheet__error_offline" tools:ignore="MissingTranslation">AI needs internet</string>
+    <!-- Error: rate limited. %1$d is a number of seconds. -->
+    <string name="ai_sheet__error_rate_limited" tools:ignore="MissingTranslation">Too many requests, try again in %1$d s</string>
+    <!-- Error: the AI declined to rewrite the text. -->
+    <string name="ai_sheet__error_refused" tools:ignore="MissingTranslation">Couldn\'t rewrite this text</string>
+    <!-- Error: the text is over the length limit. -->
+    <string name="ai_sheet__error_too_long" tools:ignore="MissingTranslation">Text is too long</string>
+    <!-- Error: the AI service cannot be reached or refused the app. -->
+    <string name="ai_sheet__error_unavailable" tools:ignore="MissingTranslation">AI is unavailable right now</string>
+    <!-- Error: no answer in time; Retry is offered. -->
+    <string name="ai_sheet__error_timeout" tools:ignore="MissingTranslation">Taking too long</string>
+    <!-- Quota card: the free daily AI actions are used up. %1$d is the number of hours until the limit resets. -->
+    <string name="ai_sheet__quota" tools:ignore="MissingTranslation">Daily AI limit reached · resets in %1$d h</string>
+    <!-- Quota card button: opens the Pro screen in the app. -->
+    <string name="ai_sheet__quota_see_pro" tools:ignore="MissingTranslation">See Pro</string>
+    <!-- Report sheet title. -->
+    <string name="ai_sheet__report_title" tools:ignore="MissingTranslation">Report this result</string>
+    <!-- Report reason. -->
+    <string name="ai_sheet__report_offensive" tools:ignore="MissingTranslation">Offensive</string>
+    <!-- Report reason. -->
+    <string name="ai_sheet__report_wrong" tools:ignore="MissingTranslation">Wrong or misleading</string>
+    <!-- Report reason. -->
+    <string name="ai_sheet__report_unsafe" tools:ignore="MissingTranslation">Unsafe</string>
+    <!-- Report reason. -->
+    <string name="ai_sheet__report_other" tools:ignore="MissingTranslation">Other</string>
+    <!-- Report checkbox, unticked by default: send the result text with the report. -->
+    <string name="ai_sheet__report_include_text" tools:ignore="MissingTranslation">Include the text</string>
+    <!-- Report button: send the report. -->
+    <string name="ai_sheet__report_send" tools:ignore="MissingTranslation">Send report</string>
+    <!-- Report button: go back without sending. -->
+    <string name="ai_sheet__report_cancel" tools:ignore="MissingTranslation">Cancel</string>
+</resources>
