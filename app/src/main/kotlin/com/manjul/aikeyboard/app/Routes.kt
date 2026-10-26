@@ -78,6 +78,7 @@ import com.manjul.aikeyboard.fork.settings.OfflineLanguagesScreen // FORK(S2-pac
 import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.ai.ProPlaceholderScreen // FORK(S3-ai)
+import com.manjul.aikeyboard.fork.settings.AiSettingsScreen // FORK(S3-polish)
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
 import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
@@ -188,6 +189,11 @@ object Routes {
         @Serializable
         @Deeplink("settings/offline-languages")
         object OfflineLanguages
+
+        // FORK(S3-polish): AI settings (Polish output script, auto-polish, AI consent), reached from the Settings home
+        @Serializable
+        @Deeplink("settings/ai")
+        object Ai
 
         @Serializable
         @Deeplink("settings/typing")
@@ -350,6 +356,7 @@ object Routes {
             composableWithDeepLink(Translator::class) { TranslatorScreen() } // FORK(S2-translator)
             composableWithDeepLink(TranslatorHistory::class) { HistoryScreen() } // FORK(S2-translator)
             composableWithDeepLink(Pro::class) { ProPlaceholderScreen() } // FORK(S3-ai)
+            composableWithDeepLink(Settings.Ai::class) { AiSettingsScreen() } // FORK(S3-polish)
 
             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
 

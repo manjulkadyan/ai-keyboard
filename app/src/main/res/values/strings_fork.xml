@@ -281,4 +281,17 @@
     <!-- S3-ai: Pro placeholder screen, opened from the AI quota card's "See Pro". Purchases are not available yet. -->
     <string name="pro__title" tools:ignore="MissingTranslation">AI Keyboard Pro</string>
     <string name="pro__placeholder_body" tools:ignore="MissingTranslation">Pro is coming soon. It will raise the daily AI limit and add auto-polish. Until then, your free AI actions reset every day.</string>
+
+    <!-- S3-polish: AI settings screen (Settings home entry): ✦ Polish output script, auto-polish (Pro) and AI consent. -->
+    <string name="ai_settings__title" tools:ignore="MissingTranslation">AI</string>
+    <string name="ai_settings__output_script" tools:ignore="MissingTranslation">Output script</string>
+    <string name="ai_settings__output_script_summary" tools:ignore="MissingTranslation">How Polish writes languages that have more than one script, like Hindi.</string>
+    <string name="ai_settings__script_same" tools:ignore="MissingTranslation">Same as dictated</string>
+    <string name="ai_settings__script_roman" tools:ignore="MissingTranslation">Roman</string>
+    <string name="ai_settings__script_native" tools:ignore="MissingTranslation">Native</string>
+    <string name="ai_settings__auto_polish" tools:ignore="MissingTranslation">Auto-polish every dictation</string>
+    <string name="ai_settings__auto_polish_summary" tools:ignore="MissingTranslation">Clean up each dictation without a tap. You can undo each one.</string>
+    <!-- Label next to a Pro-only setting. -->
+    <string name="ai_settings__pro" tools:ignore="MissingTranslation">Pro</string>
+    <string name="ai_settings__auto_polish_pro_only" tools:ignore="MissingTranslation">Available with Pro.</string>
 </resources>

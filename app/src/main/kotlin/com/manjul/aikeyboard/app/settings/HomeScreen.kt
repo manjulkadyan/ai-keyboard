@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.SmartButton
 import androidx.compose.material.icons.filled.Translate // FORK(S2-translator)
 import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.material.icons.filled.AutoFixHigh // FORK(S3-userdict)
+import androidx.compose.material.icons.filled.AutoAwesome // FORK(S3-polish)
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Keyboard
@@ -154,6 +155,12 @@ fun HomeScreen() = FlorisScreen {
             icon = Icons.Default.AutoFixHigh,
             title = stringRes(R.string.typing_settings__title),
             onClick = { navController.navigate(Routes.Settings.Suggestions) },
+        )
+        // FORK(S3-polish): home entry for the AI settings screen (Polish output script, auto-polish, AI consent)
+        Preference(
+            icon = Icons.Default.AutoAwesome,
+            title = stringRes(R.string.ai_settings__title),
+            onClick = { navController.navigate(Routes.Settings.Ai) },
         )
         // FORK(S2-packs): home entry for the Offline languages screen (translation packs, voice models)
         Preference(

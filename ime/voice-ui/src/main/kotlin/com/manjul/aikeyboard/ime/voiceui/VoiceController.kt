@@ -21,6 +21,8 @@ import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
 import com.manjul.aikeyboard.core.voice.platform.EngineChoice
 import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
 import com.manjul.aikeyboard.ime.editing.ComposingSpanController
+import com.manjul.aikeyboard.ime.editing.DictatedSpan
+import com.manjul.aikeyboard.ime.editing.DictatedSpanRecorder
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -50,6 +52,9 @@ interface FirstDictationFlag {
  * Start order: policy decision, RECORD_AUDIO (both re-read on every [toggle]), engine selection, audio focus,
  * session. Session output goes to [span] only while [generation] still has the value it had at the start; a field
  * change cancels the session ([cancel]) and nothing more reaches the host. Transcript text is never logged.
+ *
+ * Polish (PRD FR-16): when a session ends by itself or by the user (not cancelled) after committing text, [dictation]
+ * finds the span it wrote and [onDictationFinished] gets it. A cancelled session reports nothing.
  */
 class VoiceController(
     private val scope: CoroutineScope,
@@ -67,12 +72,15 @@ class VoiceController(
     private val launchPermission: () -> Unit,
     private val clock: () -> Long,
     private val downloadSystemModel: ((lang: String) -> Unit)? = null,
+    private val dictation: DictatedSpanRecorder? = null,
+    private val onDictationFinished: (DictatedSpan) -> Unit = {},
 ) {
     private val _ui = MutableStateFlow<VoiceUiState>(VoiceUiState.Hidden)
     val ui: StateFlow<VoiceUiState> = _ui.asStateFlow()
 
     private inner class Active(val session: SpeechSession, val token: Int, val kind: EngineKind, val lang: String) {
         var words = 0
+        val committed = StringBuilder()
         var ended = false
         var cancelled = false
         var outputJob: Job? = null
@@ -191,6 +199,7 @@ class VoiceController(
     private fun begin(kind: EngineKind, lang: String, token: Int) {
         stopDraining()
         span.startSession()
+        dictation?.begin()
         val segmented = segKey(kind, lang) !in segmentedOff
         val session = sessionFactory { engines.create(kind, segmented) }
         val a = Active(session, token, kind, lang)
@@ -211,6 +220,7 @@ class VoiceController(
             is VoiceOutput.Composing -> span.update(out.text)
             is VoiceOutput.Commit -> {
                 span.commit(out.text)
+                a.committed.append(out.text)
                 a.words += countWords(out.text)
             }
             VoiceOutput.ClearComposing -> span.drop()
@@ -245,9 +255,19 @@ class VoiceController(
             val errorCode = if (endReason == EndReason.ERROR) a.session.lastErrorCode else null
             analytics(EventCatalog.voiceSessionEnd(clock() - a.session.startedAtMs, a.words, endReason, errorCode))
             if (a.words > 0) logFirstDictation(a.lang)
+            reportSpan(a, cancelled = reason != null)
             _ui.value = if (a.session.tapToResume.value) VoiceUiState.TapToResume else VoiceUiState.Hidden
         }
         if (error != null && reason == null) _ui.value = VoiceUiState.Message(error.toMessageKind())
+    }
+
+    private fun reportSpan(a: Active, cancelled: Boolean) {
+        val recorder = dictation ?: return
+        if (cancelled || a.committed.isBlank() || generation() != a.token) {
+            recorder.reset()
+            return
+        }
+        recorder.finish(a.committed.toString(), a.lang, clock())?.let(onDictationFinished)
     }
 
     private fun logFirstDictation(lang: String) {

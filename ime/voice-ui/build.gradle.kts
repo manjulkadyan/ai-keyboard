@@ -27,6 +27,7 @@ dependencies {
     api(projects.ime.editing)
     implementation(libs.androidx.compose.material3)
 
+    testImplementation(testFixtures(projects.ime.editing))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.junit4)
     testImplementation(libs.robolectric)

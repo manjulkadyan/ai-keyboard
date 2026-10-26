@@ -370,6 +370,7 @@ class FlorisImeService : LifecycleInputMethodService() {
             lang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
             scope = lifecycleScope,
             barTarget = { translateSessionOrNull()?.voiceTarget() }, // FORK(S2-bar): dictate into the open bar
+            onDictationFinished = { aiSession.onDictationFinished(it) }, // FORK(S3-polish): offer ✦ Polish
         )
         // FORK(S2-bar): see the translateSession declaration
         translateSession = TranslateImeSession(
@@ -532,6 +533,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         voiceSession.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd) // FORK(S1-voice)
         translateSession.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd) // FORK(S2-bar)
+        aiSession.onCursorOrTyping(newSelStart) // FORK(S3-polish): the Polish chip goes once the cursor leaves the span
         activeState.batchEdit {
             activeState.isSelectionMode = (newSelEnd - newSelStart) != 0
             editorInstance.handleSelectionUpdate(

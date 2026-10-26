@@ -31,6 +31,8 @@ import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.whisperVoice
 import com.manjul.aikeyboard.ime.editing.ComposingSpanController
+import com.manjul.aikeyboard.ime.editing.DictatedSpan
+import com.manjul.aikeyboard.ime.editing.DictatedSpanRecorder
 import com.manjul.aikeyboard.ime.editing.TextTarget
 import com.manjul.aikeyboard.ime.voiceui.FirstDictationFlag
 import com.manjul.aikeyboard.ime.voiceui.VoiceController
@@ -68,6 +70,8 @@ class VoiceImeSession(
     private val online: () -> Boolean = { isOnline(context) },
     /** S2-bar: the Translate bar's buffer while the bar is open; voice output goes there instead of the host. */
     private val barTarget: () -> TextTarget? = { null },
+    /** S3-polish: a dictation into the host committed this span (never called for the Translate bar). */
+    onDictationFinished: (DictatedSpan) -> Unit = {},
 ) {
     private val hostTarget = ImeTextTarget(connection, isRawInputEditor, setOwnsComposing)
     private val target = RoutingTextTarget(hostTarget, barTarget)
@@ -119,6 +123,9 @@ class VoiceImeSession(
             context.startActivity(MicPermissionActivity.intent(context, lang()))
         },
         clock = clock,
+        // Polish works on the host field only; a dictation into the Translate bar reports no span.
+        dictation = DictatedSpanRecorder { if (target.routedToBar) null else hostTarget },
+        onDictationFinished = onDictationFinished,
         downloadSystemModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             { tag -> triggerSystemModelDownload(context, tag) }
         } else {

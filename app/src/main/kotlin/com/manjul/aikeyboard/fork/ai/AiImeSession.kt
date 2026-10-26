@@ -6,13 +6,17 @@
 package com.manjul.aikeyboard.fork.ai
 
 import android.view.inputmethod.InputConnection
+import com.manjul.aikeyboard.core.ai.OutputScript
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.ConsentKind
+import com.manjul.aikeyboard.core.datastore.FeatureSettings
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.fork.policy.FieldGeneration
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.fork.voice.ImeTextTarget
 import com.manjul.aikeyboard.ime.aiui.AiActionController
+import com.manjul.aikeyboard.ime.aiui.PolishController
+import com.manjul.aikeyboard.ime.editing.DictatedSpan
 import com.manjul.aikeyboard.ime.editing.SafeReplacer
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +42,10 @@ import kotlinx.coroutines.launch
  * - Token prefetch runs at most once per keyboard session, and only once the user has agreed: before that the app
  *   makes no kb-api or Firebase traffic for AI at all.
  *
+ * ✦ Polish after a dictation ([polish], Sprint 3 Task 14) shares the same gates: [onDictationFinished] offers the chip
+ * only on a configured backend, and auto-polish additionally needs `consentAutoPolishAt > 0`, the setting and [isPro]
+ * (always false until billing). The rewrite sheet and the Polish sheet never show at once.
+ *
  * Captured text and AI output are user content: never logged.
  */
 class AiImeSession(
@@ -47,7 +55,7 @@ class AiImeSession(
     private val settings: FeatureSettingsStore,
     private val graph: AiAppGraph,
     private val launchConsent: (ConsentKind) -> Unit,
-    @Suppress("unused") private val isPro: () -> Boolean, // the Pro gate; always false until billing (Task 14 uses it)
+    private val isPro: () -> Boolean, // the Pro gate; always false until billing (S4)
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
     isRawInputEditor: () -> Boolean = { false },
@@ -80,6 +88,32 @@ class AiImeSession(
         clock = clock,
     )
 
+    // Polish has its own replacer: closing one sheet must not drop the other's pending undo.
+    private val polishReplacer = SafeReplacer(target, clock)
+
+    /** ✦ Polish of the last dictation (chip in the Smartbar, sheet over the keys). */
+    val polish: PolishController = PolishController(
+        engine = graph.engine,
+        replacer = polishReplacer,
+        targetProvider = { target },
+        decision = decision,
+        generation = { generation.value },
+        hasConsent = { settings.current.consentAiAt > 0L },
+        requestConsent = { launchConsent(ConsentKind.AI) },
+        translateTarget = { settings.current.translatePair?.target },
+        pause = graph.pause,
+        config = graph.config,
+        analytics = analytics,
+        copyToClipboard = copyToClipboard,
+        report = graph.report,
+        scope = scope,
+        clock = clock,
+        autoPolish = { settings.current.autoPolish },
+        autoPolishConsentAt = { settings.current.consentAutoPolishAt },
+        isPro = isPro,
+        outputScript = { OutputScript.valueOf(FeatureSettings.normalizeOutputScript(settings.current.polishOutputScript)) },
+    )
+
     private val _chipAvailable = MutableStateFlow(false)
 
     /** Whether the ✦ chip shows (and is enabled): a configured backend and an available controller. */
@@ -103,6 +137,8 @@ class AiImeSession(
     /** The ✦ chip. Re-checks availability; the controller asks for consent or shows the tones. */
     fun open() {
         if (!graph.isConfigured) return
+        polish.dismiss()
+        polish.dismissChip()
         rewrite.open()
         refresh()
     }
@@ -110,7 +146,25 @@ class AiImeSession(
     /** "See Pro" on the quota card. */
     fun seePro() {
         rewrite.dismiss()
+        polish.dismiss()
         openPro()
+    }
+
+    /** A dictation into the host committed [span]: offer ✦ Polish (or auto-polish it). */
+    fun onDictationFinished(span: DictatedSpan) {
+        if (!graph.isConfigured) return
+        rewrite.dismiss()
+        polish.onDictationFinished(span)
+    }
+
+    /** The cursor moved to [cursor] or the user typed: the Polish chip goes once the cursor leaves the span. */
+    fun onCursorOrTyping(cursor: Int) = polish.onCursorOrTyping(cursor)
+
+    /** The Polish chip: "Clean up" or "Clean up + translate". */
+    fun polish(translate: Boolean) {
+        if (!graph.isConfigured) return
+        rewrite.dismiss()
+        polish.polish(translate)
     }
 
     /** A new field (not a restart): nothing on the new connection is ours, and nothing of the old field survives. */
@@ -118,6 +172,7 @@ class AiImeSession(
         if (restarting) return
         target.forgetOwnedRegion()
         rewrite.onFieldChanged()
+        polish.onFieldChanged()
         refresh()
     }
 
@@ -135,6 +190,7 @@ class AiImeSession(
     /** The field became more restrictive, or a field started or finished. */
     fun onRestricted() {
         rewrite.onRestricted()
+        polish.onRestricted()
         refresh()
     }
 
@@ -143,11 +199,13 @@ class AiImeSession(
         viewShown = false
         prefetched = false
         rewrite.onFieldChanged()
+        polish.onFieldChanged()
         refresh()
     }
 
     fun onDestroy() {
         rewrite.onFieldChanged()
+        polish.onFieldChanged()
         jobs.forEach { it.cancel() }
         jobs.clear()
         _chipAvailable.value = false

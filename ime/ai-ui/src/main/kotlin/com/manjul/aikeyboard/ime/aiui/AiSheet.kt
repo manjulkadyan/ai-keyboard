@@ -82,6 +82,32 @@ fun AiSheet(controller: AiActionController, onSeePro: () -> Unit, nowMs: () -> L
     )
 }
 
+/** The sheet bound to the post-dictation [controller] (✦ Polish); same layout, Polish title. */
+@Composable
+fun AiSheet(controller: PolishController, onSeePro: () -> Unit, nowMs: () -> Long, modifier: Modifier = Modifier) {
+    val state by controller.state.collectAsState()
+    AiSheet(
+        state = state,
+        actions = AiSheetActions(
+            onTone = {},
+            onStop = controller::stop,
+            onReplace = controller::replace,
+            onInsert = controller::insert,
+            onCopy = controller::copy,
+            onRetry = controller::retry,
+            onUndo = { controller.undo() },
+            onReport = controller::openReport,
+            onSubmitReport = controller::submitReport,
+            onCancelReport = controller::closeReport,
+            onSeePro = onSeePro,
+            onClose = controller::dismiss,
+        ),
+        nowMs = nowMs,
+        modifier = modifier,
+        polish = true,
+    )
+}
+
 /** What the sheet's buttons do. */
 class AiSheetActions(
     val onTone: (RewriteMode) -> Unit,
@@ -98,14 +124,20 @@ class AiSheetActions(
     val onClose: () -> Unit,
 )
 
-/** The stateless sheet: draws [state]; nothing for [AiSheetState.Hidden]. */
+/** The stateless sheet: draws [state]; nothing for [AiSheetState.Hidden]. [polish] titles it as ✦ Polish. */
 @Composable
-fun AiSheet(state: AiSheetState, actions: AiSheetActions, nowMs: () -> Long, modifier: Modifier = Modifier) {
+fun AiSheet(
+    state: AiSheetState,
+    actions: AiSheetActions,
+    nowMs: () -> Long,
+    modifier: Modifier = Modifier,
+    polish: Boolean = false,
+) {
     if (state == AiSheetState.Hidden) return
     Column(modifier = modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp).testTag(SHEET_TAG)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = stringResource(R.string.ai_sheet__title),
+                text = stringResource(if (polish) R.string.polish__title else R.string.ai_sheet__title),
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
                 fontWeight = FontWeight.Medium,
             )
@@ -116,7 +148,11 @@ fun AiSheet(state: AiSheetState, actions: AiSheetActions, nowMs: () -> Long, mod
                 AiSheetState.Hidden -> Unit
                 is AiSheetState.ChooseTone -> ToneChips(state, actions.onTone)
                 is AiSheetState.Streaming -> Output(state.text, footer = {
-                    val working = if (state.stillWorking) R.string.ai_sheet__still_working else R.string.ai_sheet__working
+                    val working = when {
+                        state.stillWorking -> R.string.ai_sheet__still_working
+                        polish -> R.string.polish__working
+                        else -> R.string.ai_sheet__working
+                    }
                     StatusText(stringResource(working))
                     SheetChip(stringResource(R.string.ai_sheet__stop), actions.onStop)
                 })
@@ -249,7 +285,7 @@ private fun StatusText(text: String) {
 /** The language's name in the UI language, from the system, never from our strings. */
 @Composable
 @ReadOnlyComposable
-private fun languageName(tag: String): String {
+internal fun languageName(tag: String): String {
     val ui = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
     return Locale.forLanguageTag(tag).getDisplayName(ui).ifBlank { tag }
 }

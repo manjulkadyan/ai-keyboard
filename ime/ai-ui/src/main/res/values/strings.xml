@@ -84,4 +84,15 @@
     <string name="ai_sheet__report_send" tools:ignore="MissingTranslation">Send report</string>
     <!-- Report button: go back without sending. -->
     <string name="ai_sheet__report_cancel" tools:ignore="MissingTranslation">Cancel</string>
+    <!-- ✦ Polish (post-dictation clean-up, PRD FR-16). -->
+    <!-- Sheet title while polishing a dictation. -->
+    <string name="polish__title" tools:ignore="MissingTranslation">Polish</string>
+    <!-- Shown while the polished text is on its way. -->
+    <string name="polish__working" tools:ignore="MissingTranslation">Polishing…</string>
+    <!-- Chip after a dictation: clean up fillers, punctuation and grammar of what was just dictated. -->
+    <string name="polish__clean_up" tools:ignore="MissingTranslation">✦ Clean up</string>
+    <!-- Chip after a dictation: clean up and translate. %1$s is the target language name, e.g. "Spanish". -->
+    <string name="polish__clean_up_translate" tools:ignore="MissingTranslation">✦ Clean up + translate to %1$s</string>
+    <!-- TalkBack label of the button that hides the Polish chips. -->
+    <string name="polish__dismiss_cd" tools:ignore="MissingTranslation">Hide Polish</string>
 </resources>

@@ -17,6 +17,9 @@ import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
 import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
 import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
 import com.manjul.aikeyboard.ime.editing.ComposingSpanController
+import com.manjul.aikeyboard.ime.editing.DictatedSpan
+import com.manjul.aikeyboard.ime.editing.DictatedSpanRecorder
+import com.manjul.aikeyboard.ime.editing.testing.FakeEditor
 import com.manjul.aikeyboard.ime.editing.TextTarget
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -76,7 +79,9 @@ class VoiceControllerTest {
         val scope: TestScope,
         caps: Caps = Caps(),
         preference: VoiceEnginePreference = VoiceEnginePreference.AUTO,
+        val editor: FakeEditor? = null,
     ) {
+        val spans = mutableListOf<DictatedSpan>()
         var permission = true
         var permissionChecks = 0
         var decision = PolicyDecision.Unrestricted
@@ -106,11 +111,13 @@ class VoiceControllerTest {
             decision = { decision },
             generation = { generation },
             focus = focus,
-            span = ComposingSpanController(field),
+            span = ComposingSpanController(editor ?: field),
             analytics = { events += it },
             firstDictation = flag,
             launchPermission = { launches++ },
             clock = { 0L },
+            dictation = editor?.let { e -> DictatedSpanRecorder { e } },
+            onDictationFinished = { spans += it },
         )
         val engine get() = engines.last()
 
@@ -305,6 +312,32 @@ class VoiceControllerTest {
         assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
         assertEquals("commit:hi there ", r.field.calls.last())
         assertEquals("user", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
+    }
+
+    @Test fun anEndedSessionReportsTheSpanItCommitted() = run {
+        val r = Rig(this, editor = FakeEditor("Note: ").apply { hostMoveCursor(6) })
+        r.controller.toggle()
+        runCurrent()
+        r.engine.listener!!.onReady()
+        r.controller.toggle()
+        r.engine.listener!!.onFinal("um so hello there")
+        runCurrent()
+        val span = r.spans.single()
+        assertEquals("um so hello there", span.text)
+        assertEquals(6 until 23, span.range)
+        assertEquals("en-US", span.lang)
+    }
+
+    @Test fun aCancelledSessionReportsNoSpan() = run {
+        val r = Rig(this, editor = FakeEditor(""))
+        r.controller.toggle()
+        runCurrent()
+        r.engine.listener!!.onReady()
+        r.engine.listener!!.onPartial("hello")
+        runCurrent()
+        r.controller.cancel("field_change")
+        runCurrent()
+        assertTrue(r.spans.isEmpty())
     }
 
     @Test fun aNewSessionNeverJoinsPunctuationToTheLastSessionsCommit() = run {
