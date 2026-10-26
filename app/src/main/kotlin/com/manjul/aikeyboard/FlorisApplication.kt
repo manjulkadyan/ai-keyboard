@@ -74,6 +74,7 @@ import kotlinx.coroutines.SupervisorJob
 // FORK(S2-translator): imports for Translator history and the shared TextToSpeech
 import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
+import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdict)
 import com.manjul.aikeyboard.core.tts.TtsManager
 import java.lang.ref.WeakReference
 
@@ -138,6 +139,13 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     // FORK(S2-translator): fork Room database (databases/app_database, never backed up), opened on first use
     val appDatabase = lazy { AppDatabase.new(this) }
     val translationHistory = lazy { TranslationHistoryRepository(appDatabase.value.translationHistoryDao()) }
+    // FORK(S3-userdict): on-device user dictionary (user_word); opened on first use, written on a background worker
+    val userWordRepository = lazy {
+        UserWordRepository(
+            appDatabase.value.userWordDao(),
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        )
+    }
     // FORK(S2-translator): the process's one TextToSpeech holder; the engine binds on the first acquire()
     val ttsManager = lazy { TtsManager(this) }
 
@@ -284,3 +292,6 @@ fun Context.translateModelStore() = this.florisApplication().translateModelStore
 fun Context.translationHistory() = this.florisApplication().translationHistory
 
 fun Context.ttsManager() = this.florisApplication().ttsManager
+
+// FORK(S3-userdict): accessor for the user dictionary
+fun Context.userWordRepository() = this.florisApplication().userWordRepository

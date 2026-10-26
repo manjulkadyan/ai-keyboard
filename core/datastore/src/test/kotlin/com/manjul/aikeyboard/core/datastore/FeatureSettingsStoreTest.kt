@@ -40,6 +40,25 @@ class FeatureSettingsStoreTest {
         assertNull(s.lastSourceLang)
         assertEquals(0L, s.enableKeyboardCardShownAt)
         assertEquals(emptySet(), s.translateStopped)
+        assertEquals(setOf("en", "es", "fr", "pt", "id"), s.autocorrectLocales)
+        assertTrue(s.suggestionsEnabled)
+    }
+
+    @Test
+    fun `unknown locales are dropped from autocorrectLocales`() = runTest {
+        val store = FeatureSettingsStore(app)
+        store.update { it.copy(autocorrectLocales = setOf("en", "hi", "de", "EN", "", "x-evil"), suggestionsEnabled = false) }
+        val s = store.flow.first()
+        assertEquals(setOf("en", "hi"), s.autocorrectLocales)
+        assertFalse(s.suggestionsEnabled)
+        assertEquals(s, store.current)
+    }
+
+    @Test
+    fun `sprint 2 files without the typing keys get the typing defaults`() = runTest {
+        val decoded = FeatureSettingsSerializer.readFrom("""{"onboardingDone":true}""".byteInputStream())
+        assertEquals(setOf("en", "es", "fr", "pt", "id"), decoded.autocorrectLocales)
+        assertTrue(decoded.suggestionsEnabled)
     }
 
     @Test

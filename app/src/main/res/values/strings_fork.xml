@@ -229,4 +229,16 @@
     <string name="process_text__enable_keyboard_body" tools:ignore="MissingTranslation">Turn on the keyboard to translate right in any chat.</string>
     <string name="process_text__enable_keyboard" tools:ignore="MissingTranslation">Enable keyboard</string>
     <string name="process_text__not_now" tools:ignore="MissingTranslation">Not now</string>
+
+    <!-- Typing settings (suggestions, autocorrect, learned words; PRD FR-05). -->
+    <string name="typing_settings__title" tools:ignore="MissingTranslation">Suggestions and autocorrect</string>
+    <string name="typing_settings__suggestions" tools:ignore="MissingTranslation">Suggestions</string>
+    <string name="typing_settings__suggestions_summary" tools:ignore="MissingTranslation">Show word suggestions above the keys. Words you pick are learned on this phone only.</string>
+    <string name="typing_settings__autocorrect" tools:ignore="MissingTranslation">Autocorrect</string>
+    <string name="typing_settings__autocorrect_summary" tools:ignore="MissingTranslation">Fix likely typos when you press space, per language.</string>
+    <string name="typing_settings__clear_learned" tools:ignore="MissingTranslation">Clear learned words</string>
+    <string name="typing_settings__clear_learned_confirm" tools:ignore="MissingTranslation">Delete every word the keyboard has learned on this phone?</string>
+    <string name="typing_settings__clear" tools:ignore="MissingTranslation">Clear</string>
+    <string name="typing_settings__cancel" tools:ignore="MissingTranslation">Cancel</string>
+    <string name="typing_settings__cleared" tools:ignore="MissingTranslation">Learned words cleared</string>
 </resources>

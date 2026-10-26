@@ -73,6 +73,7 @@ import com.manjul.aikeyboard.app.settings.media.MediaScreen
 import com.manjul.aikeyboard.app.settings.smartbar.SmartbarScreen
 import com.manjul.aikeyboard.fork.privacy.PrivateAppsScreen // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.settings.VoiceSettingsScreen // FORK(S1-whisper)
+import com.manjul.aikeyboard.fork.settings.TypingSettingsScreen // FORK(S3-userdict)
 import com.manjul.aikeyboard.fork.settings.OfflineLanguagesScreen // FORK(S2-packs)
 import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
@@ -171,6 +172,11 @@ object Routes {
         @Serializable
         @Deeplink("settings/voice")
         object Voice
+
+        // FORK(S3-userdict): Suggestions and autocorrect (fork Typing settings, clear learned words), from the Settings home
+        @Serializable
+        @Deeplink("settings/suggestions")
+        object Suggestions
 
         // FORK(S2-packs): Offline languages (translation packs, voice models); the keyboard's offline chip links here
         @Serializable
@@ -334,6 +340,7 @@ object Routes {
             composableWithDeepLink(Settings.PrivateApps::class) { PrivateAppsScreen() } // FORK(S1-smartbar)
             composableWithDeepLink(Settings.Voice::class) { VoiceSettingsScreen() } // FORK(S1-whisper)
             composableWithDeepLink(Settings.OfflineLanguages::class) { OfflineLanguagesScreen() } // FORK(S2-packs)
+            composableWithDeepLink(Settings.Suggestions::class) { TypingSettingsScreen() } // FORK(S3-userdict)
             composableWithDeepLink(Translator::class) { TranslatorScreen() } // FORK(S2-translator)
             composableWithDeepLink(TranslatorHistory::class) { HistoryScreen() } // FORK(S2-translator)
 

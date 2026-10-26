@@ -6,6 +6,7 @@
 package com.manjul.aikeyboard.core.database
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -15,9 +16,19 @@ import androidx.room.RoomDatabase
  * in `core/database/schemas/`; there is no destructive fallback, a missing migration must fail loudly instead
  * of wiping the user's history.
  */
-@Database(entities = [TranslationHistoryEntity::class], version = 1, exportSchema = true)
+@Database(
+    entities = [TranslationHistoryEntity::class, UserWordEntity::class, UserBigramEntity::class],
+    version = 2,
+    exportSchema = true,
+    autoMigrations = [
+        // v2 (Sprint 3): adds the user dictionary tables user_word and user_bigram.
+        AutoMigration(from = 1, to = 2),
+    ],
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun translationHistoryDao(): TranslationHistoryDao
+
+    abstract fun userWordDao(): UserWordDao
 
     companion object {
         const val FILE_NAME = "app_database"

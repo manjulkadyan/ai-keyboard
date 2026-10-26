@@ -48,4 +48,18 @@ data class FeatureSettings(
     val enableKeyboardCardShownAt: Long = 0L,
     /** Language tags whose model download the user stopped; an entry is removed when its job finishes. */
     val translateStopped: Set<String> = emptySet(),
-)
+    /** On-device word suggestions in the keyboard strip (PRD FR-05). */
+    val suggestionsEnabled: Boolean = true,
+    /**
+     * Languages (MVP tags, see [MVP_LANGUAGES]) where autocorrect may replace a word on space. Opt-in per language;
+     * ur, hi and ar start off (plan decision 4). [FeatureSettingsStore.update] drops any other tag.
+     */
+    val autocorrectLocales: Set<String> = DEFAULT_AUTOCORRECT_LOCALES,
+) {
+    companion object {
+        /** The MVP keyboard languages (PRD FR-05). */
+        val MVP_LANGUAGES: List<String> = listOf("en", "es", "fr", "pt", "id", "ar", "ur", "hi")
+
+        val DEFAULT_AUTOCORRECT_LOCALES: Set<String> = setOf("en", "es", "fr", "pt", "id")
+    }
+}

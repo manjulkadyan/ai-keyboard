@@ -78,6 +78,7 @@ class FeatureSettingsStore(
                 firstTranslateAt = new.firstTranslateAt.coerceAtLeast(0L),
                 enableKeyboardCardShownAt = new.enableKeyboardCardShownAt.coerceAtLeast(0L),
                 lastSourceLang = new.lastSourceLang?.takeIf { it.isNotBlank() },
+                autocorrectLocales = new.autocorrectLocales.filterTo(LinkedHashSet()) { it in FeatureSettings.MVP_LANGUAGES },
             )
         }
         // Read-your-writes for [current]; the collector above catches up with the same value.
