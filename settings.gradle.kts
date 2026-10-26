@@ -83,6 +83,8 @@ include(":ime:translate-ui")
 // FORK(S2-translator): Room database (Translator history) and the shared TextToSpeech
 include(":core:database")
 include(":core:tts")
+// FORK(S3-suggest): on-device suggestion engine (dictionary format, DL matcher, ranking, autocorrect), pure JVM
+include(":core:suggest")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")
