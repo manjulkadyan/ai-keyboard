@@ -17,7 +17,8 @@ import android.net.Uri
  * the nav graph's deep links (`ui://florisboard/<path>`), so a route whose screen is not in the graph yet falls back
  * to Home instead of crashing. `RouteRegistryTest` checks every entry against `Routes.kt`.
  *
- * PRD FR-32 also lists `conversation`, `camera`, `themes` and `paywall?trigger=`; their sprints add them.
+ * PRD FR-32 also lists `conversation`, `camera`, `themes` and `paywall?trigger=`; their sprints add them. `pro` is
+ * the placeholder the AI quota card opens until billing ships.
  */
 object RouteRegistry {
     /** The `FlorisAppActivity` extra naming a route (a key of [routes]). */
@@ -28,6 +29,7 @@ object RouteRegistry {
 
     const val HOME = "home"
     const val TRANSLATOR = "translator"
+    const val PRO = "pro"
 
     private const val HOME_PATH = "settings/home"
     private const val UI_SCHEME = "ui"
@@ -45,6 +47,7 @@ object RouteRegistry {
         "settings/voice" to "settings/voice",
         "settings/offline-languages" to "settings/offline-languages",
         "settings/privacy/private-apps" to "settings/privacy/private-apps",
+        PRO to "pro", // S3-ai: placeholder until billing; `paywall` stays unknown
     )
 
     /** Where to go. [path] is a `@Deeplink` path; [unknown] means the value was not allow-listed (Home + event). */

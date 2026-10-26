@@ -66,20 +66,22 @@ data class QuickActionArrangement(
     }
 
     companion object {
-        // FORK(S1-smartbar): Mic sticky, then Emoji, Clipboard and Settings (AI has no handler yet).
+        // FORK(S1-smartbar): Mic sticky, then the 3 pins.
         // FORK(S2-bar): Translate is fixed as the first dynamic action (PinnedActions), not one of the 3 pins.
+        // FORK(S3-ai): the pins are ✦ AI, Emoji and Clipboard; Settings moves to the overflow (MAX_PINS = 3).
         // The private-app action is last so it lands in the overflow panel and does not count as one of the 3
         // pins (PinnedActions). Upstream's other actions stay available through the actions editor.
         val Default = QuickActionArrangement(
             stickyAction = QuickAction.InsertKey(TextKeyData.VOICE_INPUT),
             dynamicActions = listOf(
                 QuickAction.InsertKey(TextKeyData.TOGGLE_TRANSLATE_BAR), // FORK(S2-bar): fixed, first after the mic
+                QuickAction.InsertKey(TextKeyData.AI_REWRITE), // FORK(S3-ai): hidden where AI is not allowed
                 QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA), // FORK(S1-smartbar)
                 QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
-                QuickAction.InsertKey(TextKeyData.SETTINGS),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_PRIVATE_APP),
             ),
             hiddenActions = listOf( // FORK(S1-smartbar)
+                QuickAction.InsertKey(TextKeyData.SETTINGS), // FORK(S3-ai): the 4th pin moves to the overflow
                 QuickAction.InsertKey(TextKeyData.UNDO),
                 QuickAction.InsertKey(TextKeyData.REDO), // FORK(S1-smartbar)
                 QuickAction.InsertKey(TextKeyData.TOGGLE_INCOGNITO_MODE),

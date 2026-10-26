@@ -77,6 +77,7 @@ import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdict)
 import com.manjul.aikeyboard.core.tts.TtsManager
 import com.manjul.aikeyboard.fork.suggest.SuggestContext // FORK(S3-suggest)
+import com.manjul.aikeyboard.fork.ai.AiAppGraph // FORK(S3-ai)
 import java.lang.ref.WeakReference
 
 /**
@@ -151,6 +152,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     val suggestContext = SuggestContext()
     // FORK(S2-translator): the process's one TextToSpeech holder; the engine binds on the first acquire()
     val ttsManager = lazy { TtsManager(this) }
+    // FORK(S3-ai): config, kb-api tokens, cloud engine, LRU, pause gate, reports; no HTTP client or Firebase until used
+    val aiAppGraph = lazy { AiAppGraph.create(this) }
 
     // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
     override val workManagerConfiguration: Configuration
@@ -301,3 +304,6 @@ fun Context.userWordRepository() = this.florisApplication().userWordRepository
 
 // FORK(S3-suggest): accessor for the suggestion field facts
 fun Context.suggestContext() = this.florisApplication().suggestContext
+
+// FORK(S3-ai): accessor for the app-wide AI pieces
+fun Context.aiAppGraph() = this.florisApplication().aiAppGraph

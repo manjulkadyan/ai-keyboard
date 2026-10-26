@@ -77,6 +77,7 @@ import com.manjul.aikeyboard.fork.settings.TypingSettingsScreen // FORK(S3-userd
 import com.manjul.aikeyboard.fork.settings.OfflineLanguagesScreen // FORK(S2-packs)
 import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
+import com.manjul.aikeyboard.fork.ai.ProPlaceholderScreen // FORK(S3-ai)
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
 import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
@@ -117,6 +118,11 @@ object Routes {
     @Serializable
     @Deeplink("translator/history")
     object TranslatorHistory // FORK(S2-translator)
+
+    // FORK(S3-ai): Pro placeholder, opened by "See Pro" on the AI quota card (no billing yet)
+    @Serializable
+    @Deeplink("pro")
+    object Pro
 
     object Settings {
         @Serializable
@@ -343,6 +349,7 @@ object Routes {
             composableWithDeepLink(Settings.Suggestions::class) { TypingSettingsScreen() } // FORK(S3-userdict)
             composableWithDeepLink(Translator::class) { TranslatorScreen() } // FORK(S2-translator)
             composableWithDeepLink(TranslatorHistory::class) { HistoryScreen() } // FORK(S2-translator)
+            composableWithDeepLink(Pro::class) { ProPlaceholderScreen() } // FORK(S3-ai)
 
             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
 

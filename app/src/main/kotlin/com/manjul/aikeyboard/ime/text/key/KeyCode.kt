@@ -109,6 +109,7 @@ object KeyCode {
     const val TOGGLE_AUTOCORRECT =          -245
     const val TOGGLE_PRIVATE_APP =          -246 // FORK(S1-smartbar): makes the focused editor's app private
     const val TOGGLE_TRANSLATE_BAR =        -247 // FORK(S2-bar): opens or closes the Translate bar
+    const val AI_REWRITE =                  -248 // FORK(S3-ai): opens the ✦ AI rewrite sheet
 
     const val URI_COMPONENT_TLD =           -255
 

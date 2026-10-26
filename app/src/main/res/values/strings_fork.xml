@@ -252,4 +252,33 @@
     <string name="privacy__withdraw_ai_confirm" tools:ignore="MissingTranslation">Withdraw AI consent? AI rewrite and polish stay off until you agree again.</string>
     <string name="privacy__withdraw" tools:ignore="MissingTranslation">Withdraw</string>
     <string name="privacy__cancel" tools:ignore="MissingTranslation">Cancel</string>
+    <!-- S3-ai: the ✦ AI rewrite chip in the keyboard's top bar. One short word. -->
+    <string name="quick_action__ai_rewrite" tools:ignore="MissingTranslation">AI</string>
+    <string name="quick_action__ai_rewrite__tooltip" tools:ignore="MissingTranslation">Rewrite with AI</string>
+    <!-- S3-ai: screen reader label of the area behind the AI rewrite sheet; tapping it closes the sheet. -->
+    <string name="ai_sheet__close" tools:ignore="MissingTranslation">Close AI rewrite</string>
+
+    <!-- S3-ai: AI consent screen (consent class consent_ai), opened in the app before the first AI rewrite or polish. Agree is the only consent; Not now and Back are not. -->
+    <string name="ai_consent__title_ai" tools:ignore="MissingTranslation">Before AI rewrites your text</string>
+    <string name="ai_consent__intro_ai" tools:ignore="MissingTranslation">AI rewrite and polish send text to the cloud. Nothing is sent until you tap Agree.</string>
+    <string name="ai_consent__sent_header" tools:ignore="MissingTranslation">What is sent</string>
+    <string name="ai_consent__sent_ai" tools:ignore="MissingTranslation">Only when you tap ✦ or Polish: the text you selected, or the text in the field, or your dictation transcript. Never passwords or other private fields, and never what you type otherwise.</string>
+    <string name="ai_consent__processor_header" tools:ignore="MissingTranslation">Who processes it</string>
+    <string name="ai_consent__processor_body" tools:ignore="MissingTranslation">Our server and our AI provider, only to return the rewritten text to you. It is not sold or used for ads.</string>
+    <string name="ai_consent__kept_header" tools:ignore="MissingTranslation">What is kept</string>
+    <string name="ai_consent__kept_body" tools:ignore="MissingTranslation">Your text is not stored by our server. Request details without your text, used to stop abuse, are kept for up to 30 days. If you report an output and choose to include the text, the report is kept for 90 days for review.</string>
+    <string name="ai_consent__withdraw_header" tools:ignore="MissingTranslation">How to withdraw</string>
+    <string name="ai_consent__withdraw_body" tools:ignore="MissingTranslation">Any time in Settings, Private apps, Data and consent: Withdraw AI consent. AI features stay off until you agree again.</string>
+    <string name="ai_consent__agree" tools:ignore="MissingTranslation">Agree</string>
+    <string name="ai_consent__not_now" tools:ignore="MissingTranslation">Not now</string>
+
+    <!-- S3-ai: auto-polish consent screen (consent class consent_auto_polish), opened when auto-polish is turned on. -->
+    <string name="ai_consent__title_auto_polish" tools:ignore="MissingTranslation">Polish every dictation automatically?</string>
+    <string name="ai_consent__intro_auto_polish" tools:ignore="MissingTranslation">With auto-polish on, every dictation transcript is sent to the cloud without a tap. It stays off unless you tap Agree.</string>
+    <string name="ai_consent__sent_auto_polish" tools:ignore="MissingTranslation">The transcript of every dictation, as soon as you stop speaking. Never in passwords or other private fields.</string>
+    <string name="ai_consent__withdraw_auto_polish" tools:ignore="MissingTranslation">Turn auto-polish off, or in Settings, Private apps, Data and consent: Withdraw AI consent. It stops at once.</string>
+
+    <!-- S3-ai: Pro placeholder screen, opened from the AI quota card's "See Pro". Purchases are not available yet. -->
+    <string name="pro__title" tools:ignore="MissingTranslation">AI Keyboard Pro</string>
+    <string name="pro__placeholder_body" tools:ignore="MissingTranslation">Pro is coming soon. It will raise the daily AI limit and add auto-polish. Until then, your free AI actions reset every day.</string>
 </resources>

@@ -22,15 +22,16 @@ enum class ChipId {
             CLIPBOARD -> KeyCode.IME_UI_MODE_CLIPBOARD
             SETTINGS -> KeyCode.SETTINGS
             TRANSLATE -> KeyCode.TOGGLE_TRANSLATE_BAR // S2-bar: opens the Translate bar
-            AI, STICKERS -> null
+            AI -> KeyCode.AI_REWRITE // S3-ai: opens the ✦ rewrite sheet
+            STICKERS -> null
         }
 
     companion object {
         /** Chips that can be neither pinned nor moved. */
         val fixed: Set<ChipId> = setOf(MIC, TRANSLATE)
 
-        /** Chips with a handler. AI stays hidden until Sprint 3; upstream has no stickers. */
-        val registered: Set<ChipId> = setOf(MIC, TRANSLATE, EMOJI, CLIPBOARD, SETTINGS)
+        /** Chips with a handler. Upstream has no stickers. */
+        val registered: Set<ChipId> = setOf(MIC, TRANSLATE, AI, EMOJI, CLIPBOARD, SETTINGS)
 
         fun forKeyCode(code: Int): ChipId? = entries.firstOrNull { it.keyCode == code }
     }

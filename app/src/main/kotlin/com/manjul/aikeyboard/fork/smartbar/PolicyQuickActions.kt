@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 private val FailClosed: StateFlow<PolicyDecision> = MutableStateFlow(PolicyDecision.Locked)
+private val AiUnavailable: StateFlow<Boolean> = MutableStateFlow(false)
 
 /** The decision of the live controller, or [PolicyDecision.Locked] when there is none (fail closed). */
 fun decisionOrLocked(current: PolicyDecision?): PolicyDecision = current ?: PolicyDecision.Locked
@@ -35,12 +36,17 @@ fun rememberPolicyDecision(): PolicyDecision {
 /** Quick actions a sensitive field may show (R37): they read no field content. Every other action is hidden. */
 private val SensitiveAllowList = setOf(KeyCode.IME_UI_MODE_MEDIA, KeyCode.SETTINGS, KeyCode.TOGGLE_PRIVATE_APP)
 
-/** True if [action] may be shown under [decision]. Chip-backed actions follow [ChipArrangement.allowed]. */
-fun QuickAction.isAllowedBy(decision: PolicyDecision, clipboardHistoryOn: Boolean): Boolean {
+/**
+ * True if [action] may be shown under [decision]. Chip-backed actions follow [ChipArrangement.allowed]; the ✦ chip
+ * also needs [aiAvailable] (the AI session's `chipAvailable`: not paused, not switched off, backend configured), so
+ * without a running session it is hidden.
+ */
+fun QuickAction.isAllowedBy(decision: PolicyDecision, clipboardHistoryOn: Boolean, aiAvailable: Boolean = false): Boolean {
     val code = (this as? QuickAction.InsertKey)?.data?.code
     if (decision.sensitive && (code == null || code !in SensitiveAllowList)) return false
     if (code == null) return true
     if (code == KeyCode.TOGGLE_PRIVATE_APP) return SensitivityReason.PRIVATE_APP !in decision.reasons
+    if (code == KeyCode.AI_REWRITE && !aiAvailable) return false
     val chip = ChipId.forKeyCode(code) ?: return true
     return ChipArrangement.allowed(chip, decision, clipboardHistoryOn)
 }
@@ -51,9 +57,11 @@ fun List<QuickAction>.policyFiltered(): List<QuickAction> {
     val decision = rememberPolicyDecision()
     val prefs by FlorisPreferenceStore
     val clipboardHistoryOn by prefs.clipboard.historyEnabled.observeAsState()
+    val aiFlow = remember { FlorisImeService.aiSessionOrNull()?.chipAvailable ?: AiUnavailable }
+    val aiAvailable by aiFlow.collectAsState()
     val actions = this
-    return remember(actions, decision, clipboardHistoryOn) {
-        actions.filter { it.isAllowedBy(decision, clipboardHistoryOn) }
+    return remember(actions, decision, clipboardHistoryOn, aiAvailable) {
+        actions.filter { it.isAllowedBy(decision, clipboardHistoryOn, aiAvailable) }
     }
 }
 

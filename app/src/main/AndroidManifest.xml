@@ -158,6 +158,15 @@
             android:taskAffinity=""
             android:exported="false"/>
 
+        <!-- FORK(S3-ai): AI and auto-polish consent screen, opened only by the keyboard with an explicit intent.
+             Not exported, no intent filter; it finishes itself in onStop. -->
+        <activity
+            android:name="com.manjul.aikeyboard.fork.ai.AiConsentActivity"
+            android:theme="@style/FlorisAppTheme.Transparent"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="false"/>
+
         <!-- FORK(S2-processtext): the "Translate" text-selection action and text share target (PRD FR-14).
              Exported with exactly these two filters, text/plain only, no data URIs (ExportedComponentRules). -->
         <activity

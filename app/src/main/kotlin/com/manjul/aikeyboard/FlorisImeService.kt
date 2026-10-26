@@ -117,6 +117,10 @@ import android.app.KeyguardManager
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.fork.voice.VoiceImeSession // FORK(S1-voice)
 import com.manjul.aikeyboard.fork.translate.TranslateImeSession // FORK(S2-bar)
+import com.manjul.aikeyboard.fork.ai.AiConsentActivity // FORK(S3-ai)
+import com.manjul.aikeyboard.fork.ai.AiImeSession // FORK(S3-ai)
+import com.manjul.aikeyboard.fork.ai.copyAiOutput // FORK(S3-ai)
+import com.manjul.aikeyboard.fork.ai.proIntent // FORK(S3-ai)
 import com.manjul.aikeyboard.core.analytics.EndReason // FORK(S2-bar)
 import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
 import com.manjul.aikeyboard.fork.analytics.ImeSessionStartReporter // FORK(S1-analytics)
@@ -177,6 +181,12 @@ class FlorisImeService : LifecycleInputMethodService() {
         fun translateSessionOrNull(): TranslateImeSession? {
             val service = FlorisImeServiceReference.get() ?: return null
             return if (service::translateSession.isInitialized) service.translateSession else null
+        }
+
+        // FORK(S3-ai): the ✦ AI rewrite of the running service (chip, sheet)
+        fun aiSessionOrNull(): AiImeSession? {
+            val service = FlorisImeServiceReference.get() ?: return null
+            return if (service::aiSession.isInitialized) service.aiSession else null
         }
 
         // FORK(S1-smartbar): "App made private" with Undo after the smartbar made the app private
@@ -318,6 +328,9 @@ class FlorisImeService : LifecycleInputMethodService() {
     // FORK(S2-bar): the Translate bar; closed by every policy restriction, on hide and on field change. Its
     // controller and the translation core are created on the first chip tap, never when the keyboard shows.
     private lateinit var translateSession: TranslateImeSession
+    // FORK(S3-ai): the ✦ AI rewrite; hidden unless allowAi && allowCloud, closed by every restriction, on hide and
+    // on field change. Nothing is sent before the app's consent screen sets consentAiAt.
+    private lateinit var aiSession: AiImeSession
     // FORK(S1-smartbar): "Make this app private" adds the app at once and offers Undo for 5 s in the smartbar;
     // a field change dismisses the offer (the app stays private). The package is never logged.
     private lateinit var privateAppUndo: PrivateAppUndo
@@ -371,6 +384,22 @@ class FlorisImeService : LifecycleInputMethodService() {
             subtypeLang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
             beforeToggle = { voiceSession.controller.cancel(EndReason.FIELD_CHANGE.value) },
         )
+        // FORK(S3-ai): see the aiSession declaration
+        aiSession = AiImeSession(
+            connection = { currentInputConnection },
+            decision = { policyController.decision.value },
+            generation = policyController.generation,
+            settings = featureSettingsStore().value,
+            graph = aiAppGraph().value,
+            launchConsent = { startActivity(AiConsentActivity.intent(this, it)) },
+            isPro = { false },
+            scope = lifecycleScope,
+            isRawInputEditor = { editorInstance.activeInfo.isRawInputEditor },
+            locale = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
+            analytics = appContext().value.analytics.value::log,
+            copyToClipboard = { copyAiOutput(this, it) },
+            openPro = { startActivity(proIntent(this)) },
+        ).also { it.bindTo(policyController) }
         // FORK(S1-smartbar): see the privateAppUndo declaration
         privateAppUndo = privateAppsRepository().let { repo ->
             PrivateAppUndo(add = repo::add, remove = repo::remove, scope = lifecycleScope)
@@ -444,6 +473,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         policyController.onFinishInput() // FORK(S1-policy): drop in-flight work for the closed field
         voiceSession.destroy() // FORK(S1-voice)
         translateSession.destroy() // FORK(S2-bar)
+        aiSession.onDestroy() // FORK(S3-ai)
         FlorisImeServiceReference = WeakReference(null)
         inputWindowView = null
     }
@@ -453,6 +483,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         super.onStartInput(info, restarting)
         voiceSession.onStartInput(restarting) // FORK(S1-voice): a new field's connection holds no region of ours
         translateSession.onStartInput(restarting) // FORK(S2-bar): same for the bar's live preview
+        aiSession.onStartInput(restarting) // FORK(S3-ai): a new field closes the sheet and drops the old field's undo
         if (!restarting) privateAppUndo.onFieldChange() // FORK(S1-smartbar): a new field ends the Undo offer
         policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
         suggestContext().update(info, policyController.decision.value) // FORK(S3-suggest): field facts for autocorrect
@@ -469,6 +500,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         // FORK(S1-analytics): the decision for this field is already set by onStartInput
         imeSessionReporter.onStartInputView(policyController.decision.value, subtypeManager.activeSubtype.primaryLocale.languageTag())
         translateSession.onStartInputView() // FORK(S2-bar): the keyboard is back, keep the bar text kept on hide
+        aiSession.onStartInputView() // FORK(S3-ai): one token prefetch per keyboard session, after consent only
         activeState.batchEdit {
             // FORK(S1-policy): a restart never keeps the clipboard panel open where history is denied
             activeState.imeUiMode = ClipboardPanelGate.onStartInputView(
@@ -516,6 +548,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         policyController.onFinishInputView() // FORK(S1-policy)
         voiceSession.onFinishInputView() // FORK(S1-voice): hiding the keyboard ends dictation
         translateSession.onFinishInputView() // FORK(S2-bar): hiding closes the bar, pair and mode are kept
+        aiSession.onFinishInputView() // FORK(S3-ai): hiding cancels the stream and closes the sheet
         editorInstance.handleFinishInputView()
     }
 

@@ -59,7 +59,10 @@ class RouteRegistryTest {
     @Test
     fun allowListIsExactlyThePlannedRoutes() {
         assertEquals(
-            setOf("home", "translator", "settings/home", "settings/voice", "settings/offline-languages", "settings/privacy/private-apps"),
+            setOf(
+                "home", "translator", "settings/home", "settings/voice", "settings/offline-languages",
+                "settings/privacy/private-apps", "pro",
+            ),
             RouteRegistry.routes.keys,
         )
         assertTrue(RouteRegistry.routes.values.none { it.startsWith("devtools") || it.startsWith("ext") || "paywall" in it })
@@ -75,6 +78,9 @@ class RouteRegistryTest {
         assertEquals("translator", RouteRegistry.resolve(null, Uri.parse("app://translator?x=1#y")).path)
         assertEquals(RouteRegistry.Home, RouteRegistry.resolve("home", null))
         assertEquals(RouteRegistry.Home, RouteRegistry.resolve(null, null))
+        // S3-ai: the Pro placeholder (the quota card's "See Pro"); the paywall stays unknown.
+        assertEquals("pro", RouteRegistry.resolve(null, Uri.parse("ui://florisboard/pro")).path)
+        assertTrue(RouteRegistry.resolve("paywall", null).unknown)
     }
 
     @Test

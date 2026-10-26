@@ -40,7 +40,9 @@ object ChipArrangement {
     fun allowed(chip: ChipId, decision: PolicyDecision, clipboardHistoryOn: Boolean): Boolean = when (chip) {
         ChipId.MIC -> decision.allowVoice
         ChipId.TRANSLATE -> decision.allowTranslate
-        ChipId.AI -> decision.allowAi
+        // The cloud too: the rewrite runs on our server (PC-1). isAllowedBy also needs the AI session's own
+        // availability (pause, kill switch, configured backend).
+        ChipId.AI -> decision.allowAi && decision.allowCloud
         ChipId.CLIPBOARD -> decision.allowClipboardHistory && clipboardHistoryOn
         ChipId.STICKERS -> decision.allowCloud
         ChipId.EMOJI, ChipId.SETTINGS -> true

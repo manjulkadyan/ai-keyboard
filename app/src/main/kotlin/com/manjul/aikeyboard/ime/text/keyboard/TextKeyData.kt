@@ -151,6 +151,7 @@ data class TextKeyData(
                 TOGGLE_AUTOCORRECT,
                 TOGGLE_PRIVATE_APP, // FORK(S1-smartbar)
                 TOGGLE_TRANSLATE_BAR, // FORK(S2-bar)
+                AI_REWRITE, // FORK(S3-ai)
             )
         }
 
@@ -526,6 +527,12 @@ data class TextKeyData(
             type = KeyType.FUNCTION,
             code = KeyCode.TOGGLE_TRANSLATE_BAR,
             label = "toggle_translate_bar",
+        )
+        // FORK(S3-ai): predefined key data for [KeyCode.AI_REWRITE]
+        val AI_REWRITE = TextKeyData(
+            type = KeyType.FUNCTION,
+            code = KeyCode.AI_REWRITE,
+            label = "ai_rewrite",
         )
         /** Predefined key data for [KeyCode.TOGGLE_AUTOCORRECT] */
         val TOGGLE_AUTOCORRECT = TextKeyData(

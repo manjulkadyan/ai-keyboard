@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.KeyboardVoice
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock // FORK(S1-smartbar)
 import androidx.compose.material.icons.filled.Translate // FORK(S2-bar)
+import androidx.compose.material.icons.filled.AutoAwesome // FORK(S3-ai)
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
@@ -258,6 +259,7 @@ fun ComputingEvaluator.computeImageVector(data: KeyData): ImageVector? {
         }
         KeyCode.TOGGLE_PRIVATE_APP -> Icons.Default.Lock // FORK(S1-smartbar)
         KeyCode.TOGGLE_TRANSLATE_BAR -> Icons.Default.Translate // FORK(S2-bar)
+        KeyCode.AI_REWRITE -> Icons.Default.AutoAwesome // FORK(S3-ai): the ✦ chip
         KeyCode.SHIFT -> {
             when (evaluator.state.inputShiftState != InputShiftState.UNSHIFTED) {
                 true -> Icons.Default.KeyboardCapslock
