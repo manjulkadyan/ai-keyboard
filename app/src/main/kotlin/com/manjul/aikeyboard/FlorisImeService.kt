@@ -341,6 +341,8 @@ class FlorisImeService : LifecycleInputMethodService() {
         )
         // Settings can arrive after the field started: recompute the editor state from the new decision.
         policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
+        // FORK(S3-suggest): suggestions, autocorrect and learning follow every decision for the current field
+        policyController.decision.collectIn(lifecycleScope) { suggestContext().onDecision(it) }
         // FORK(S1-policy): an open clipboard history panel closes when the field turns more restrictive
         ClipboardPanelGate.closeOnRestriction(policyController, { activeState.imeUiMode }) { activeState.imeUiMode = it }
         // FORK(S1-voice): see the voiceSession declaration
@@ -453,6 +455,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         translateSession.onStartInput(restarting) // FORK(S2-bar): same for the bar's live preview
         if (!restarting) privateAppUndo.onFieldChange() // FORK(S1-smartbar): a new field ends the Undo offer
         policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
+        suggestContext().update(info, policyController.decision.value) // FORK(S3-suggest): field facts for autocorrect
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
         editorInstance.handleStartInput(editorInfo)
@@ -523,6 +526,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         privateAppUndo.onFieldChange() // FORK(S1-smartbar): the field closed, the app stays private
         super.onFinishInput()
         policyController.onFinishInput() // FORK(S1-policy)
+        suggestContext().clear() // FORK(S3-suggest): no field, no suggestions or learning
         editorInstance.handleFinishInput()
         NlpInlineAutofill.clearInlineSuggestions()
     }

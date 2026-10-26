@@ -76,6 +76,7 @@ import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdict)
 import com.manjul.aikeyboard.core.tts.TtsManager
+import com.manjul.aikeyboard.fork.suggest.SuggestContext // FORK(S3-suggest)
 import java.lang.ref.WeakReference
 
 /**
@@ -146,6 +147,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
     }
+    // FORK(S3-suggest): field facts for the suggestion provider, set by FlorisImeService (fails closed until then)
+    val suggestContext = SuggestContext()
     // FORK(S2-translator): the process's one TextToSpeech holder; the engine binds on the first acquire()
     val ttsManager = lazy { TtsManager(this) }
 
@@ -295,3 +298,6 @@ fun Context.ttsManager() = this.florisApplication().ttsManager
 
 // FORK(S3-userdict): accessor for the user dictionary
 fun Context.userWordRepository() = this.florisApplication().userWordRepository
+
+// FORK(S3-suggest): accessor for the suggestion field facts
+fun Context.suggestContext() = this.florisApplication().suggestContext

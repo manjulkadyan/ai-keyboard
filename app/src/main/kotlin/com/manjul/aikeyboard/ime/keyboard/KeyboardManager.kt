@@ -30,6 +30,8 @@ import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy
 import com.manjul.aikeyboard.fork.smartbar.decisionOrLocked // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.translate.BarKeyRouter // FORK(S2-bar)
+import com.manjul.aikeyboard.fork.suggest.AutocorrectGate // FORK(S3-suggest)
+import com.manjul.aikeyboard.suggestContext // FORK(S3-suggest)
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
@@ -549,12 +551,19 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         activeState.inputShiftState = InputShiftState.UNSHIFTED
     }
 
+    // FORK(S3-suggest): the auto-commit candidate re-checked against the live field and the composing word
+    private fun spaceAutoCommitCandidate(): SuggestionCandidate? = AutocorrectGate.onSpace(
+        nlpManager.getAutoCommitCandidate(),
+        editorInstance.activeContent.composingText,
+        appContext.suggestContext(),
+    )
+
     /**
      * Handles a hardware [KeyEvent.KEYCODE_SPACE] event. Same as [handleSpace],
      * but skips handling changing to characters keyboard and double space periods.
      */
     fun handleHardwareKeyboardSpace() {
-        val candidate = nlpManager.getAutoCommitCandidate()
+        val candidate = spaceAutoCommitCandidate() // FORK(S3-suggest)
         candidate?.let { commitCandidate(it) }
         // Skip handling changing to characters keyboard and double space periods
         // TODO: this is whether we commit space after selecting candidate. Should be determined by SuggestionProvider
@@ -569,7 +578,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
      * enabled by the user.
      */
     private fun handleSpace(data: KeyData) {
-        val candidate = nlpManager.getAutoCommitCandidate()
+        val candidate = spaceAutoCommitCandidate() // FORK(S3-suggest)
         candidate?.let { commitCandidate(it) }
         if (prefs.keyboard.spaceBarSwitchesToCharacters.get()) {
             when (activeState.keyboardMode) {
@@ -810,7 +819,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             KeyCode.VIEW_SYMBOLS2 -> activeState.keyboardMode = KeyboardMode.SYMBOLS2
             else -> {
                 if (activeState.imeUiMode == ImeUiMode.MEDIA) {
-                    nlpManager.getAutoCommitCandidate()?.let { commitCandidate(it) }
+                    // FORK(S3-suggest): our autocorrect fires on space only
+                    AutocorrectGate.onOtherKey(nlpManager.getAutoCommitCandidate())?.let { commitCandidate(it) }
                     editorInstance.commitText(data.asString(isForDisplay = false))
                     return@batchEdit
                 }
@@ -836,7 +846,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                         KeyType.CHARACTER, KeyType.NUMERIC ->{
                             val text = data.asString(isForDisplay = false)
                             if (!UCharacter.isUAlphabetic(UCharacter.codePointAt(text, 0))) {
-                                nlpManager.getAutoCommitCandidate()?.let { commitCandidate(it) }
+                                // FORK(S3-suggest): our autocorrect fires on space only
+                                AutocorrectGate.onOtherKey(nlpManager.getAutoCommitCandidate())?.let { commitCandidate(it) }
                             }
                             editorInstance.commitChar(text)
                         }

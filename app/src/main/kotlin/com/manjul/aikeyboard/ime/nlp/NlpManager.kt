@@ -50,6 +50,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.properties.Delegates
 
 private const val BLANK_STR_PATTERN = "^\\s*$"
+// FORK(S3-suggest): the suggestion strip shows three words (PRD FR-05)
+private const val SUGGESTION_STRIP_SIZE = 3
 
 class NlpManager(context: Context) {
     private val blankStrRegex = Regex(BLANK_STR_PATTERN)
@@ -219,7 +221,7 @@ class NlpManager(context: Context) {
                     getSuggestionProvider(subtype).suggest(
                         subtype = subtype,
                         content = content,
-                        maxCandidateCount = 8,
+                        maxCandidateCount = SUGGESTION_STRIP_SIZE, // FORK(S3-suggest): 3-word strip (PRD FR-05)
                         allowPossiblyOffensive = !prefs.suggestion.blockPossiblyOffensive.get(),
                         isPrivateSession = keyboardManager.activeState.isIncognitoMode,
                     )

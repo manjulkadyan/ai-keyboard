@@ -298,6 +298,7 @@ dependencies {
     // FORK(S2-translator): Translator history (Room) and the shared TextToSpeech
     implementation(projects.core.database)
     implementation(projects.core.tts)
+    implementation(projects.core.suggest) // FORK(S3-suggest): suggestion engine behind LatinLanguageProvider
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)
