@@ -39,6 +39,9 @@ class SuggestDictionary internal constructor(
 
     fun containsExact(word: String): Boolean = indexOf(word) >= 0
 
+    /** Every word in sorted order (read-only view; used by the dictionary build checks). */
+    fun wordList(): List<String> = words.asList()
+
     /** Words within [maxDistance] (uniform costs) of [prefix], as whole words or as completions of it. */
     internal fun candidatesNear(prefix: String, maxDistance: Int): Sequence<String> =
         search(prefix, maxDistance.toDouble(), maxDistance.toDouble(), SubstitutionCost.UNIFORM, Int.MAX_VALUE)

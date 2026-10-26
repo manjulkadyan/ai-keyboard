@@ -96,4 +96,21 @@ class DictionaryFormatTest {
         assertFalse(message.contains("99"), "exception message echoes input bytes")
         assertEquals(null, e.cause, "cause could carry input details")
     }
+
+    @Test fun writeScaledKeepsTheGivenFrequencyBytes() {
+        val out = ByteArrayOutputStream()
+        DictionaryFormat.writeScaled(out, "ur", listOf("ب" to 16, "ا" to 16, "ا" to 20))
+        val dict = DictionaryFormat.read(ByteArrayInputStream(out.toByteArray()))
+        assertEquals(listOf("ا", "ب"), dict.wordList())
+        assertEquals(20, dict.frequency("ا"))
+        assertEquals(16, dict.frequency("ب"))
+        assertEquals(0, dict.bigram("ا", "ب"))
+        assertFailsWith<IllegalArgumentException> { DictionaryFormat.writeScaled(ByteArrayOutputStream(), "x", listOf("a" to 0)) }
+    }
+
+    @Test fun scaleCountMatchesWrite() {
+        assertEquals(255, DictionaryFormat.scaleCount(1000, 1000))
+        assertEquals(0, DictionaryFormat.scaleCount(0, 1000))
+        assertTrue(DictionaryFormat.scaleCount(3, 1000) in 1..254)
+    }
 }

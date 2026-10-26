@@ -77,6 +77,34 @@ object DictionaryFormat {
         data.flush()
     }
 
+    /**
+     * Writes [entries] whose values are already frequency bytes (1..255, see [scaleCount]) and no bigrams. Used by
+     * `:tools:dictbuild` when a list has no real counts (Urdu gets a flat low frequency, plan decision 2).
+     */
+    fun writeScaled(out: OutputStream, locale: String, entries: List<Pair<String, Int>>) {
+        val merged = HashMap<String, Int>(entries.size * 2)
+        for ((word, f) in entries) {
+            if (word.isEmpty()) continue
+            require(f in 1..255) { "Frequency byte out of range" }
+            merged[word] = maxOf(merged[word] ?: 0, f)
+        }
+        val data = DataOutputStream(BufferedOutputStream(out))
+        data.write(MAGIC)
+        data.writeByte(VERSION)
+        data.writeUTF(locale)
+        val words = merged.keys.sorted()
+        data.writeInt(words.size)
+        for (w in words) {
+            data.writeUTF(w)
+            data.writeByte(merged.getValue(w))
+        }
+        data.writeInt(0)
+        data.flush()
+    }
+
+    /** The log scale [write] applies: [count] against the largest count [max], 1..255, or 0 when absent. */
+    fun scaleCount(count: Int, max: Int): Int = scale(count, max)
+
     fun read(input: InputStream): SuggestDictionary {
         val data = DataInputStream(if (input is BufferedInputStream) input else BufferedInputStream(input))
         try {
