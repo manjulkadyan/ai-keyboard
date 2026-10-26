@@ -6,6 +6,7 @@
 package com.manjul.aikeyboard.ime.editing.testing
 
 import com.manjul.aikeyboard.ime.editing.ComposingSpanController
+import com.manjul.aikeyboard.ime.editing.FieldSnapshot
 import com.manjul.aikeyboard.ime.editing.TextTarget
 
 /** What an editor reports to the IME after an edit (`onUpdateSelection`). */
@@ -74,6 +75,9 @@ class FakeEditor(initial: String = "") : TextTarget {
     /** Every host character ever written, minus those the host itself removed: all must still be in the field. */
     val hostOwned: List<Cell> get() = hostWritten.filter { it !in hostRemoved }
 
+    /** The field's cells right now, in order (a copy). */
+    fun snapshotCells(): List<Cell> = cells.toList()
+
     /** Whether [cell] is in the field right now (by identity). */
     fun contains(cell: Cell): Boolean = cells.any { it === cell }
 
@@ -122,6 +126,13 @@ class FakeEditor(initial: String = "") : TextTarget {
         val afterEnd = minOf(cells.size, selectionEnd + afterLength)
         replace(selectionEnd, afterEnd, emptyList(), host = false)
         replace(maxOf(0, selectionStart - beforeLength), selectionStart, emptyList(), host = false)
+        true
+    }
+
+    fun setSelection(start: Int, end: Int): Boolean = edit {
+        if (start !in 0..end || end > cells.size) return@edit false
+        selectionStart = start
+        selectionEnd = end
         true
     }
 
@@ -198,6 +209,38 @@ class FakeEditor(initial: String = "") : TextTarget {
         }
     }
 
+    override fun selection(): IntRange = selectionStart until selectionEnd
+
+    override fun textInRange(range: IntRange): String? {
+        val end = range.last + 1
+        if (range.first < 0 || end < range.first || end > cells.size) return null
+        return text.substring(range.first, end)
+    }
+
+    override fun fieldText(maxChars: Int): FieldSnapshot {
+        val all = text
+        if (all.length <= maxChars) return FieldSnapshot(all, 0, selection())
+        // Like ImeTextTarget: a window around the selection, longer than maxChars or starting after 0.
+        val start = maxOf(0, selectionStart - maxChars)
+        val end = minOf(all.length, maxOf(selectionEnd + maxChars, start + maxChars + 1))
+        return FieldSnapshot(all.substring(start, end), start, selection())
+    }
+
+    override fun replaceRange(range: IntRange, text: String, expected: String?): Boolean {
+        val end = range.last + 1
+        if (range.first < 0 || end < range.first || end > cells.size) return false
+        beginBatchEdit()
+        try {
+            if (expected != null && textInRange(range) != expected) return false
+            finishComposingText()
+            own(false)
+            setSelection(range.first, end)
+            return commitText(text, 1)
+        } finally {
+            endBatchEdit()
+        }
+    }
+
     /** The input connection changed (`ImeTextTarget.forgetOwnedRegion`). */
     fun forgetOwnedRegion() {
         own(false)
@@ -231,6 +274,12 @@ class FakeEditor(initial: String = "") : TextTarget {
     fun hostDelete(n: Int) = edit {
         val start = if (selectionStart != selectionEnd) selectionStart else maxOf(0, selectionStart - n)
         replace(start, selectionEnd, emptyList(), host = true)
+    }
+
+    /** Replaces `start until end` with [s] anywhere in the field, as an app or autofill would. */
+    fun hostReplace(start: Int, end: Int, s: String) = edit {
+        require(start in 0..end && end <= cells.size)
+        replace(start, end, s.map { Cell(it, host = true).also(hostWritten::add) }, host = true)
     }
 
     /** Moves the cursor (or selects `start..end`). */
