@@ -89,6 +89,14 @@ android {
         // FORK(S1-privacy-logs): info/debug Flog lines carry key labels, spell-check text and editor info, so they
         // are off unless a developer opts in locally with -Paikb.verboseFlog=true (never on CI or for testers)
         buildConfigField("boolean", "VERBOSE_FLOG", (project.findProperty("aikb.verboseFlog") == "true").toString())
+        // FORK(S3-net): kb-api base URL and Firebase options from Gradle properties aikb.* (empty by default, so the
+        // AI chip stays hidden); dev auth (X-Dev-Uid) is debug-only, release and beta force it off below
+        buildConfigField("String", "AI_BASE_URL", "\"${aikbProperty("aikb.ai.baseUrl")}\"")
+        buildConfigField("boolean", "AI_DEV_AUTH", (aikbProperty("aikb.ai.devAuth") == "true").toString())
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${aikbProperty("aikb.firebase.projectId")}\"")
+        buildConfigField("String", "FIREBASE_APP_ID", "\"${aikbProperty("aikb.firebase.appId")}\"")
+        buildConfigField("String", "FIREBASE_API_KEY", "\"${aikbProperty("aikb.firebase.apiKey")}\"")
+        buildConfigField("String", "FIREBASE_PROJECT_NUMBER", "\"${aikbProperty("aikb.firebase.projectNumber")}\"")
 
         sourceSets {
             maybeCreate("main").apply {
@@ -147,6 +155,7 @@ android {
             // FORK(S0-branding): placeholder app name and neutral launcher glyph instead of FlorisBoard branding
             resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_keyboard_foreground")
             resValue("string", "floris_app_name", "AI Keyboard Beta")
+            buildConfigField("boolean", "AI_DEV_AUTH", "false") // FORK(S3-net): dev auth never outside debug
         }
 
         named("release") {
@@ -164,6 +173,7 @@ android {
             resValue("string", "floris_app_name", "@string/app_name")
             // FORK(S1-whisper): no language uses Whisper in release until each is checked (decision 5)
             buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"\"")
+            buildConfigField("boolean", "AI_DEV_AUTH", "false") // FORK(S3-net): dev auth never outside debug
         }
 
         create("benchmark") {
@@ -299,6 +309,11 @@ dependencies {
     implementation(projects.core.database)
     implementation(projects.core.tts)
     implementation(projects.core.suggest) // FORK(S3-suggest): suggestion engine behind LatinLanguageProvider
+    // FORK(S3-net): remote config defaults, the kb-api AI client, its OkHttp factory and lazy Firebase tokens
+    implementation(projects.core.config)
+    implementation(projects.core.ai)
+    implementation(projects.core.network)
+    implementation(projects.core.firebase)
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)
@@ -317,6 +332,13 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.espresso.core)
+}
+
+// FORK(S3-net): a Gradle property as a BuildConfig string value (empty when unset; quotes and backslashes rejected)
+fun aikbProperty(name: String): String {
+    val value = (project.findProperty(name) as String?).orEmpty().trim()
+    require(value.none { it == '"' || it == '\\' }) { "Gradle property $name must not contain quotes or backslashes" }
+    return value
 }
 
 fun getGitCommitHash(short: Boolean = false): Provider<String> {

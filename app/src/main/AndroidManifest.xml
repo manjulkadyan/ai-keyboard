@@ -213,6 +213,21 @@
                 tools:node="remove"/>
         </provider>
 
+        <!-- FORK(S3-net): Firebase never starts with the process (TRD §2.3). :core:firebase initialises its own
+             FirebaseApp on the first AI request, and only when Firebase options are configured (decision 6). -->
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            android:exported="false"
+            tools:node="remove"/>
+        <!-- FORK(S3-net): firebase-auth merges two exported browser-redirect activities for federated and phone
+             sign-in. We use anonymous sign-in only, so they are removed (exported allow-list, TRD §6.3). -->
+        <activity android:name="com.google.firebase.auth.internal.GenericIdpActivity" tools:node="remove"/>
+        <activity android:name="com.google.firebase.auth.internal.RecaptchaActivity" tools:node="remove"/>
+        <!-- FORK(S3-net): play-services-auth-base (via firebase-auth) exports Google Sign-In's revocation service; no
+             Google Sign-In here, so it is removed too. -->
+        <service android:name="com.google.android.gms.auth.api.signin.RevocationBoundService" tools:node="remove"/>
+
     </application>
 
 </manifest>

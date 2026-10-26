@@ -87,6 +87,11 @@ include(":core:tts")
 include(":core:suggest")
 // FORK(S3-suggest): JVM tool that builds assets/dict/<lang>.sdict from third_party/wordlists
 include(":tools:dictbuild")
+// FORK(S3-net): defaults-only remote config, AI client (SSE, errors, LRU), OkHttp auth headers, lazy Firebase
+include(":core:config")
+include(":core:ai")
+include(":core:network")
+include(":core:firebase")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

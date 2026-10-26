@@ -6,6 +6,8 @@
 package com.manjul.aikeyboard.fork.suggest
 
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.manjul.aikeyboard.core.config.ConfigKeys
+import com.manjul.aikeyboard.core.config.DefaultsRemoteConfig
 import com.manjul.aikeyboard.core.database.UserWordRepository
 import com.manjul.aikeyboard.core.datastore.FeatureSettings
 import com.manjul.aikeyboard.core.suggest.AutocorrectPolicy
@@ -69,7 +71,8 @@ class LatinSuggester(
     private val context: SuggestContext,
     private val isPrivateSession: () -> Boolean,
     private val io: CoroutineDispatcher = Dispatchers.IO,
-    private val minScore: Double = AUTOCORRECT_MIN_SCORE,
+    /** `autocorrect_min_score` (decision 4), a `:core:config` default. */
+    private val minScore: Double = DefaultsRemoteConfig().double(ConfigKeys.AUTOCORRECT_MIN_SCORE),
 ) {
     private class Loaded(val language: String, val dict: SuggestDictionary, val engine: SuggestEngine)
 
@@ -220,8 +223,6 @@ class LatinSuggester(
     }
 
     companion object {
-        /** `autocorrect_min_score` (decision 4). Moves to `:core:config` defaults with Task 10. */
-        const val AUTOCORRECT_MIN_SCORE = 0.7
         private const val MAX_REVERTED = 64
 
         /** Letters, combining marks (Devanagari matras, Arabic harakat), apostrophes and ZWNJ/ZWJ. */
