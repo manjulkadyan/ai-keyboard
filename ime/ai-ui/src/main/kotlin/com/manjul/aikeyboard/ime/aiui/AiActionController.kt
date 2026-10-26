@@ -121,6 +121,18 @@ class AiActionController(
         _isAvailable.value = computeAvailable()
     }
 
+    /**
+     * The shared [AiPauseGate] was set (here or by ✦ Polish): hide the chip now and show it again when the pause ends.
+     */
+    fun onPaused() {
+        refreshAvailability()
+        pauseJob?.cancel()
+        pauseJob = scope.launch {
+            delay(AiPauseGate.PAUSED_MS)
+            refreshAvailability()
+        }
+    }
+
     /** The ✦ chip: shows the tones, or asks for consent. No-op while AI is not available. */
     fun open() {
         refreshAvailability()
@@ -387,12 +399,7 @@ class AiActionController(
         }
         if (error == AiError.Paused) {
             pause.pauseFor(AiPauseGate.PAUSED_MS)
-            refreshAvailability()
-            pauseJob?.cancel()
-            pauseJob = scope.launch {
-                delay(AiPauseGate.PAUSED_MS)
-                refreshAvailability()
-            }
+            onPaused()
         }
         _state.value = AiSheetState.Error(error, canRetry(error))
     }

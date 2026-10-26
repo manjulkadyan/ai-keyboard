@@ -52,7 +52,8 @@ import kotlinx.coroutines.launch
  * transcript back within [UNDO_WINDOW_MS] while our output is still in place.
  *
  * Auto-polish ([AutoPolishPolicy], plus `consent_ai`) runs without a tap and without a sheet, and replaces the span
- * itself when the output arrives (Undo is then offered as after a manual Replace). Moving out of the span or typing
+ * itself when the output arrives. Its Undo is the light [autoUndo] chip in the Smartbar for [UNDO_WINDOW_MS], never
+ * the sheet, so the keys stay usable. Moving out of the span or typing
  * cancels it. A [AiError.Quota] during auto-polish keeps the raw text, shows nothing and pauses auto-polish until the
  * next UTC day ([quotaPaused]); any other auto error shows the manual chip again.
  *
@@ -82,6 +83,8 @@ class PolishController(
     private val autoPolishConsentAt: () -> Long,
     private val isPro: () -> Boolean,
     private val outputScript: () -> OutputScript,
+    /** A [AiError.Paused] set the shared [pause]: the ✦ rewrite chip must re-check its availability now. */
+    private val onPaused: () -> Unit = {},
     private val newRequestId: () -> String = { UUID.randomUUID().toString() },
 ) {
     private class Session(
@@ -111,6 +114,11 @@ class PolishController(
 
     /** The Polish sheet. Stays [AiSheetState.Hidden] while auto-polish runs. */
     val state: StateFlow<AiSheetState> = _state.asStateFlow()
+
+    private val _autoUndo = MutableStateFlow(false)
+
+    /** An auto-polish replaced the span and [undo] is still offered (a Smartbar chip, not the sheet). */
+    val autoUndo: StateFlow<Boolean> = _autoUndo.asStateFlow()
 
     /** The span the chip offers, and the field generation it was dictated in. */
     private var span: DictatedSpan? = null
@@ -201,7 +209,20 @@ class PolishController(
                 }
                 send(s)
             }
-            is AiSheetState.Ready -> start(s.span, s.generation, s.translate, auto = false)
+            is AiSheetState.Ready -> {
+                // A new cloud request: the same gates as a first Polish (availability, field, consent).
+                if (!isAvailable() || !sessionValid(s)) {
+                    abort()
+                    return
+                }
+                if (!hasConsent()) {
+                    close()
+                    _state.value = AiSheetState.NeedsConsent
+                    requestConsent()
+                    return
+                }
+                start(s.span, s.generation, s.translate, auto = false)
+            }
             else -> Unit
         }
     }
@@ -252,7 +273,7 @@ class PolishController(
 
     /** Within [UNDO_WINDOW_MS] of a replace: puts the raw transcript back if our output is still in place. */
     fun undo(): Boolean {
-        if (_state.value !is AiSheetState.Replaced) return false
+        if (_state.value !is AiSheetState.Replaced && !_autoUndo.value) return false
         val s = session ?: return false
         if (!sessionValid(s)) {
             abort()
@@ -405,11 +426,12 @@ class PolishController(
 
     private fun applied(s: Session) {
         analytics(EventCatalog.aiPolishDone(s.mode, s.auto))
-        _state.value = AiSheetState.Replaced(RewriteMode.FIX, s.mode)
+        // Auto-polish offers Undo as a Smartbar chip; only a manual Replace shows it in the sheet.
+        if (s.auto) _autoUndo.value = true else _state.value = AiSheetState.Replaced(RewriteMode.FIX, s.mode)
         undoJob?.cancel()
         undoJob = scope.launch {
             delay(UNDO_WINDOW_MS)
-            if (_state.value is AiSheetState.Replaced) close()
+            if (_state.value is AiSheetState.Replaced || _autoUndo.value) close()
         }
     }
 
@@ -420,7 +442,10 @@ class PolishController(
         } else {
             analytics(EventCatalog.aiError(AiActionController.reason(error)))
         }
-        if (error == AiError.Paused) pause.pauseFor(AiPauseGate.PAUSED_MS)
+        if (error == AiError.Paused) {
+            pause.pauseFor(AiPauseGate.PAUSED_MS)
+            onPaused()
+        }
         if (s.auto) {
             // Auto-polish fails quietly: the raw transcript stays. Outside a quota stop the manual chip comes back.
             close()
@@ -459,6 +484,7 @@ class PolishController(
         replacer.invalidate()
         session = null
         beforeReport = null
+        _autoUndo.value = false
         _state.value = AiSheetState.Hidden
     }
 

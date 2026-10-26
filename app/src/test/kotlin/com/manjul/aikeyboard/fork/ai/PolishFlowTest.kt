@@ -9,6 +9,7 @@ import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.EditText
+import com.manjul.aikeyboard.core.ai.AiError
 import com.manjul.aikeyboard.core.ai.AiEvent
 import com.manjul.aikeyboard.core.ai.AiLru
 import com.manjul.aikeyboard.core.ai.AiPauseGate
@@ -35,6 +36,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -138,6 +140,22 @@ class PolishFlowTest {
 
         assertTrue(r.session.polish.undo())
         assertEquals("Note: um so hello there ", r.text)
+    }
+
+    @Test fun pausedDuringPolishHidesTheRewriteChipAtOnce() = run {
+        val r = Rig(this)
+        r.store.update { it.copy(consentAiAt = 1L) }
+        runCurrent()
+        r.startField()
+        runCurrent()
+        assertTrue(r.session.rewrite.isAvailable.value)
+
+        r.dictate("um so hello there")
+        r.engine.failWith(AiError.Paused)
+        r.session.polish(translate = false)
+        runCurrent()
+        assertFalse(r.session.rewrite.isAvailable.value, "the ✦ chip must not offer a rewrite that fails at once")
+        assertFalse(r.session.chipAvailable.value)
     }
 
     @Test fun autoPolishWithoutProNeverCallsTheEngine() = run {

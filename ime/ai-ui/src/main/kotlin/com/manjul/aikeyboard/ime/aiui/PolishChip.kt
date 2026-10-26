@@ -51,4 +51,18 @@ fun PolishChip(controller: PolishController, state: PolishChipState, modifier: M
     )
 }
 
+/** After an auto-polish replaced the dictation: a light "Undo" chip in the Smartbar row (never the sheet). */
+@Composable
+fun PolishUndoChip(onUndo: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.testTag(POLISH_UNDO_CHIP_TAG),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SheetChip(stringResource(R.string.ai_sheet__undo), onUndo)
+    }
+}
+
 internal const val POLISH_CHIP_TAG = "polish_chip"
+
+internal const val POLISH_UNDO_CHIP_TAG = "polish_undo_chip"

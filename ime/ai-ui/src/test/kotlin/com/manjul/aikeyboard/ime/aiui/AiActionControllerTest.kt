@@ -353,6 +353,17 @@ class AiActionControllerTest {
         assertTrue(rig.controller.isAvailable.value)
     }
 
+    @Test fun `a pause set by Polish hides the chip at once and for one hour`() = runTest {
+        val rig = AiRig(this)
+        assertTrue(rig.controller.isAvailable.value)
+        rig.pause.pauseFor(AiPauseGate.PAUSED_MS)
+        rig.controller.onPaused()
+        assertFalse(rig.controller.isAvailable.value)
+        advanceTimeBy(AiPauseGate.PAUSED_MS + 1)
+        runCurrent()
+        assertTrue(rig.controller.isAvailable.value)
+    }
+
     @Test fun `ai_enabled_global false makes AI unavailable`() = runTest {
         val rig = AiRig(this, config = DefaultsRemoteConfig(mapOf(ConfigKeys.AI_ENABLED_GLOBAL to false)))
         assertFalse(rig.controller.isAvailable.value)

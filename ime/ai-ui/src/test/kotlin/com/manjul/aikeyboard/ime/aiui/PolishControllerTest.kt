@@ -56,6 +56,7 @@ internal class PolishRig(val scope: TestScope, dictated: String = "um so hello t
     val clipboard = mutableListOf<String>()
     val reports = mutableListOf<ReportPayload>()
     val replies = mutableListOf<Channel<Step>>()
+    var pausedNotices = 0
 
     init {
         engine.script = {
@@ -92,6 +93,7 @@ internal class PolishRig(val scope: TestScope, dictated: String = "um so hello t
         autoPolishConsentAt = { autoConsentAt },
         isPro = { isPro },
         outputScript = { script },
+        onPaused = { pausedNotices++ },
     )
 
     val state: AiSheetState get() = controller.state.value
@@ -256,10 +258,73 @@ class PolishControllerTest {
         assertNull(r.chip)
         r.done("So, hello there.")
         assertEquals("Note: So, hello there. ", r.editor.text)
-        assertIs<AiSheetState.Replaced>(r.state)
+        assertEquals(AiSheetState.Hidden, r.state, "auto polish never covers the keys with the sheet")
+        assertTrue(r.controller.autoUndo.value, "a light Undo chip is offered instead")
         assertEquals(true, r.named(EventCatalog.AI_POLISH_DONE).single().params["auto"])
         assertTrue(r.controller.undo())
         assertEquals("Note: um so hello there ", r.editor.text)
+        assertFalse(r.controller.autoUndo.value)
+    }
+
+    @Test fun `the auto polish undo chip goes after the undo window`() = runTest {
+        val r = PolishRig(this)
+        r.autoPolish = true
+        r.autoConsentAt = 1L
+        r.isPro = true
+        r.dictate()
+        r.done("So, hello there.")
+        assertTrue(r.controller.autoUndo.value)
+        advanceTimeBy(PolishController.UNDO_WINDOW_MS + 1)
+        runCurrent()
+        assertFalse(r.controller.autoUndo.value)
+        assertFalse(r.controller.undo())
+        assertEquals("Note: So, hello there. ", r.editor.text)
+    }
+
+    private fun TestScope.readyRig(): PolishRig {
+        val r = PolishRig(this)
+        r.dictate()
+        r.controller.polish(translate = false)
+        runCurrent()
+        r.done("So, hello there.")
+        assertIs<AiSheetState.Ready>(r.state)
+        return r
+    }
+
+    @Test fun `retry on an output asks for consent again once it was withdrawn`() = runTest {
+        val r = readyRig()
+        r.consent = false
+        r.controller.retry()
+        runCurrent()
+        assertEquals(1, r.engine.requests.size, "nothing is sent without consent")
+        assertEquals(AiSheetState.NeedsConsent, r.state)
+        assertEquals(1, r.consentRequests)
+    }
+
+    @Test fun `retry on an output sends nothing while AI is paused or the field changed`() = runTest {
+        val paused = readyRig()
+        paused.pause.pauseFor(AiPauseGate.PAUSED_MS)
+        paused.controller.retry()
+        runCurrent()
+        assertEquals(1, paused.engine.requests.size)
+        assertEquals(AiSheetState.Hidden, paused.state)
+
+        val moved = readyRig()
+        moved.generation = 2
+        moved.controller.retry()
+        runCurrent()
+        assertEquals(1, moved.engine.requests.size)
+        assertEquals(AiSheetState.Hidden, moved.state)
+    }
+
+    @Test fun `Paused from polish tells the rewrite chip to re-check availability`() = runTest {
+        val r = PolishRig(this)
+        r.dictate()
+        r.controller.polish(translate = false)
+        runCurrent()
+        r.reply(Step.Fail(AiError.Paused))
+        assertTrue(r.pause.isPaused)
+        assertEquals(1, r.pausedNotices)
     }
 
     @Test fun `auto polish never runs without Pro or in a sensitive field`() = runTest {

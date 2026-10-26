@@ -112,6 +112,7 @@ class AiImeSession(
         autoPolishConsentAt = { settings.current.consentAutoPolishAt },
         isPro = isPro,
         outputScript = { OutputScript.valueOf(FeatureSettings.normalizeOutputScript(settings.current.polishOutputScript)) },
+        onPaused = { rewrite.onPaused() },
     )
 
     private val _chipAvailable = MutableStateFlow(false)
