@@ -43,4 +43,14 @@ object Buckets {
         bytes < 500_000_000 -> "250-500"
         else -> "500+"
     }
+
+    /** Latency in milliseconds (AI calls, first request to done). */
+    fun latency(ms: Long): String = when {
+        ms < 500 -> "0-500"
+        ms < 1_000 -> "500-1000"
+        ms < 2_000 -> "1000-2000"
+        ms < 5_000 -> "2000-5000"
+        ms < 10_000 -> "5000-10000"
+        else -> "10000+"
+    }
 }

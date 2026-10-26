@@ -55,8 +55,34 @@ data class FeatureSettings(
      * ur, hi and ar start off (plan decision 4). [FeatureSettingsStore.update] drops any other tag.
      */
     val autocorrectLocales: Set<String> = DEFAULT_AUTOCORRECT_LOCALES,
+    /** When the user tapped "Agree" on the `consent_ai` screen (PRD §10.6); 0 = no consent, nothing is sent. */
+    val consentAiAt: Long = 0L,
+    /** When the user tapped "Agree" on the `consent_auto_polish` screen (PRD FR-16 AC5); 0 = no consent. */
+    val consentAutoPolishAt: Long = 0L,
+    /** Polish every dictation without a tap (Pro, needs [consentAutoPolishAt]); off by default. */
+    val autoPolish: Boolean = false,
+    /**
+     * Polish output script as its kb-api wire name, one of [OUTPUT_SCRIPTS] (plan decision 12). Kept as a string so
+     * this module does not depend on `:core:ai`; [FeatureSettingsStore] clamps unknown values to the default.
+     */
+    val polishOutputScript: String = DEFAULT_OUTPUT_SCRIPT,
 ) {
+    /** True while any AI consent is on record, so Settings can offer to withdraw it. */
+    val hasAnyAiConsent: Boolean get() = consentAiAt > 0L || consentAutoPolishAt > 0L
+
+    /** These settings with every AI consent withdrawn: both consents cleared and auto-polish off (PRD §10.6). */
+    fun withAiConsentWithdrawn(): FeatureSettings = copy(consentAiAt = 0L, consentAutoPolishAt = 0L, autoPolish = false)
+
     companion object {
+        /** `OutputScript` wire names in `:core:ai` (kb-api `PolishRequest.script`). */
+        val OUTPUT_SCRIPTS: List<String> = listOf("MATCH_INPUT", "ROMAN", "NATIVE")
+
+        const val DEFAULT_OUTPUT_SCRIPT: String = "MATCH_INPUT"
+
+        /** [value] as one of [OUTPUT_SCRIPTS] (case-insensitive), or [DEFAULT_OUTPUT_SCRIPT]. */
+        fun normalizeOutputScript(value: String): String =
+            value.uppercase(java.util.Locale.ROOT).takeIf { it in OUTPUT_SCRIPTS } ?: DEFAULT_OUTPUT_SCRIPT
+
         /** The MVP keyboard languages (PRD FR-05). */
         val MVP_LANGUAGES: List<String> = listOf("en", "es", "fr", "pt", "id", "ar", "ur", "hi")
 

@@ -6,7 +6,7 @@
 package com.manjul.aikeyboard.core.analytics
 
 /**
- * PRD §12 events used so far. Factories take enums, buckets, language tags and booleans only, so no
+ * PRD §12 events used so far, plus `ai_request` (TRD §4.14) and the consent events (PRD §10.6). Factories take enums, buckets, language tags and booleans only, so no
  * event can carry text, package names or keystroke counts.
  */
 object EventCatalog {
@@ -42,6 +42,14 @@ object EventCatalog {
     const val PROCESS_TEXT_OPEN = "process_text_open"
     const val PROCESS_TEXT_REPLACE = "process_text_replace"
     const val DEEPLINK_UNKNOWN = "deeplink_unknown"
+    const val AI_REQUEST = "ai_request"
+    const val AI_REWRITE_DONE = "ai_rewrite_done"
+    const val AI_POLISH_DONE = "ai_polish_done"
+    const val AI_QUOTA_HIT = "ai_quota_hit"
+    const val AI_ERROR = "ai_error"
+    const val AI_OUTPUT_REPORTED = "ai_output_reported"
+    const val CONSENT_RESULT = "consent_result"
+    const val CONSENT_WITHDRAWN = "consent_withdrawn"
 
     val paramRegistry: Map<String, Set<String>> = mapOf(
         ONBOARDING_START to setOf("source"),
@@ -66,6 +74,14 @@ object EventCatalog {
         PROCESS_TEXT_OPEN to setOf("action", "editable"),
         PROCESS_TEXT_REPLACE to emptySet(),
         DEEPLINK_UNKNOWN to emptySet(),
+        AI_REQUEST to setOf("engine"),
+        AI_REWRITE_DONE to setOf("tone", "chars_bucket", "latency_bucket", "action"),
+        AI_POLISH_DONE to setOf("mode", "auto"),
+        AI_QUOTA_HIT to setOf("feature"),
+        AI_ERROR to setOf("reason"),
+        AI_OUTPUT_REPORTED to setOf("tone"),
+        CONSENT_RESULT to setOf("kind", "agreed"),
+        CONSENT_WITHDRAWN to setOf("kind"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -174,4 +190,34 @@ object EventCatalog {
 
     /** A deep link with an unknown route (TRD §4.3.4); the URI is never sent. */
     fun deeplinkUnknown() = event(DEEPLINK_UNKNOWN)
+
+    // AI events (PRD §12, TRD §4.14). Enums and numbers only: no prompt, output, tone label text or field data.
+
+    /** One network call to an AI engine (logged per call, not per LRU hit). */
+    fun aiRequest(engine: AiEngineParam) = event(AI_REQUEST, "engine" to engine.value)
+
+    /** A rewrite applied to the field. [chars] is the captured input length, sent only as a bucket. */
+    fun aiRewriteDone(tone: AiTone, chars: Int, latencyMs: Long, action: AiAction) = event(
+        AI_REWRITE_DONE,
+        "tone" to tone.value,
+        "chars_bucket" to Buckets.chars(chars),
+        "latency_bucket" to Buckets.latency(latencyMs),
+        "action" to action.value,
+    )
+
+    fun aiPolishDone(mode: PolishMode, auto: Boolean) = event(AI_POLISH_DONE, "mode" to mode.value, "auto" to auto)
+
+    fun aiQuotaHit(feature: AiFeature) = event(AI_QUOTA_HIT, "feature" to feature.value)
+
+    fun aiError(reason: AiErrorReason) = event(AI_ERROR, "reason" to reason.value)
+
+    /** The user reported AI output (Play AI-generated content policy); never says whether text was attached. */
+    fun aiOutputReported(tone: AiTone) = event(AI_OUTPUT_REPORTED, "tone" to tone.value)
+
+    /** The user answered a consent screen: [agreed] is true only for an explicit "Agree" (PRD §10.6). */
+    fun consentResult(kind: ConsentKind, agreed: Boolean) =
+        event(CONSENT_RESULT, "kind" to kind.value, "agreed" to agreed)
+
+    /** The user withdrew a consent in Settings. */
+    fun consentWithdrawn(kind: ConsentKind) = event(CONSENT_WITHDRAWN, "kind" to kind.value)
 }

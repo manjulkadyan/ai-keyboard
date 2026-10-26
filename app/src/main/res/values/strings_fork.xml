@@ -241,4 +241,15 @@
     <string name="typing_settings__clear" tools:ignore="MissingTranslation">Clear</string>
     <string name="typing_settings__cancel" tools:ignore="MissingTranslation">Cancel</string>
     <string name="typing_settings__cleared" tools:ignore="MissingTranslation">Learned words cleared</string>
+
+    <!-- Privacy controls (PRD FR-35, §10.6), on the Private apps screen -->
+    <string name="privacy__data_header" tools:ignore="MissingTranslation">Data and consent</string>
+    <string name="privacy__share_analytics" tools:ignore="MissingTranslation">Share usage analytics</string>
+    <string name="privacy__share_analytics_summary" tools:ignore="MissingTranslation">Send anonymous counts of which features you use. Never what you type.</string>
+    <string name="privacy__withdraw_ai" tools:ignore="MissingTranslation">Withdraw AI consent</string>
+    <string name="privacy__withdraw_ai_summary" tools:ignore="MissingTranslation">Stop sending text for AI rewrite and polish. Auto-polish turns off.</string>
+    <string name="privacy__withdraw_ai_none" tools:ignore="MissingTranslation">You have not agreed to AI features.</string>
+    <string name="privacy__withdraw_ai_confirm" tools:ignore="MissingTranslation">Withdraw AI consent? AI rewrite and polish stay off until you agree again.</string>
+    <string name="privacy__withdraw" tools:ignore="MissingTranslation">Withdraw</string>
+    <string name="privacy__cancel" tools:ignore="MissingTranslation">Cancel</string>
 </resources>

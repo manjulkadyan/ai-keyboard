@@ -33,7 +33,9 @@ internal object FeatureSettingsSerializer : Serializer<FeatureSettings> {
     override val defaultValue: FeatureSettings = FeatureSettings()
 
     override suspend fun readFrom(input: InputStream): FeatureSettings = try {
-        json.decodeFromString(FeatureSettings.serializer(), input.readBytes().decodeToString())
+        json.decodeFromString(FeatureSettings.serializer(), input.readBytes().decodeToString()).let {
+            it.copy(polishOutputScript = FeatureSettings.normalizeOutputScript(it.polishOutputScript))
+        }
     } catch (e: SerializationException) {
         // Never put the file content in the message (it can contain package names).
         throw CorruptionException("feature_settings.json is not valid")
@@ -78,6 +80,9 @@ class FeatureSettingsStore(
                 firstTranslateAt = new.firstTranslateAt.coerceAtLeast(0L),
                 enableKeyboardCardShownAt = new.enableKeyboardCardShownAt.coerceAtLeast(0L),
                 lastSourceLang = new.lastSourceLang?.takeIf { it.isNotBlank() },
+                consentAiAt = new.consentAiAt.coerceAtLeast(0L),
+                consentAutoPolishAt = new.consentAutoPolishAt.coerceAtLeast(0L),
+                polishOutputScript = FeatureSettings.normalizeOutputScript(new.polishOutputScript),
                 autocorrectLocales = new.autocorrectLocales.filterTo(LinkedHashSet()) { it in FeatureSettings.MVP_LANGUAGES },
             )
         }

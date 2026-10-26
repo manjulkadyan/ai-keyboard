@@ -44,3 +44,31 @@ enum class TranslateErrorReason(val value: String) {
 }
 
 enum class ProcessTextAction(val value: String) { PROCESS_TEXT("process_text"), SEND("send") }
+
+/** Which engine served an AI call (`ai_request{engine}`); only [CLOUD] exists until OD-20 (plan decision 9). */
+enum class AiEngineParam(val value: String) { CLOUD("cloud"), ON_DEVICE("on_device") }
+
+/**
+ * The rewrite tone (`ai_rewrite_done`, `ai_output_reported`). The first seven match the kb-api rewrite modes;
+ * [POLISH] is for `ai_output_reported` on Polish output, which has no tone.
+ */
+enum class AiTone(val value: String) {
+    FIX("fix"), FORMAL("formal"), FRIENDLY("friendly"), SHORTER("shorter"), LONGER("longer"),
+    EMOJIFY("emojify"), TRANSLATE("translate"), POLISH("polish"),
+}
+
+/** How a rewrite was applied (PRD §12 `ai_rewrite_done.action`: replace/insert). */
+enum class AiAction(val value: String) { REPLACE("replace"), INSERT("insert") }
+
+enum class PolishMode(val value: String) { CLEAN("clean"), CLEAN_TRANSLATE("clean_translate") }
+
+enum class AiFeature(val value: String) { REWRITE("rewrite"), POLISH("polish") }
+
+/** `ai_error{reason}`: the client error classes of TRD §4.4.5 (quota has its own event, `ai_quota_hit`). */
+enum class AiErrorReason(val value: String) {
+    OFFLINE("offline"), TIMEOUT("timeout"), REFUSED("refused"), PAUSED("paused"), TOO_LONG("too_long"),
+    UNAVAILABLE("unavailable"), RATE_LIMITED("rate_limited"), TEXT_CHANGED("text_changed"),
+}
+
+/** PRD §10.6 consent classes that have an Agree screen this sprint. */
+enum class ConsentKind(val value: String) { AI("ai"), AUTO_POLISH("auto_polish") }

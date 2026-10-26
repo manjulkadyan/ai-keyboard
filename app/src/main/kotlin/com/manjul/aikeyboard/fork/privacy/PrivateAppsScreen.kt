@@ -27,13 +27,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
+import com.manjul.aikeyboard.appContext
+import com.manjul.aikeyboard.core.datastore.FeatureSettings
+import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.florisboard.lib.compose.stringRes
 
-/** Private apps (a Settings home entry; there is no Privacy parent screen yet): every field in a toggled app is treated as sensitive. */
+/**
+ * Private apps (a Settings home entry; there is no Privacy parent screen yet): every field in a toggled app is treated
+ * as sensitive. The analytics opt-out and AI consent withdrawal ([privacyControls]) sit above the app list.
+ */
 @Composable
 fun PrivateAppsScreen() = FlorisScreen {
     title = stringRes(R.string.private_apps__title)
@@ -52,6 +58,8 @@ fun PrivateAppsScreen() = FlorisScreen {
         }
     }
     val privatePackages by repository.privatePackages.collectAsState(initial = emptySet())
+    val store = remember { context.featureSettingsStore().value }
+    val settings by store.flow.collectAsState(initial = store.current)
 
     content {
         @Composable
@@ -90,6 +98,17 @@ fun PrivateAppsScreen() = FlorisScreen {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
+            privacyControls(
+                settings = settings,
+                onUpdate = { transform -> scope.launch { store.update(transform) } },
+                onWithdrawAiConsent = {
+                    scope.launch {
+                        var before = FeatureSettings()
+                        store.update { before = it; it.withAiConsentWithdrawn() }
+                        consentWithdrawnEvents(before).forEach(context.appContext().value.analytics.value::log)
+                    }
+                },
+            )
             if (suggestions.isNotEmpty()) {
                 item { Header(stringRes(R.string.private_apps__suggested)) }
                 items(suggestions, key = { "s:" + it.packageName }) { AppRow(it) }

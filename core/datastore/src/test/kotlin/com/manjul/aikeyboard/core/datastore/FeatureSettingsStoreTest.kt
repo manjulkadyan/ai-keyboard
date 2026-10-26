@@ -152,4 +152,53 @@ class FeatureSettingsStoreTest {
         store.update { it.copy(onboardingStep = 2) }
         assertEquals(2, store.flow.first().onboardingStep)
     }
+
+    @Test
+    fun `ai consent fields default to off`() = runTest {
+        val s = FeatureSettingsStore(app).flow.first()
+        assertEquals(0L, s.consentAiAt)
+        assertEquals(0L, s.consentAutoPolishAt)
+        assertFalse(s.autoPolish)
+        assertEquals("MATCH_INPUT", s.polishOutputScript)
+        val old = FeatureSettingsSerializer.readFrom("""{"onboardingDone":true}""".byteInputStream())
+        assertEquals(0L, old.consentAiAt)
+        assertEquals("MATCH_INPUT", old.polishOutputScript)
+    }
+
+    @Test
+    fun `unknown polishOutputScript is clamped on write and on read`() = runTest {
+        val store = FeatureSettingsStore(app)
+        store.update { it.copy(polishOutputScript = "ROMAN") }
+        assertEquals("ROMAN", store.flow.first().polishOutputScript)
+        store.update { it.copy(polishOutputScript = "native") }
+        assertEquals("NATIVE", store.flow.first().polishOutputScript)
+        store.update { it.copy(polishOutputScript = "klingon") }
+        assertEquals("MATCH_INPUT", store.flow.first().polishOutputScript)
+        assertEquals("MATCH_INPUT", store.current.polishOutputScript)
+        val read = FeatureSettingsSerializer.readFrom("""{"polishOutputScript":"x"}""".byteInputStream())
+        assertEquals("MATCH_INPUT", read.polishOutputScript)
+    }
+
+    @Test
+    fun `withdrawing ai consent clears both consents and auto-polish only`() = runTest {
+        val given = FeatureSettings(
+            consentAiAt = 5L, consentAutoPolishAt = 6L, autoPolish = true, polishOutputScript = "ROMAN",
+            analyticsOptOut = true,
+        )
+        val withdrawn = given.withAiConsentWithdrawn()
+        assertEquals(given.copy(consentAiAt = 0L, consentAutoPolishAt = 0L, autoPolish = false), withdrawn)
+        assertFalse(withdrawn.hasAnyAiConsent)
+        assertTrue(given.hasAnyAiConsent)
+        assertTrue(FeatureSettings(consentAutoPolishAt = 1L).hasAnyAiConsent)
+        assertFalse(FeatureSettings().hasAnyAiConsent)
+    }
+
+    @Test
+    fun `negative consent timestamps are clamped to zero`() = runTest {
+        val store = FeatureSettingsStore(app)
+        store.update { it.copy(consentAiAt = -3L, consentAutoPolishAt = -1L) }
+        val s = store.flow.first()
+        assertEquals(0L, s.consentAiAt)
+        assertEquals(0L, s.consentAutoPolishAt)
+    }
 }

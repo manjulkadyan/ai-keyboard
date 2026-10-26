@@ -40,6 +40,15 @@ class EventCatalogLimitsTest {
         EventCatalog.processTextOpen(ProcessTextAction.SEND, false),
         EventCatalog.processTextReplace(),
         EventCatalog.deeplinkUnknown(),
+        EventCatalog.aiRequest(AiEngineParam.CLOUD),
+        EventCatalog.aiRewriteDone(AiTone.TRANSLATE, Int.MAX_VALUE, Long.MAX_VALUE, AiAction.INSERT),
+        EventCatalog.aiRewriteDone(AiTone.FIX, -1, -1, AiAction.REPLACE),
+        EventCatalog.aiPolishDone(PolishMode.CLEAN, false),
+        EventCatalog.aiQuotaHit(AiFeature.REWRITE),
+        EventCatalog.aiError(AiErrorReason.RATE_LIMITED),
+        EventCatalog.aiOutputReported(AiTone.POLISH),
+        EventCatalog.consentResult(ConsentKind.AUTO_POLISH, false),
+        EventCatalog.consentWithdrawn(ConsentKind.AI),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -142,6 +151,8 @@ class EventCatalogLimitsTest {
             "voice_session_end", "voice_permission_result", "voice_unavailable", "privacy_private_app_add",
             "pack_download_start", "pack_download_done", "translate_done", "first_translate", "translate_error",
             "translate_preview", "process_text_open", "process_text_replace", "deeplink_unknown",
+            "ai_request", "ai_rewrite_done", "ai_polish_done", "ai_quota_hit", "ai_error", "ai_output_reported",
+            "consent_result", "consent_withdrawn",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)
