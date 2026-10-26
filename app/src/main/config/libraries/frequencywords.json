@@ -1,0 +1,15 @@
+{
+  "uniqueId": "frequencywords",
+  "name": "FrequencyWords word lists (suggestion dictionaries for en, es, fr, pt, id, ar, hi)",
+  "developers": [
+    {
+      "name": "Hermit Dave",
+      "organisationUrl": "https://github.com/hermitdave"
+    }
+  ],
+  "website": "https://github.com/hermitdave/FrequencyWords",
+  "description": "Word frequency lists built from OpenSubtitles2018. The keyboard's dictionaries for these languages are adapted from them (filtered and re-encoded) and are shared under CC-BY-SA-4.0.",
+  "licenses": [
+    "frequencywords-cc-by-sa-4.0"
+  ]
+}

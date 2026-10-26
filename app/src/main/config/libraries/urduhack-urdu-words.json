@@ -1,0 +1,14 @@
+{
+  "uniqueId": "urduhack-urdu-words",
+  "name": "urdu-words (Urdu suggestion dictionary)",
+  "developers": [
+    {
+      "name": "Urdu Hack",
+      "organisationUrl": "https://github.com/urduhack"
+    }
+  ],
+  "website": "https://github.com/urduhack/urdu-words",
+  "licenses": [
+    "urduhack-mit"
+  ]
+}
