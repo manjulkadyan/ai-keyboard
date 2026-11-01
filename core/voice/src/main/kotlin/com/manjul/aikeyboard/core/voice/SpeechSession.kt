@@ -20,7 +20,8 @@ import kotlinx.coroutines.launch
  * Speech session state machine and error policy. All calls and engine callbacks must happen on the thread
  * [scope] runs on (the main thread in the IME). Transcript text is never logged.
  *
- * [endReason] values match the analytics EndReason values: "user", "silence", "error", "cap", "field_change".
+ * [endReason] values match the analytics EndReason values: "user", "silence", "error", "cap", "field_change"
+ * ([cancel] always reports "field_change"; the voice controller reports "hidden" for a keyboard hide).
  * A non-continuous session that ends on its own final result reports "silence" (ruling R19).
  *
  * [output] is lossless (unbounded channel, single consumer): items emitted before a collector subscribes are

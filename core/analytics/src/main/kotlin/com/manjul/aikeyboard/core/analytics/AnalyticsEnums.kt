@@ -15,7 +15,7 @@ enum class VoiceEngine(val value: String) {
 }
 
 enum class EndReason(val value: String) {
-    USER("user"), SILENCE("silence"), ERROR("error"), CAP("cap"), FIELD_CHANGE("field_change")
+    USER("user"), SILENCE("silence"), ERROR("error"), CAP("cap"), FIELD_CHANGE("field_change"), HIDDEN("hidden")
 }
 
 enum class UnavailableReason(val value: String) {

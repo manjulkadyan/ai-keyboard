@@ -229,6 +229,8 @@ class FlorisImeService : LifecycleInputMethodService() {
 
         fun hideUi() {
             val ims = FlorisImeServiceReference.get() ?: return
+            // FORK(S1-voice): our hide key ends dictation at once (mic off) instead of after the hide animation
+            voiceSessionOrNull()?.onFinishInputView()
             if (AndroidVersion.ATLEAST_API28_P) {
                 ims.requestHideSelf(0)
             } else {
@@ -546,9 +548,11 @@ class FlorisImeService : LifecycleInputMethodService() {
 
     override fun onFinishInputView(finishingInput: Boolean) {
         flogInfo { "finishing=$finishingInput" }
+        // FORK(S1-voice): end dictation before super, which finishes the composing region, so the partial is
+        // discarded and not committed (R25)
+        voiceSession.onFinishInputView()
         super.onFinishInputView(finishingInput)
         policyController.onFinishInputView() // FORK(S1-policy)
-        voiceSession.onFinishInputView() // FORK(S1-voice): hiding the keyboard ends dictation
         translateSession.onFinishInputView() // FORK(S2-bar): hiding closes the bar, pair and mode are kept
         aiSession.onFinishInputView() // FORK(S3-ai): hiding cancels the stream and closes the sheet
         editorInstance.handleFinishInputView()

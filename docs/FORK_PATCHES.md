@@ -150,6 +150,7 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 |---|---|
 | `app/src/main/assets/ime/theme/org.florisboard.themes{,.my}/extension.json` | JSON has no comment syntax; branding-only title change recorded in the S0-branding row above |
 | `app/src/main/assets/ime/keyboard/org.florisboard.localization/{extension.json,popupMappings/ur-PK.json,popupMappings/ar.json}` | JSON has no comment syntax; S1-layouts additions recorded in the rows above |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-voice | Device check 4.2 fix (R25): `onFinishInputView` ends dictation before `super.onFinishInputView`, which finishes the composing region, so a hide discards the partial instead of committing it. The companion `hideUi` (our hide key) ends dictation at once, so the mic turns off before the hide animation ends. Both report `end_reason=hidden` |
 | `README.md` | Rewritten from scratch for the fork (S0-branding); no upstream hunk is left to annotate |
 
 ## Decisions

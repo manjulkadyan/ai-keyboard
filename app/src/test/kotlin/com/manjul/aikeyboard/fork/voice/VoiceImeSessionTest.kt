@@ -274,8 +274,11 @@ class VoiceImeSessionTest {
         listen(r, "hi")
         assertTrue(r.session.controller.ui.value is VoiceUiState.Listening)
 
-        r.policy.onFinishInputView()
+        // FlorisImeService.onFinishInputView (R25): our cancel first, then InputMethodService.onFinishInputView,
+        // which finishes whatever composing region is left, then the policy controller.
         r.session.onFinishInputView()
+        r.ic.finishComposingText()
+        r.policy.onFinishInputView()
         runCurrent()
 
         assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
@@ -285,6 +288,34 @@ class VoiceImeSessionTest {
         assertEquals("", r.text)
         assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
         assertEquals(0, r.deletes)
+        assertTrue(r.commits.isEmpty())
+        assertEquals("hidden", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
+    }
+
+    @Test fun hideAfterTheFrameworkFinishedComposingKeepsThePartial() = run {
+        // Documents why the service must cancel before super: once the framework has finished composing, the
+        // partial is plain host text and a cancel cannot remove it (the bug fixed for R25).
+        val r = Rig(this, initial = "abc ")
+        listen(r, "hel")
+        r.ic.finishComposingText()
+        r.session.onFinishInputView()
+        runCurrent()
+        assertEquals("abc hel", r.text)
+    }
+
+    @Test fun hideKeyThenFrameworkHideEndsTheSessionOnce() = run {
+        val r = Rig(this, initial = "abc ")
+        listen(r, "hel")
+        // FlorisImeService.hideUi cancels at once, then the framework later calls onFinishInputView.
+        r.session.onFinishInputView()
+        runCurrent()
+        assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
+        r.session.onFinishInputView()
+        r.ic.finishComposingText()
+        runCurrent()
+        assertEquals("abc ", r.text)
+        assertTrue(r.commits.isEmpty())
+        assertEquals(1, r.events.count { it.name == "voice_session_end" })
     }
 
     @Test fun capabilitiesAreResolvedOnFirstVoiceUseNotAtCreation() = run {

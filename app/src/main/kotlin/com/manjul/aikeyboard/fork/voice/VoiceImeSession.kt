@@ -153,8 +153,12 @@ class VoiceImeSession(
         controller.cancel(EndReason.FIELD_CHANGE.value)
     }
 
+    /**
+     * Keyboard hidden (R25), or our hide key pressed: call before `InputMethodService.onFinishInputView`, which
+     * finishes the composing region, so the partial is discarded instead of committed. A second call is a no-op.
+     */
     fun onFinishInputView() {
-        controller.cancel(EndReason.FIELD_CHANGE.value)
+        controller.cancel(EndReason.HIDDEN.value)
     }
 
     fun onSelectionUpdate(newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {

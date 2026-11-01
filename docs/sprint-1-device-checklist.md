@@ -124,7 +124,7 @@ These are not code tasks. They need an owner outside engineering.
   The small model is offered at 5.5 GiB of reported RAM, which stands for the "6 GB" device class (R31).
 - **PRD section 12 analytics enums.** The shipped catalog is a superset of the PRD values (R13): `engine`
   is `system_on_device`, `system_default` or `whisper` (PRD: `on_device`, `system`); `end_reason` also has
-  `cap` and `field_change` (PRD: `user`, `silence`, `error`); `voice_unavailable` and `pack_download_start`
+  `cap`, `field_change` and `hidden` (PRD: `user`, `silence`, `error`); `voice_unavailable` and `pack_download_start`
   and `pack_download_done` are not in the PRD table. Event names are unchanged. Update the PRD so data and
   product use the same enum values.
 - **Other open product flags** from the sprint decisions: curated banking-package list is empty until
