@@ -44,6 +44,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * The app-wide AI pieces (TRD §4.4, §5.2): remote config, kb-api tokens, the cloud engine, the field-scoped LRU, the
  * pause gate and the report sender. One per process (`FlorisApplication.aiAppGraph`), created lazily by the IME.
  *
+ * [config] is the IME mirror of Firebase Remote Config (S4), so `ai_enabled_global` works as a kill switch.
+ *
  * Process start (TRD §2.3): building the graph creates no HTTP client and does not touch Firebase. The client is
  * built on the first request; Firebase starts on the first token fetch (`FirebaseBootstrap`).
  *
@@ -61,7 +63,7 @@ class AiAppGraph(
     val isConfigured: Boolean,
 ) {
     companion object {
-        fun create(context: Context): AiAppGraph {
+        fun create(context: Context, config: RemoteConfig = DefaultsRemoteConfig()): AiAppGraph {
             val baseUrl = BuildConfig.AI_BASE_URL
             val firebase = FirebaseConfig(
                 projectId = BuildConfig.FIREBASE_PROJECT_ID,
@@ -74,7 +76,6 @@ class AiAppGraph(
             } else {
                 FirebaseTokenSource(FirebaseBootstrap(context, firebase), CoroutineScope(SupervisorJob() + Dispatchers.IO))
             }
-            val config = DefaultsRemoteConfig()
             // AiClient adds the auth headers itself, so the client has no auth interceptor.
             val http = lazy { HttpClientFactory.create() }
             val engine = LazyCloudEngine { CloudAiEngine(AiClient(http.value, baseUrl, tokens, config, System::currentTimeMillis)) }

@@ -25,6 +25,7 @@ dependencies {
     api(libs.kotlinx.coroutines)
     api(libs.kotlinx.serialization.json)
     api(libs.androidx.datastore)
+    api(projects.core.config) // S4 Task 1: RemoteConfigMirror and MirroredRemoteConfig
 
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.junit4)

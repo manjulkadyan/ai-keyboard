@@ -27,6 +27,8 @@ plugins {
     // FORK(S0-ads): verify<Variant>NoAdAutoInit fails `check` if an ad/consent SDK provider is merged (TRD §11.1);
     // verify<Variant>ExportedComponents applies the exported-component allow-list to the merged manifest (TRD §6.3)
     alias(libs.plugins.aikeyboard.ad.isolation)
+    // FORK(S4-rc): Crashlytics build id (the SDK starts only on first use; collection is off in the manifest)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 val projectMinSdk: String by project
@@ -237,6 +239,11 @@ androidComponents {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// FORK(S4-rc): ManifestAnalyticsDefaultsTest reads the debug and the release merged manifests
+tasks.matching { it.name == "testDebugUnitTest" }.configureEach {
+    dependsOn("processDebugMainManifest", "processReleaseMainManifest")
 }
 
 // FORK(S1-policy): offline android-all jar for Robolectric (see the script header)

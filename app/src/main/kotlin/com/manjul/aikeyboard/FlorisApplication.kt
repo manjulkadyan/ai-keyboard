@@ -78,6 +78,10 @@ import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdic
 import com.manjul.aikeyboard.core.tts.TtsManager
 import com.manjul.aikeyboard.fork.suggest.SuggestContext // FORK(S3-suggest)
 import com.manjul.aikeyboard.fork.ai.AiAppGraph // FORK(S3-ai)
+import com.manjul.aikeyboard.fork.rc.FirebaseGraph // FORK(S4-rc)
+import kotlinx.coroutines.flow.distinctUntilChanged // FORK(S4-rc)
+import kotlinx.coroutines.flow.drop // FORK(S4-rc)
+import kotlinx.coroutines.flow.map // FORK(S4-rc)
 import java.lang.ref.WeakReference
 
 /**
@@ -112,10 +116,19 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     val themeManager = lazy { ThemeManager(this) }
     // FORK(S1-policy): fork-owned settings (DataStore), read by the policy controller
     val featureSettingsStore = lazy { FeatureSettingsStore(this) }
+    // FORK(S4-rc): Remote Config mirror, Firebase Analytics sink and Crashlytics reporter; no SDK starts until used
+    val firebaseGraph = lazy {
+        FirebaseGraph(
+            context = this,
+            optOut = { featureSettingsStore.value.current.analyticsOptOut },
+            fallbackSink = if (BuildConfig.DEBUG) LogcatSink else NoopSink,
+        )
+    }
     // FORK(S1-analytics): batched, consent-aware analytics relay (Logcat in debug, no-op in release)
     val analytics = lazy {
         BatchingRelay(
-            sink = if (BuildConfig.DEBUG) LogcatSink else NoopSink,
+            // FORK(S4-rc): Firebase only when configured and not opted out, else Logcat (debug) or no-op
+            sink = firebaseGraph.value.analyticsSink,
             clock = System::currentTimeMillis,
             scope = scope,
             optOut = { featureSettingsStore.value.current.analyticsOptOut },
@@ -153,7 +166,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     // FORK(S2-translator): the process's one TextToSpeech holder; the engine binds on the first acquire()
     val ttsManager = lazy { TtsManager(this) }
     // FORK(S3-ai): config, kb-api tokens, cloud engine, LRU, pause gate, reports; no HTTP client or Firebase until used
-    val aiAppGraph = lazy { AiAppGraph.create(this) }
+    // FORK(S4-rc): the AI kill switch and timeouts come from the Remote Config mirror
+    val aiAppGraph = lazy { AiAppGraph.create(this, firebaseGraph.value.remoteConfig) }
 
     // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
     override val workManagerConfiguration: Configuration
@@ -207,6 +221,11 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
 
     fun init() {
         featureSettingsStore.value // FORK(S1-policy): start loading the fork settings at process start
+        // FORK(S4-rc): an opt-out change turns Analytics and Crashlytics collection off (or back on) at once
+        scope.launch {
+            featureSettingsStore.value.flow.map { it.analyticsOptOut }.distinctUntilChanged().drop(1)
+                .collect { firebaseGraph.value.onOptOutChanged(it) }
+        }
         cacheDir?.deleteContentsRecursively()
         scope.launch {
             val result = FlorisPreferenceStore.initAndroid(
@@ -307,3 +326,6 @@ fun Context.suggestContext() = this.florisApplication().suggestContext
 
 // FORK(S3-ai): accessor for the app-wide AI pieces
 fun Context.aiAppGraph() = this.florisApplication().aiAppGraph
+
+// FORK(S4-rc): accessor for the Remote Config mirror, Analytics sink and Crashlytics reporter
+fun Context.firebaseGraph() = this.florisApplication().firebaseGraph

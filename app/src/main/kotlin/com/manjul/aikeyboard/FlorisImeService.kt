@@ -122,6 +122,7 @@ import com.manjul.aikeyboard.fork.ai.AiImeSession // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.ai.copyAiOutput // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.ai.proIntent // FORK(S3-ai)
 import com.manjul.aikeyboard.core.analytics.EndReason // FORK(S2-bar)
+import com.manjul.aikeyboard.core.config.ConfigKeys // FORK(S4-rc)
 import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
 import com.manjul.aikeyboard.fork.analytics.ImeSessionStartReporter // FORK(S1-analytics)
 import com.manjul.aikeyboard.fork.privacy.PrivateAppUndo // FORK(S1-smartbar)
@@ -323,7 +324,8 @@ class FlorisImeService : LifecycleInputMethodService() {
 
     // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. Created in onCreate so the store
     // load and the settings collector start with the service. Keyguard state is read on each evaluation, never
-    // cached. Remote-config forced packages arrive in S3.
+    // cached. FORK(S4-rc): forced packages are the `policy_force_sensitive_packages` kill switch, read from the
+    // Remote Config mirror on each evaluation (the IME never talks to Firebase).
     private lateinit var policyController: ImePolicyController
     // FORK(S1-voice): in-keyboard voice typing; cancelled by every policy restriction and when the keyboard hides
     private lateinit var voiceSession: VoiceImeSession
@@ -351,7 +353,11 @@ class FlorisImeService : LifecycleInputMethodService() {
         policyController = ImePolicyController(
             store = featureSettingsStore().value,
             keyguard = { keyguardManager?.isDeviceLocked ?: true },
-            forcedPackages = { emptySet() },
+            // FORK(S4-rc): see the policyController declaration
+            forcedPackages = {
+                val raw = firebaseGraph().value.remoteConfig.string(ConfigKeys.POLICY_FORCE_SENSITIVE_PACKAGES)
+                ConfigKeys.forcedPackages(raw)
+            },
             scope = lifecycleScope,
         )
         // Settings can arrive after the field started: recompute the editor state from the new decision.

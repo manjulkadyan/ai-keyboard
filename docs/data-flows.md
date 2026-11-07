@@ -45,6 +45,15 @@ and day in Firestore. Reports are stored for 90 days, and their text only when t
 receives the text to produce the output. The backend is not deployed in Sprint 3, so none of these flows runs in a
 shipped build yet (`docs/sprint-3-device-checklist.md` A.1).
 
+## Remote Config, Analytics and Crashlytics (Sprint 4)
+
+| Flow | Data | Leaves the device? | Where to | When | Notes |
+|---|---|---|---|---|---|
+| Remote Config fetch | Firebase installation id, app id and version, device locale and SDK metadata (per Google's terms) | Yes, only when Firebase is configured | Google (Firebase Remote Config) | App activity start: activate the cached values, fetch after the first frame (1 h in debug, 12 h in release). Real-time kill-switch listener while an app activity is started | No user content. The IME process never fetches |
+| IME config mirror | Catalog keys and values only, plus the activation time | No | `datastore/rc_mirror.json` on the device | Each activation in the app process. Kill-switch updates change only `ai_enabled_global` and `policy_force_sensitive_packages` | The IME reads the mirror. Unknown keys are dropped |
+| Firebase Analytics | Catalog events and params only (`EventCatalog`), Firebase app instance id, device and app metadata | Yes, only when Firebase is configured and the user did not opt out | Google (Firebase Analytics) | Each batched event from the analytics relay | Collection and ad id collection are off in the manifest. Code turns them on only without the opt-out, and off at once on opt-out. Consent Mode is not wired until Task 6 |
+| Crashlytics | Crash and non-fatal stack traces with exception class names, area tag, device and app metadata | Yes, only when Firebase is configured and the user did not opt out | Google (Firebase Crashlytics) | Crashes and `NonFatalReporter.report` | Every exception message is dropped (`CrashlyticsReporter.scrub`). Collection is off in the manifest until the app starts it |
+
 ## Suggestions and the user dictionary (Sprint 3)
 
 | Flow | Data | Leaves the device? | Where to | When | Notes |

@@ -222,6 +222,12 @@
                 tools:node="remove"/>
         </provider>
 
+        <!-- FORK(S4-rc): Analytics, the advertising id and Crashlytics collect nothing until the app turns them on
+             after the consent and opt-out checks (S4 decision 17). Guarded by ManifestAnalyticsDefaultsTest. -->
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false"/>
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false"/>
+        <meta-data android:name="firebase_crashlytics_collection_enabled" android:value="false"/>
+
         <!-- FORK(S3-net): Firebase never starts with the process (TRD §2.3). :core:firebase initialises its own
              FirebaseApp on the first AI request, and only when Firebase options are configured (decision 6).
              The removed classes are absent from the merged libraries, so MissingClass is ignored on each entry. -->

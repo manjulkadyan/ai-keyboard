@@ -51,6 +51,7 @@ import com.manjul.aikeyboard.app.setup.NotificationPermissionState
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.cacheManager
 import com.manjul.aikeyboard.featureSettingsStore // FORK(S1-onboarding)
+import com.manjul.aikeyboard.firebaseGraph // FORK(S4-rc)
 import com.manjul.aikeyboard.fork.routes.AppIntent // FORK(S2-routes)
 import com.manjul.aikeyboard.fork.routes.AppIntents // FORK(S2-routes)
 import com.manjul.aikeyboard.fork.routes.TranslatorHandoff // FORK(S2-routes)
@@ -112,6 +113,9 @@ class FlorisAppActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // FORK(S4-rc): activate Remote Config at the cold start, fetch after the first frame, and listen for
+        // kill-switch updates while this Activity is started. Does nothing without Firebase options.
+        firebaseGraph().value.onAppActivityCreated(this) { task -> window.decorView.post(task) }
 
         prefs.other.settingsTheme.asFlow().collectIn(lifecycleScope) {
             appTheme = it

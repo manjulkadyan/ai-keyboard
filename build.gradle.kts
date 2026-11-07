@@ -26,6 +26,7 @@ plugins {
     alias(libs.plugins.kotlinx.kover) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.mikepenz.aboutlibraries) apply false
+    alias(libs.plugins.firebase.crashlytics) apply false // FORK(S4-rc): applied in :app
     // FORK(S0-modules): fail the build on forbidden module dependencies (TRD §2.2 "Dependency rules")
     alias(libs.plugins.aikeyboard.module.rules)
 }

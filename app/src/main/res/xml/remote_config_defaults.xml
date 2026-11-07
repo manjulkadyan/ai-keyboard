@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 AI Keyboard contributors. Licensed under the Apache License, Version 2.0 -->
+<!-- S4 Task 1: Firebase Remote Config in-app defaults. The key set and values must match ConfigCatalog
+     (RemoteConfigDefaultsXmlTest). Ad unit ids are empty here: an empty id means no ad for that placement. -->
+<defaultsMap>
+    <entry>
+        <key>ai_enabled_global</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>autocorrect_min_score</key>
+        <value>0.7</value>
+    </entry>
+    <entry>
+        <key>ai_still_working_ms</key>
+        <value>4000</value>
+    </entry>
+    <entry>
+        <key>ai_timeout_ms</key>
+        <value>10000</value>
+    </entry>
+    <entry>
+        <key>policy_force_sensitive_packages</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>min_supported_version</key>
+        <value>0</value>
+    </entry>
+    <entry>
+        <key>ads_enabled_global</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>paywall_onboarding_enabled</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>ad_unit_app_open</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>ad_unit_inter_feature_exit</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>ad_unit_banner_home</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>ad_unit_native_translator</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>ad_unit_native_history</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>ad_unit_native_dictionary</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>ad_unit_rewarded_game_hint</key>
+        <value></value>
+    </entry>
+</defaultsMap>

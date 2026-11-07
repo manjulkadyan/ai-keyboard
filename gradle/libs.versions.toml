@@ -58,6 +58,8 @@ androidx-test-runner = "1.6.1"
 # and :core:firebase (App Check + anonymous Auth, initialised manually on first use; BoM checked 2026-10-26)
 okhttp = "4.12.0"
 firebase-bom = "34.8.0"
+# FORK(S4-rc): Crashlytics Gradle plugin (build id and mapping file; latest on Google Maven, checked 2026-11-07)
+firebase-crashlytics-plugin = "3.0.8"
 
 
 
@@ -148,6 +150,10 @@ firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "fir
 firebase-appcheck-playintegrity = { module = "com.google.firebase:firebase-appcheck-playintegrity" }
 firebase-appcheck-debug = { module = "com.google.firebase:firebase-appcheck-debug" }
 firebase-auth = { module = "com.google.firebase:firebase-auth" }
+# FORK(S4-rc): Remote Config, Analytics and Crashlytics on the default FirebaseApp (versions from the BoM)
+firebase-config = { module = "com.google.firebase:firebase-config" }
+firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
+firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
 
 
 
@@ -174,3 +180,5 @@ aikeyboard-android-library-compose = { id = "aikeyboard.android.library.compose"
 aikeyboard-jvm-library = { id = "aikeyboard.jvm.library" }
 aikeyboard-module-rules = { id = "aikeyboard.module-rules" }
 aikeyboard-ad-isolation = { id = "aikeyboard.ad-isolation" }
+# FORK(S4-rc): Crashlytics build id and mapping file (the SDK refuses to start without the build id)
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebase-crashlytics-plugin" }

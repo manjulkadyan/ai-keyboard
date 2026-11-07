@@ -38,6 +38,7 @@ class FirebaseBootstrap(context: Context, private val config: FirebaseConfig) {
     private val appContext = context.applicationContext
 
     @Volatile private var app: FirebaseApp? = null
+    @Volatile private var defaultApp: FirebaseApp? = null
 
     val isConfigured: Boolean get() = config.isConfigured
 
@@ -50,18 +51,34 @@ class FirebaseBootstrap(context: Context, private val config: FirebaseConfig) {
         }
     }
 
+    /**
+     * The default FirebaseApp, for Remote Config, Analytics and Crashlytics (Sprint 4 decision 17). Those SDKs read
+     * the default app only. Created by hand on first use, in the app process; null when [config] is incomplete.
+     * The named app [APP_NAME] stays for App Check and Auth.
+     */
+    fun defaultApp(): FirebaseApp? {
+        if (!config.isConfigured) return null
+        defaultApp?.let { return it }
+        return synchronized(this) {
+            defaultApp ?: initializeDefault().also { defaultApp = it }
+        }
+    }
+
+    private fun initializeDefault(): FirebaseApp {
+        val existing = FirebaseApp.getApps(appContext).firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
+        return existing ?: FirebaseApp.initializeApp(appContext, options())
+    }
+
+    private fun options(): FirebaseOptions = FirebaseOptions.Builder()
+        .setProjectId(config.projectId)
+        .setApplicationId(config.appId)
+        .setApiKey(config.apiKey)
+        .setGcmSenderId(config.projectNumber)
+        .build()
+
     private fun initialize(): FirebaseApp {
         val existing = FirebaseApp.getApps(appContext).firstOrNull { it.name == APP_NAME }
-        val firebaseApp = existing ?: FirebaseApp.initializeApp(
-            appContext,
-            FirebaseOptions.Builder()
-                .setProjectId(config.projectId)
-                .setApplicationId(config.appId)
-                .setApiKey(config.apiKey)
-                .setGcmSenderId(config.projectNumber)
-                .build(),
-            APP_NAME,
-        )
+        val firebaseApp = existing ?: FirebaseApp.initializeApp(appContext, options(), APP_NAME)
         FirebaseAppCheck.getInstance(firebaseApp).installAppCheckProviderFactory(AppCheckProviders.factory())
         return firebaseApp
     }
