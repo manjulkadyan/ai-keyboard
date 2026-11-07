@@ -62,5 +62,5 @@ target/
 **/*.rs.bk
 *.pdb
 
-#plans
+# FORK(S1-sdd): keep the Sprint 1 SDD artifacts under .superpowers/sdd tracked
 !/.superpowers/sdd/2026-10-18-sprint-1/*
