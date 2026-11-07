@@ -1,0 +1,2842 @@
+# Review package: 667e84db..8a532cad
+
+## Commits
+8a532cad feat(voice): in-keyboard voice typing with composing span and permission trampoline
+
+## Files changed
+ app/build.gradle.kts                               |   3 +
+ app/src/main/AndroidManifest.xml                   |  12 +
+ .../com/manjul/aikeyboard/FlorisImeService.kt      |  24 ++
+ .../manjul/aikeyboard/fork/voice/ImeTextTarget.kt  |  64 +++++
+ .../aikeyboard/fork/voice/MicPermissionActivity.kt | 181 +++++++++++++
+ .../aikeyboard/fork/voice/SmartbarVoicePanel.kt    |  60 +++++
+ .../aikeyboard/fork/voice/VoiceImeSession.kt       | 159 ++++++++++++
+ .../ime/editor/AbstractEditorInstance.kt           |   4 +-
+ .../aikeyboard/ime/keyboard/KeyboardManager.kt     |   5 +-
+ .../com/manjul/aikeyboard/ime/smartbar/Smartbar.kt |   2 +
+ app/src/main/res/values/strings_fork.xml           |   4 +
+ .../fork/voice/MicPermissionActivityTest.kt        | 193 ++++++++++++++
+ .../aikeyboard/fork/voice/VoiceImeSessionTest.kt   | 239 +++++++++++++++++
+ .../aikeyboard/core/datastore/FeatureSettings.kt   |   2 +
+ .../core/datastore/FeatureSettingsStoreTest.kt     |   1 +
+ .../manjul/aikeyboard/core/voice/SpeechSession.kt  |   8 +-
+ .../aikeyboard/core/voice/SpeechSessionTest.kt     |  18 ++
+ docs/FORK_PATCHES.md                               |   8 +
+ ime/voice-ui/build.gradle.kts                      |  33 +++
+ .../ime/voiceui/ComposingSpanController.kt         | 117 +++++++++
+ .../com/manjul/aikeyboard/ime/voiceui/VoiceChip.kt |  42 +++
+ .../aikeyboard/ime/voiceui/VoiceController.kt      | 284 ++++++++++++++++++++
+ .../manjul/aikeyboard/ime/voiceui/VoicePanel.kt    | 132 ++++++++++
+ .../manjul/aikeyboard/ime/voiceui/VoiceUiState.kt  |  26 ++
+ .../com/manjul/aikeyboard/ime/voiceui/Waveform.kt  |  48 ++++
+ ime/voice-ui/src/main/res/values/strings.xml       |  18 ++
+ .../ime/voiceui/ComposingSpanControllerTest.kt     | 192 ++++++++++++++
+ .../aikeyboard/ime/voiceui/VoiceControllerTest.kt  | 287 +++++++++++++++++++++
+ settings.gradle.kts                                |   2 +
+ 29 files changed, 2163 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index a1cf7469..fa4edd9e 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -267,20 +267,23 @@ dependencies {
+     // FORK(S0-ads): ads stack for app Activities only. The IME code in this module must not use it
+     // (ImeAdIsolationTest; TRD §2.2, §11.1). Nothing calls it yet.
+     implementation(projects.core.ads)
+ 
+     // FORK(S1-policy): fork settings store and the sensitive-field policy that FlorisImeService evaluates
+     implementation(projects.core.datastore)
+     implementation(projects.ime.policy)
+     // FORK(S1-clipboard): clipboard sensitivity classifier used by the capture gate
+     implementation(projects.core.privacy)
+     implementation(projects.core.analytics) // FORK(S1-analytics): event catalog and relay
++    // FORK(S1-voice): speech session, platform engines and the in-keyboard voice UI
++    implementation(projects.core.voice)
++    implementation(projects.ime.voiceUi)
+ 
+     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
+     lintChecks(projects.lintRules)
+ 
+     testImplementation(libs.kotlin.test.junit5)
+     // FORK(S1-policy): Robolectric (JUnit 4) tests run on the JUnit 5 platform through the vintage engine
+     testImplementation(platform(libs.junit.bom))
+     testImplementation(libs.junit4)
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index bab1aeab..286f4ab2 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -1,20 +1,23 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools">
+ 
+     <!-- Permission needed to vibrate if the user has key press vibration enabled -->
+     <uses-permission android:name="android.permission.VIBRATE"/>
+ 
+     <!-- FORK(S1-onboarding): microphone for voice input; requested only after the voice notice, in onboarding or Task 11's trampoline -->
+     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+ 
++    <!-- FORK(S1-voice): network state for the voice engine choice (a server recognizer needs a network) -->
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
++
+     <!-- Permission needed to create notifications on devices running Android 13+ -->
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+ 
+     <!-- Android 11+ only: Define that FlorisBoard requests to see all apps that
+           ship with an IME or Spell Check service. This is used to guide the user
+           in the Settings Ui why FlorisBoard may not be working.
+      -->
+     <queries>
+         <intent>
+             <action android:name="android.view.InputMethod"/>
+@@ -136,20 +139,29 @@
+             android:name="com.manjul.aikeyboard.ime.clipboard.FlorisCopyToClipboardActivity"
+             android:theme="@style/FlorisAppTheme.Transparent"
+             android:exported="true">
+             <intent-filter>
+                 <action android:name="android.intent.action.SEND"/>
+                 <category android:name="android.intent.category.DEFAULT"/>
+                 <data android:mimeType="image/*"/>
+             </intent-filter>
+         </activity>
+ 
++        <!-- FORK(S1-voice): microphone permission trampoline for the keyboard, opened only from the mic chip -->
++        <activity
++            android:name="com.manjul.aikeyboard.fork.voice.MicPermissionActivity"
++            android:theme="@style/FlorisAppTheme.Transparent"
++            android:excludeFromRecents="true"
++            android:noHistory="true"
++            android:taskAffinity=""
++            android:exported="false"/>
++
+         <!-- Clipboard Media File Provider -->
+         <provider
+             android:name="com.manjul.aikeyboard.ime.clipboard.provider.ClipboardMediaProvider"
+             android:authorities="${applicationId}.provider.clipboard"
+             android:grantUriPermissions="true"
+             android:exported="false">
+         </provider>
+ 
+         <!-- Default file provider to share files from the "files" or "cache" dir -->
+         <provider
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
+index 00628a24..8628ebf6 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
+@@ -108,20 +108,21 @@ import com.manjul.aikeyboard.lib.devtools.flogError
+ import com.manjul.aikeyboard.lib.devtools.flogInfo
+ import com.manjul.aikeyboard.lib.devtools.flogWarning
+ import com.manjul.aikeyboard.lib.observeAsTransformingState
+ import com.manjul.aikeyboard.lib.util.ViewUtils
+ import com.manjul.aikeyboard.lib.util.debugSummarize
+ import com.manjul.aikeyboard.lib.util.launchActivity
+ import dev.patrickgold.jetpref.datastore.model.observeAsState
+ // FORK(S1-policy): imports for the policy controller
+ import android.app.KeyguardManager
+ import com.manjul.aikeyboard.fork.policy.ImePolicyController
++import com.manjul.aikeyboard.fork.voice.VoiceImeSession // FORK(S1-voice)
+ import java.lang.ref.WeakReference
+ import kotlinx.coroutines.flow.update
+ import org.florisboard.lib.android.AndroidInternalR
+ import org.florisboard.lib.android.AndroidVersion
+ import org.florisboard.lib.android.isOrientationLandscape
+ import org.florisboard.lib.android.isOrientationPortrait
+ import org.florisboard.lib.android.showShortToastSync
+ import org.florisboard.lib.android.systemServiceOrNull
+ import org.florisboard.lib.compose.ProvideLocalizedResources
+ import org.florisboard.lib.kotlin.collectIn
+@@ -153,20 +154,26 @@ class FlorisImeService : LifecycleInputMethodService() {
+         // FORK(S1-policy): policy controller accessor for features (voice, smartbar, ...)
+         fun policyController(): ImePolicyController {
+             return checkNotNull(policyControllerOrNull()) { "IME service is not running" }
+         }
+ 
+         fun policyControllerOrNull(): ImePolicyController? {
+             val service = FlorisImeServiceReference.get() ?: return null
+             return if (service::policyController.isInitialized) service.policyController else null
+         }
+ 
++        // FORK(S1-voice): voice typing of the running service (mic key, smartbar panel)
++        fun voiceSessionOrNull(): VoiceImeSession? {
++            val service = FlorisImeServiceReference.get() ?: return null
++            return if (service::voiceSession.isInitialized) service.voiceSession else null
++        }
++
+         fun currentInputConnection(): InputConnection? {
+             return FlorisImeServiceReference.get()?.currentInputConnection
+         }
+ 
+         fun inputFeedbackController(): InputFeedbackController? {
+             return FlorisImeServiceReference.get()?.inputFeedbackController
+         }
+ 
+         /**
+          * Hides the IME and launches [FlorisAppActivity].
+@@ -281,38 +288,52 @@ class FlorisImeService : LifecycleInputMethodService() {
+     private var isFullscreenUiMode by mutableStateOf(false)
+     private var isExtractUiShown by mutableStateOf(false)
+     private var resourcesContext by mutableStateOf(this as Context)
+ 
+     private val wallpaperChangeReceiver = WallpaperChangeReceiver()
+ 
+     // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. Created in onCreate so the store
+     // load and the settings collector start with the service. Keyguard state is read on each evaluation, never
+     // cached. Remote-config forced packages arrive in S3.
+     private lateinit var policyController: ImePolicyController
++    // FORK(S1-voice): in-keyboard voice typing; cancelled by every policy restriction and when the keyboard hides
++    private lateinit var voiceSession: VoiceImeSession
+ 
+     init {
+         setTheme(R.style.FlorisImeTheme)
+     }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         FlorisImeServiceReference = WeakReference(this)
+         // FORK(S1-policy): see the policyController declaration
+         val keyguardManager = getSystemService(KeyguardManager::class.java)
+         policyController = ImePolicyController(
+             store = featureSettingsStore().value,
+             keyguard = { keyguardManager?.isDeviceLocked ?: true },
+             forcedPackages = { emptySet() },
+             scope = lifecycleScope,
+         )
+         // Settings can arrive after the field started: recompute the editor state from the new decision.
+         policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
++        // FORK(S1-voice): see the voiceSession declaration
++        voiceSession = VoiceImeSession(
++            context = this,
++            policy = policyController,
++            store = featureSettingsStore().value,
++            analytics = appContext().value.analytics.value::log,
++            connection = { currentInputConnection },
++            isRawInputEditor = { editorInstance.activeInfo.isRawInputEditor },
++            setOwnsComposing = { editorInstance.voiceOwnsComposing = it },
++            lang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
++            scope = lifecycleScope,
++        )
+         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
+         subtypeManager.activeSubtypeFlow.collectIn(lifecycleScope) { subtype ->
+             val config = Configuration(resources.configuration)
+             if (prefs.localization.displayKeyboardLabelsInSubtypeLanguage.get()) {
+                 config.setLocale(subtype.primaryLocale.base)
+             }
+             resourcesContext = createConfigurationContext(config)
+         }
+         prefs.localization.displayKeyboardLabelsInSubtypeLanguage.asFlow().collectIn(lifecycleScope) { shouldSync ->
+             val config = Configuration(resources.configuration)
+@@ -364,20 +385,21 @@ class FlorisImeService : LifecycleInputMethodService() {
+ 
+     override fun onConfigurationChanged(newConfig: Configuration) {
+         super.onConfigurationChanged(newConfig)
+         themeManager.configurationChangeCounter.update { it + 1 }
+     }
+ 
+     override fun onDestroy() {
+         super.onDestroy()
+         unregisterReceiver(wallpaperChangeReceiver)
+         policyController.onFinishInput() // FORK(S1-policy): drop in-flight work for the closed field
++        voiceSession.destroy() // FORK(S1-voice)
+         FlorisImeServiceReference = WeakReference(null)
+         inputWindowView = null
+     }
+ 
+     override fun onStartInput(info: EditorInfo?, restarting: Boolean) {
+         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
+         super.onStartInput(info, restarting)
+         policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
+         if (info == null) return
+         val editorInfo = FlorisEditorInfo.wrap(info)
+@@ -408,34 +430,36 @@ class FlorisImeService : LifecycleInputMethodService() {
+     override fun onUpdateSelection(
+         oldSelStart: Int,
+         oldSelEnd: Int,
+         newSelStart: Int,
+         newSelEnd: Int,
+         candidatesStart: Int,
+         candidatesEnd: Int,
+     ) {
+         flogInfo { "old={start=$oldSelStart,end=$oldSelEnd} new={start=$newSelStart,end=$newSelEnd} composing={start=$candidatesStart,end=$candidatesEnd}" }
+         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
++        voiceSession.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd) // FORK(S1-voice)
+         activeState.batchEdit {
+             activeState.isSelectionMode = (newSelEnd - newSelStart) != 0
+             editorInstance.handleSelectionUpdate(
+                 oldSelection = EditorRange.normalized(oldSelStart, oldSelEnd),
+                 newSelection = EditorRange.normalized(newSelStart, newSelEnd),
+                 composing = EditorRange.normalized(candidatesStart, candidatesEnd),
+             )
+         }
+     }
+ 
+     override fun onFinishInputView(finishingInput: Boolean) {
+         flogInfo { "finishing=$finishingInput" }
+         super.onFinishInputView(finishingInput)
+         policyController.onFinishInputView() // FORK(S1-policy)
++        voiceSession.onFinishInputView() // FORK(S1-voice): hiding the keyboard ends dictation
+         editorInstance.handleFinishInputView()
+     }
+ 
+     override fun onFinishInput() {
+         flogInfo { "(no args)" }
+         super.onFinishInput()
+         policyController.onFinishInput() // FORK(S1-policy)
+         editorInstance.handleFinishInput()
+         NlpInlineAutofill.clearInlineSuggestions()
+     }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt
+new file mode 100644
+index 00000000..2fe961b8
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt
+@@ -0,0 +1,64 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.voice
++
++import android.view.inputmethod.InputConnection
++import com.manjul.aikeyboard.ime.voiceui.TextTarget
++
++/**
++ * [TextTarget] over the IME's current [InputConnection]. Each edit is one batch edit, so the host reports one
++ * selection update for it. While a region is ours, [setOwnsComposing] tells the editor not to move the composing
++ * region on its own (it would otherwise re-derive one from the last word).
++ *
++ * Never deletes text other than the single space the caller asks to join punctuation with, and never logs text.
++ */
++class ImeTextTarget(
++    private val connection: () -> InputConnection?,
++    private val isRawInputEditor: () -> Boolean,
++    private val setOwnsComposing: (Boolean) -> Unit,
++) : TextTarget {
++    private var owned = false
++
++    override fun setComposing(text: String): Boolean {
++        if (isRawInputEditor()) return false
++        val ic = connection() ?: return false
++        ic.beginBatchEdit()
++        try {
++            // Someone else's region (the editor's current word) stays as typed: start ours at the cursor.
++            if (!owned) ic.finishComposingText()
++            own(true)
++            return ic.setComposingText(text, 1)
++        } finally {
++            ic.endBatchEdit()
++        }
++    }
++
++    override fun commit(text: String, removeSpaceBefore: Boolean): Boolean {
++        val ic = connection() ?: return false
++        ic.beginBatchEdit()
++        try {
++            if (owned) ic.setComposingText("", 1)
++            ic.finishComposingText()
++            own(false)
++            if (removeSpaceBefore && ic.getTextBeforeCursor(1, 0)?.toString() == " ") ic.deleteSurroundingText(1, 0)
++            return ic.commitText(text, 1)
++        } finally {
++            ic.endBatchEdit()
++        }
++    }
++
++    override fun finishComposing(): Boolean {
++        if (!owned) return true
++        own(false)
++        return connection()?.finishComposingText() ?: false
++    }
++
++    private fun own(value: Boolean) {
++        if (owned == value) return
++        owned = value
++        setOwnsComposing(value)
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt
+new file mode 100644
+index 00000000..7752ccf3
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt
+@@ -0,0 +1,181 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.voice
++
++import android.Manifest
++import android.content.Context
++import android.content.Intent
++import android.content.pm.PackageManager
++import android.net.Uri
++import android.os.Bundle
++import android.provider.Settings
++import androidx.activity.ComponentActivity
++import androidx.activity.compose.setContent
++import androidx.activity.result.contract.ActivityResultContracts
++import androidx.annotation.VisibleForTesting
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import androidx.lifecycle.lifecycleScope
++import com.manjul.aikeyboard.R
++import com.manjul.aikeyboard.app.AppTheme
++import com.manjul.aikeyboard.app.apptheme.FlorisAppTheme
++import com.manjul.aikeyboard.appContext
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.analytics.EventCatalog
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.platform.EngineChoice
++import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
++import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
++import com.manjul.aikeyboard.featureSettingsStore
++import com.manjul.aikeyboard.fork.onboarding.DisclosureEngineKind
++import com.manjul.aikeyboard.fork.onboarding.VoiceDisclosureSheet
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.launch
++import org.florisboard.lib.compose.ProvideLocalizedResources
++import org.florisboard.lib.compose.stringRes
++
++/**
++ * Microphone permission trampoline for the keyboard, which cannot ask for permissions itself. Opened only by a tap
++ * on the keyboard's permission chip. Shows the voice notice first unless it was agreed to before, asks for
++ * RECORD_AUDIO, and finishes. On denial it explains where to turn the microphone on.
++ *
++ * It never starts dictation: the user taps the mic again, so a grant cannot start recording on its own.
++ */
++class MicPermissionActivity : ComponentActivity() {
++    @VisibleForTesting
++    internal class Deps(
++        val store: FeatureSettingsStore,
++        val analytics: (AnalyticsEvent) -> Unit,
++        val engineKind: suspend (lang: String) -> DisclosureEngineKind,
++        val clock: () -> Long,
++    )
++
++    private enum class Screen { NONE, DISCLOSURE, RATIONALE }
++
++    private lateinit var deps: Deps
++    private var screen by mutableStateOf(Screen.NONE)
++    private var disclosureKind = DisclosureEngineKind.SYSTEM_SERVICE
++    private var requested = false
++
++    private val launcher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
++        deps.analytics(EventCatalog.voicePermissionResult(granted))
++        if (granted) finish() else screen = Screen.RATIONALE
++    }
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
++            finish()
++            return
++        }
++        deps = depsOverride ?: defaultDeps(this)
++        requested = savedInstanceState?.getBoolean(KEY_REQUESTED) ?: false
++        setContent {
++            ProvideLocalizedResources(this, appName = R.string.app_name) {
++                FlorisAppTheme(AppTheme.AUTO) {
++                    when (screen) {
++                        Screen.NONE -> Unit
++                        Screen.DISCLOSURE -> VoiceDisclosureSheet(
++                            engineKind = { disclosureKind },
++                            store = deps.store,
++                            clock = deps.clock,
++                            onAgree = ::request,
++                            onDismiss = ::finish,
++                        )
++                        Screen.RATIONALE -> AlertDialog(
++                            onDismissRequest = ::finish,
++                            title = { Text(stringRes(R.string.voice__permission_denied_title)) },
++                            text = { Text(stringRes(R.string.voice__permission_denied_body)) },
++                            confirmButton = {
++                                TextButton(onClick = ::openAppSettings) {
++                                    Text(stringRes(R.string.voice__permission_open_settings))
++                                }
++                            },
++                            dismissButton = {
++                                TextButton(onClick = ::finish) { Text(stringRes(R.string.voice__permission_not_now)) }
++                            },
++                        )
++                    }
++                }
++            }
++        }
++        // After a configuration change the pending request (if any) comes back through the launcher.
++        if (requested) return
++        val lang = intent.getStringExtra(EXTRA_LANG) ?: DEFAULT_LANG
++        lifecycleScope.launch {
++            if (deps.store.flow.first().consentVoiceNoticeAt > 0) {
++                request()
++            } else {
++                disclosureKind = deps.engineKind(lang)
++                screen = Screen.DISCLOSURE
++            }
++        }
++    }
++
++    override fun onSaveInstanceState(outState: Bundle) {
++        super.onSaveInstanceState(outState)
++        outState.putBoolean(KEY_REQUESTED, requested)
++    }
++
++    private fun request() {
++        screen = Screen.NONE
++        requested = true
++        launcher.launch(Manifest.permission.RECORD_AUDIO)
++    }
++
++    private fun openAppSettings() {
++        startActivity(
++            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
++                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
++        )
++        finish()
++    }
++
++    companion object {
++        /** BCP-47 tag of the keyboard language, to name the recognizer that will be used in the notice. */
++        const val EXTRA_LANG = "com.manjul.aikeyboard.extra.VOICE_LANG"
++        private const val KEY_REQUESTED = "requested"
++        private const val DEFAULT_LANG = "en"
++
++        @VisibleForTesting
++        internal var depsOverride: Deps? = null
++
++        fun intent(context: Context, lang: String): Intent =
++            Intent(context, MicPermissionActivity::class.java)
++                .putExtra(EXTRA_LANG, lang)
++                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
++
++        private fun defaultDeps(context: Context): Deps {
++            val store = context.featureSettingsStore().value
++            val selector = SpeechEngineSelector(PlatformRecognizerCapabilities(context))
++            return Deps(
++                store = store,
++                analytics = context.appContext().value.analytics.value::log,
++                engineKind = { lang ->
++                    val preferWhisper = store.current.voiceEnginePreference == VoiceEnginePreference.WHISPER
++                    selector.choose(lang, preferWhisper, isOnline(context)).toDisclosureKind()
++                },
++                clock = System::currentTimeMillis,
++            )
++        }
++    }
++}
++
++/** The notice names the recognizer the keyboard will use. No engine yet: assume audio may leave the device. */
++internal fun EngineChoice.toDisclosureKind(): DisclosureEngineKind = when (this) {
++    is EngineChoice.Use -> when (kind) {
++        EngineKind.SYSTEM_ON_DEVICE -> DisclosureEngineKind.ON_DEVICE
++        EngineKind.SYSTEM_DEFAULT -> DisclosureEngineKind.SYSTEM_SERVICE
++        EngineKind.WHISPER -> DisclosureEngineKind.WHISPER
++    }
++    is EngineChoice.Unavailable -> DisclosureEngineKind.SYSTEM_SERVICE
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/SmartbarVoicePanel.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/SmartbarVoicePanel.kt
+new file mode 100644
+index 00000000..20bdad9e
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/SmartbarVoicePanel.kt
+@@ -0,0 +1,60 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.voice
++
++import android.os.Build
++import android.view.View
++import android.window.OnBackInvokedCallback
++import android.window.OnBackInvokedDispatcher
++import androidx.annotation.RequiresApi
++import androidx.compose.foundation.layout.RowScope
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.DisposableEffect
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.rememberUpdatedState
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalView
++import com.manjul.aikeyboard.FlorisImeService
++import com.manjul.aikeyboard.ime.voiceui.VoicePanel
++import com.manjul.aikeyboard.ime.voiceui.VoiceUiState
++
++/**
++ * The voice panel in the smartbar. Returns false (and renders nothing) while voice typing is hidden, so the
++ * smartbar shows its usual content. While the panel is open, back dismisses it (API 33+ predictive back).
++ */
++@Composable
++fun RowScope.smartbarVoicePanel(): Boolean {
++    val controller = FlorisImeService.voiceSessionOrNull()?.controller ?: return false
++    val state by controller.ui.collectAsState()
++    if (state == VoiceUiState.Hidden) return false
++    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
++        BackDismisses(LocalView.current, controller::dismiss)
++    }
++    VoicePanel(
++        state = state,
++        onStop = controller::toggle,
++        onDismiss = controller::dismiss,
++        onAllowMic = controller::requestPermission,
++        onResume = controller::toggle,
++        onDownloadSystemModel = if (controller.canDownloadSystemModel) controller::downloadSystemModel else null,
++        modifier = Modifier.weight(1f),
++    )
++    return true
++}
++
++@RequiresApi(Build.VERSION_CODES.TIRAMISU)
++@Composable
++private fun BackDismisses(view: View, onBack: () -> Unit) {
++    val current by rememberUpdatedState(onBack)
++    DisposableEffect(view) {
++        val dispatcher = view.findOnBackInvokedDispatcher()
++        val callback = OnBackInvokedCallback { current() }
++        // Overlay priority: handled before the IME's own back (which hides the keyboard).
++        dispatcher?.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_OVERLAY, callback)
++        onDispose { dispatcher?.unregisterOnBackInvokedCallback(callback) }
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt
+new file mode 100644
+index 00000000..7202ac1b
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt
+@@ -0,0 +1,159 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.voice
++
++import android.Manifest
++import android.content.Context
++import android.content.Intent
++import android.content.pm.PackageManager
++import android.media.AudioManager
++import android.net.ConnectivityManager
++import android.net.NetworkCapabilities
++import android.os.Build
++import android.speech.RecognizerIntent
++import android.speech.SpeechRecognizer
++import android.view.inputmethod.InputConnection
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.analytics.EndReason
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++import com.manjul.aikeyboard.core.voice.SpeechSession
++import com.manjul.aikeyboard.core.voice.SpokenPunctuation
++import com.manjul.aikeyboard.core.voice.VoiceTimings
++import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
++import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
++import com.manjul.aikeyboard.core.voice.platform.PlatformSpeechEngine
++import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
++import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
++import com.manjul.aikeyboard.fork.policy.ImePolicyController
++import com.manjul.aikeyboard.ime.voiceui.ComposingSpanController
++import com.manjul.aikeyboard.ime.voiceui.FirstDictationFlag
++import com.manjul.aikeyboard.ime.voiceui.VoiceController
++import com.manjul.aikeyboard.ime.voiceui.VoiceEngines
++import com.manjul.aikeyboard.ime.voiceui.VoiceRequest
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.launch
++
++/**
++ * Voice typing for one IME service instance: wires [VoiceController] to the policy controller, the settings
++ * store, the input connection and the platform recognizers. Created in `FlorisImeService.onCreate`, main thread only.
++ *
++ * Every restriction the policy controller reports (new field, more restrictive restart, no field) cancels the
++ * session, and so does hiding the keyboard ([onFinishInputView]).
++ */
++class VoiceImeSession(
++    private val context: Context,
++    private val policy: ImePolicyController,
++    private val store: FeatureSettingsStore,
++    analytics: (AnalyticsEvent) -> Unit,
++    connection: () -> InputConnection?,
++    isRawInputEditor: () -> Boolean,
++    setOwnsComposing: (Boolean) -> Unit,
++    private val lang: () -> String,
++    private val scope: CoroutineScope,
++    private val clock: () -> Long = System::currentTimeMillis,
++    caps: RecognizerCapabilities = PlatformRecognizerCapabilities(context),
++    private val engineFactory: (EngineKind, segmented: Boolean) -> SpeechEngine = { kind, segmented ->
++        PlatformSpeechEngine(context, onDevice = kind == EngineKind.SYSTEM_ON_DEVICE, segmented = segmented)
++    },
++    private val online: () -> Boolean = { isOnline(context) },
++) {
++    val span = ComposingSpanController(ImeTextTarget(connection, isRawInputEditor, setOwnsComposing))
++
++    val controller = VoiceController(
++        scope = scope,
++        sessionFactory = { factory ->
++            val settings = store.current
++            SpeechSession(
++                engineFactory = factory,
++                scope = scope,
++                timings = VoiceTimings(silenceMs = settings.voiceSilenceMs.toLong()),
++                punctuation = SpokenPunctuation,
++                clock = clock,
++                punctuationEnabled = settings.spokenPunctuation,
++            )
++        },
++        engines = object : VoiceEngines {
++            // WHISPER has no engine before Task 13: the controller reports it as unavailable.
++            override fun supports(kind: EngineKind) = kind != EngineKind.WHISPER
++            override fun create(kind: EngineKind, segmented: Boolean) = engineFactory(kind, segmented)
++        },
++        selector = SpeechEngineSelector(caps),
++        request = {
++            VoiceRequest(
++                lang = lang(),
++                preferWhisper = store.current.voiceEnginePreference == VoiceEnginePreference.WHISPER,
++                online = online(),
++            )
++        },
++        permission = {
++            context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
++        },
++        decision = { policy.decision.value },
++        generation = { policy.generation.value },
++        focus = AudioFocusHolder(context.getSystemService(AudioManager::class.java)),
++        span = span,
++        analytics = analytics,
++        firstDictation = object : FirstDictationFlag {
++            override val logged: Boolean get() = store.current.firstDictationAt > 0
++            override fun markLogged() {
++                val now = clock()
++                scope.launch { store.update { it.copy(firstDictationAt = now) } }
++            }
++        },
++        launchPermission = {
++            // Only reached from the permission chip tap; the IME has no activity task of its own.
++            context.startActivity(MicPermissionActivity.intent(context, lang()))
++        },
++        clock = clock,
++        downloadSystemModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
++            { tag -> triggerSystemModelDownload(context, tag) }
++        } else {
++            null
++        },
++    )
++
++    init {
++        policy.addRestrictionListener { controller.cancel(EndReason.FIELD_CHANGE.value) }
++    }
++
++    fun onFinishInputView() {
++        controller.cancel(EndReason.FIELD_CHANGE.value)
++    }
++
++    fun onSelectionUpdate(newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {
++        span.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd)
++    }
++
++    fun destroy() {
++        controller.destroy()
++    }
++
++    private companion object {
++        /** Asks the on-device recognizer to download [tag]'s model; the system shows its own progress UI. */
++        fun triggerSystemModelDownload(context: Context, tag: String) {
++            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
++            if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) return
++            val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
++            try {
++                recognizer.triggerModelDownload(
++                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag),
++                )
++            } finally {
++                recognizer.destroy()
++            }
++        }
++    }
++}
++
++/** Whether a network is up, for the engine choice (a server recognizer needs one). */
++internal fun isOnline(context: Context): Boolean {
++    val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
++    val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
++    return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt
+index b49ed16a..1f0462cc 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt
+@@ -86,20 +86,22 @@ abstract class AbstractEditorInstance(context: Context) {
+         }
+ 
+     private val _activeContentFlow = MutableStateFlow(EditorContent.Unspecified)
+     val activeContentFlow = _activeContentFlow.asStateFlow()
+     inline var activeContent: EditorContent
+         get() = expectedContent() ?: activeContentFlow.value
+         private set(v) {
+             _activeContentFlow.value = v
+         }
+     private val expectedContentQueue = ExpectedContentQueue()
++    // FORK(S1-voice): true while voice typing holds the composing region; selection updates must not move it
++    var voiceOwnsComposing = false
+     private val _lastCommitPosition = LastCommitPosition()
+     val lastCommitPosition
+         get() = LastCommitPosition(_lastCommitPosition)
+ 
+     fun expectedContent(): EditorContent? {
+         return runBlocking { expectedContentQueue.peekNewestOrNull() }
+     }
+ 
+     private fun currentInputConnection() = FlorisImeService.currentInputConnection()
+ 
+@@ -196,21 +198,21 @@ abstract class AbstractEditorInstance(context: Context) {
+             val content = generateContent(
+                 editorInfo,
+                 newSelection,
+                 textBeforeSelection,
+                 textAfterSelection,
+                 selectedText,
+             )
+             activeCursorCapsMode = content.cursorCapsMode()
+             activeContent = content
+             keyboardManager.reevaluateInputShiftState()
+-            if (content.composing != composing) {
++            if (content.composing != composing && !voiceOwnsComposing) { // FORK(S1-voice)
+                 ic.setComposingRegion(content.composing)
+             }
+         }
+     }
+ 
+     open fun handleFinishInputView() {
+         reset()
+     }
+ 
+     open fun handleFinishInput() {
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
+index 3684bbaf..87c6556b 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
+@@ -746,22 +746,23 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
+             KeyCode.ENTER -> handleEnter()
+             KeyCode.FORWARD_DELETE -> handleForwardDelete(OperationUnit.CHARACTERS)
+             KeyCode.FORWARD_DELETE_WORD -> handleForwardDelete(OperationUnit.WORDS)
+             KeyCode.IME_SHOW_UI -> FlorisImeService.showUi()
+             KeyCode.IME_HIDE_UI -> FlorisImeService.hideUi()
+             KeyCode.IME_PREV_SUBTYPE -> subtypeManager.switchToPrevSubtype()
+             KeyCode.IME_NEXT_SUBTYPE -> subtypeManager.switchToNextSubtype()
+             KeyCode.IME_UI_MODE_TEXT -> activeState.imeUiMode = ImeUiMode.TEXT
+             KeyCode.IME_UI_MODE_MEDIA -> activeState.imeUiMode = ImeUiMode.MEDIA
+             KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ImeUiMode.CLIPBOARD
+-            // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires; Task 11 replaces this handler
+-            KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.switchToVoiceInputMethod()
++            // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires
++            // FORK(S1-voice): in-keyboard voice typing instead of switching to another voice IME
++            KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.voiceSessionOrNull()?.controller?.toggle()
+             KeyCode.KANA_SWITCHER -> handleKanaSwitch()
+             KeyCode.KANA_HIRA -> handleKanaHira()
+             KeyCode.KANA_KATA -> handleKanaKata()
+             KeyCode.KANA_HALF_KATA -> handleKanaHalfKata()
+             KeyCode.LANGUAGE_SWITCH -> handleLanguageSwitch()
+             KeyCode.REDO -> editorInstance.performRedo()
+             KeyCode.SETTINGS -> FlorisImeService.launchSettings()
+             KeyCode.SHIFT -> handleShiftUp(data)
+             KeyCode.SPACE -> handleSpace(data)
+             KeyCode.SYSTEM_INPUT_METHOD_PICKER -> InputMethodUtils.showImePicker(appContext)
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt
+index dd26ce36..7eac460c 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt
+@@ -50,20 +50,21 @@ import androidx.compose.ui.draw.rotate
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.graphics.isUnspecified
+ import androidx.compose.ui.graphics.vector.ImageVector
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.res.vectorResource
+ import androidx.compose.ui.unit.dp
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
+ import com.manjul.aikeyboard.fork.smartbar.PrivateLockIndicator // FORK(S1-smartbar)
+ import com.manjul.aikeyboard.fork.smartbar.policyFilteredOrNull // FORK(S1-smartbar)
++import com.manjul.aikeyboard.fork.voice.smartbarVoicePanel // FORK(S1-voice)
+ import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
+ import com.manjul.aikeyboard.ime.nlp.NlpInlineAutofill
+ import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickActionButton
+ import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickActionsRow
+ import com.manjul.aikeyboard.ime.smartbar.quickaction.ToggleOverflowPanelAction
+ import com.manjul.aikeyboard.ime.theme.FlorisImeUi
+ import com.manjul.aikeyboard.keyboardManager
+ import com.manjul.aikeyboard.nlpManager
+ import dev.patrickgold.jetpref.datastore.model.observeAsState
+ import kotlinx.coroutines.launch
+@@ -320,20 +321,21 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
+             }
+         }
+     }
+ 
+     SnyggRow(
+         modifier = modifier
+             .fillMaxWidth()
+             .height(FlorisImeSizing.smartbarHeight),
+     ) {
+         PrivateLockIndicator() // FORK(S1-smartbar): renders nothing unless the field is sensitive
++        if (smartbarVoicePanel()) return@SnyggRow // FORK(S1-voice): the voice panel replaces the row while active
+         when (smartbarLayout) {
+             SmartbarLayout.SUGGESTIONS_ONLY -> {
+                 if (shouldShowInlineSuggestionsUi) {
+                     InlineSuggestionsUi(inlineSuggestions)
+                 } else {
+                     CandidatesRow()
+                 }
+             }
+ 
+             SmartbarLayout.ACTIONS_ONLY -> {
+diff --git a/app/src/main/res/values/strings_fork.xml b/app/src/main/res/values/strings_fork.xml
+index 374f925c..51713413 100644
+--- a/app/src/main/res/values/strings_fork.xml
++++ b/app/src/main/res/values/strings_fork.xml
+@@ -60,11 +60,15 @@
+     <string name="onboarding__try_field_hint" tools:ignore="MissingTranslation">Type something</string>
+     <string name="onboarding__try_mic" tools:ignore="MissingTranslation">Speak instead</string>
+     <string name="onboarding__try_mic_denied" tools:ignore="MissingTranslation">Microphone access is off. You can keep typing, and turn voice on later in system settings.</string>
+     <string name="onboarding__voice_notice_title" tools:ignore="MissingTranslation">Before you speak</string>
+     <string name="onboarding__voice_notice_on_device" tools:ignore="MissingTranslation">Voice typing uses the on-device speech recognition. Your voice stays on this phone.</string>
+     <string name="onboarding__voice_notice_system" tools:ignore="MissingTranslation">Voice typing uses the speech service on your phone. It may send audio to the service provider to turn it into text.</string>
+     <string name="onboarding__voice_notice_whisper" tools:ignore="MissingTranslation">Voice typing uses a Whisper speech model that runs on your device. Your voice stays on this phone.</string>
+     <string name="onboarding__voice_notice_agree" tools:ignore="MissingTranslation">Agree</string>
+     <string name="onboarding__voice_notice_not_now" tools:ignore="MissingTranslation">Not now</string>
+     <string name="onboarding__home_select_card" tools:ignore="MissingTranslation">Select AI Keyboard as your keyboard</string>
++    <string name="voice__permission_denied_title" tools:ignore="MissingTranslation">Microphone is off</string>
++    <string name="voice__permission_denied_body" tools:ignore="MissingTranslation">Voice typing needs the microphone. You can allow it in the app settings, then tap the mic again.</string>
++    <string name="voice__permission_open_settings" tools:ignore="MissingTranslation">Open app settings</string>
++    <string name="voice__permission_not_now" tools:ignore="MissingTranslation">Not now</string>
+ </resources>
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivityTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivityTest.kt
+new file mode 100644
+index 00000000..abb3d4b5
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivityTest.kt
+@@ -0,0 +1,193 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.voice
++
++import android.Manifest
++import android.content.Intent
++import android.content.pm.PackageManager
++import android.os.Looper
++import android.provider.Settings
++import androidx.compose.ui.test.junit4.createEmptyComposeRule
++import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performClick
++import androidx.test.core.app.ActivityScenario
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.platform.EngineChoice
++import com.manjul.aikeyboard.fork.onboarding.DisclosureEngineKind
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.runBlocking
++import org.junit.After
++import org.junit.Before
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.Shadows.shadowOf
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class MicPermissionActivityTest {
++    @get:Rule
++    val compose = createEmptyComposeRule()
++
++    private val app = RuntimeEnvironment.getApplication()
++    private val store = FeatureSettingsStore(app)
++    private val events = mutableListOf<AnalyticsEvent>()
++
++    @Before
++    fun setUp() {
++        MicPermissionActivity.depsOverride = MicPermissionActivity.Deps(
++            store = store,
++            analytics = { events += it },
++            engineKind = { DisclosureEngineKind.ON_DEVICE },
++            clock = { 777L },
++        )
++    }
++
++    @After
++    fun tearDown() {
++        MicPermissionActivity.depsOverride = null
++    }
++
++    private fun launch(): ActivityScenario<MicPermissionActivity> {
++        val scenario = ActivityScenario.launch<MicPermissionActivity>(MicPermissionActivity.intent(app, "en-US"))
++        idle()
++        return scenario
++    }
++
++    private fun idle() {
++        shadowOf(Looper.getMainLooper()).idle()
++        compose.waitForIdle()
++    }
++
++    private fun ActivityScenario<MicPermissionActivity>.requestedPermissions(): Array<String>? {
++        var result: Array<String>? = null
++        onActivity { result = shadowOf(it).lastRequestedPermission?.requestedPermissions }
++        return result
++    }
++
++    /** Activities started besides the system permission dialog (which Robolectric records as a started activity). */
++    private fun otherStartedActivities(): List<Intent> {
++        val all = generateSequence { shadowOf(app).nextStartedActivity }.toList()
++        return all.filter { it.action != ACTION_REQUEST_PERMISSIONS }
++    }
++
++    private fun ActivityScenario<MicPermissionActivity>.answer(granted: Boolean) {
++        onActivity { activity ->
++            val request = checkNotNull(shadowOf(activity).lastRequestedPermission)
++            if (granted) shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
++            val result = if (granted) PackageManager.PERMISSION_GRANTED else PackageManager.PERMISSION_DENIED
++            @Suppress("DEPRECATION")
++            activity.onRequestPermissionsResult(request.requestCode, request.requestedPermissions, intArrayOf(result))
++        }
++        idle()
++    }
++
++    private fun ActivityScenario<MicPermissionActivity>.isFinishing(): Boolean {
++        if (state == androidx.lifecycle.Lifecycle.State.DESTROYED) return true
++        var finishing = false
++        onActivity { finishing = it.isFinishing }
++        return finishing
++    }
++
++    @Test
++    fun noticeComesFirstAndTheRequestFollowsAgree() {
++        val scenario = launch()
++        compose.onNodeWithText("Before you speak").assertExists()
++        compose.onNodeWithText("Voice typing uses the on-device speech recognition. Your voice stays on this phone.")
++            .assertExists()
++        assertNull(scenario.requestedPermissions())
++
++        compose.onNodeWithText("Agree").performClick()
++        // The consent write finishes before the request is made.
++        compose.waitUntil(timeoutMillis = 5_000) {
++            shadowOf(Looper.getMainLooper()).idle()
++            scenario.requestedPermissions() != null
++        }
++
++        assertTrue(scenario.requestedPermissions()!!.contentEquals(arrayOf(Manifest.permission.RECORD_AUDIO)))
++        assertEquals(777L, runBlocking { store.flow.first().consentVoiceNoticeAt })
++    }
++
++    @Test
++    fun noticeAgreedBeforeSkipsTheSheet() {
++        runBlocking { store.update { it.copy(consentVoiceNoticeAt = 5L) } }
++        val scenario = launch()
++        compose.onNodeWithText("Before you speak").assertDoesNotExist()
++        assertTrue(scenario.requestedPermissions()!!.contentEquals(arrayOf(Manifest.permission.RECORD_AUDIO)))
++    }
++
++    @Test
++    fun notNowOnTheNoticeFinishesWithoutAsking() {
++        val scenario = launch()
++        compose.onNodeWithText("Not now").performClick()
++        idle()
++        assertNull(scenario.requestedPermissions())
++        assertTrue(scenario.isFinishing())
++    }
++
++    @Test
++    fun grantFinishesLogsAndDoesNotStartDictation() {
++        runBlocking { store.update { it.copy(consentVoiceNoticeAt = 5L) } }
++        val scenario = launch()
++        scenario.answer(granted = true)
++        assertTrue(scenario.isFinishing())
++        assertEquals(listOf(true), events.filter { it.name == "voice_permission_result" }.map { it.params["granted"] })
++        // Nothing else is opened, and the activity has no way to reach the keyboard's voice controller.
++        assertTrue(otherStartedActivities().isEmpty())
++        assertEquals(1, events.size)
++    }
++
++    @Test
++    fun denialShowsARationaleWithAnAppSettingsLink() {
++        runBlocking { store.update { it.copy(consentVoiceNoticeAt = 5L) } }
++        val scenario = launch()
++        scenario.answer(granted = false)
++        assertEquals(listOf(false), events.filter { it.name == "voice_permission_result" }.map { it.params["granted"] })
++        compose.onNodeWithText("Microphone is off").assertExists()
++
++        compose.onNodeWithText("Open app settings").performClick()
++        idle()
++
++        val started = otherStartedActivities().single()
++        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, started.action)
++        assertEquals("package:${app.packageName}", started.dataString)
++        assertTrue(scenario.isFinishing())
++    }
++
++    @Test
++    fun alreadyGrantedFinishesAtOnce() {
++        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
++        val scenario = launch()
++        assertTrue(scenario.isFinishing())
++        assertTrue(events.isEmpty())
++        // Not even the permission dialog.
++        assertTrue(generateSequence { shadowOf(app).nextStartedActivity }.none())
++    }
++
++    @Test
++    fun engineChoiceMapsToTheNotice() {
++        assertEquals(DisclosureEngineKind.ON_DEVICE, EngineChoice.Use(EngineKind.SYSTEM_ON_DEVICE).toDisclosureKind())
++        assertEquals(DisclosureEngineKind.SYSTEM_SERVICE, EngineChoice.Use(EngineKind.SYSTEM_DEFAULT).toDisclosureKind())
++        assertEquals(DisclosureEngineKind.WHISPER, EngineChoice.Use(EngineKind.WHISPER).toDisclosureKind())
++        assertEquals(
++            DisclosureEngineKind.SYSTEM_SERVICE,
++            EngineChoice.Unavailable("no_service", offerSystemDownload = false, offerWhisperDownload = false).toDisclosureKind(),
++        )
++    }
++
++    private companion object {
++        /** PackageManager.ACTION_REQUEST_PERMISSIONS, which is hidden API. */
++        const val ACTION_REQUEST_PERMISSIONS = "android.content.pm.action.REQUEST_PERMISSIONS"
++    }
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt
+new file mode 100644
+index 00000000..dbcbd861
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt
+@@ -0,0 +1,239 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.voice
++
++import android.Manifest
++import android.media.AudioManager
++import android.text.InputType
++import android.text.Selection
++import android.view.inputmethod.BaseInputConnection
++import android.view.inputmethod.EditorInfo
++import android.view.inputmethod.InputConnection
++import android.view.inputmethod.InputConnectionWrapper
++import android.widget.EditText
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
++import com.manjul.aikeyboard.fork.policy.ImePolicyController
++import com.manjul.aikeyboard.ime.voiceui.VoiceUiState
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.Shadows.shadowOf
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertNotNull
++import kotlin.test.assertTrue
++
++/**
++ * The IME path of voice typing, from the mic key to the host field. FlorisImeService cannot run under Robolectric
++ * (native library), so this drives [VoiceImeSession] the way the service does: the real policy controller gets
++ * onStartInput, a real EditText input connection receives the edits and its selection is fed back as
++ * onUpdateSelection would.
++ */
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class VoiceImeSessionTest {
++    private val app = RuntimeEnvironment.getApplication()
++
++    private class Engine(override val kind: EngineKind) : SpeechEngine {
++        override val supportsPartials = true
++        var listener: SpeechEngine.Listener? = null
++        var destroyed = false
++        override fun start(lang: String, listener: SpeechEngine.Listener) { this.listener = listener }
++        override fun stop() {}
++        override fun cancel() {}
++        override fun destroy() { destroyed = true }
++    }
++
++    private object Caps : RecognizerCapabilities {
++        override val sdkInt = 34
++        override fun isRecognitionAvailable() = true
++        override fun isOnDeviceAvailable() = true
++        override suspend fun onDeviceSupports(lang: String): Boolean? = true
++        override fun whisperModelReady(lang: String) = false
++        override fun whisperLangEnabled(lang: String) = false
++    }
++
++    private inner class Rig(scope: TestScope, initial: String = "") {
++        val edit = EditText(app).apply {
++            setText(initial)
++            setSelection(initial.length)
++        }
++        val commits = mutableListOf<String>()
++        var deletes = 0
++        val ic: InputConnection = object : InputConnectionWrapper(edit.onCreateInputConnection(EditorInfo()), false) {
++            override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
++                commits += text.toString()
++                return super.commitText(text, newCursorPosition)
++            }
++
++            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
++                deletes++
++                return super.deleteSurroundingText(beforeLength, afterLength)
++            }
++        }
++        val engines = mutableListOf<Engine>()
++        val events = mutableListOf<AnalyticsEvent>()
++        val store = FeatureSettingsStore(app, StandardTestDispatcher(scope.testScheduler))
++        val policy = ImePolicyController(store, keyguard = { false }, forcedPackages = { emptySet() }, scope = scope.backgroundScope)
++        var ownsComposing = false
++        val audioManager: AudioManager = app.getSystemService(AudioManager::class.java)
++        val session = VoiceImeSession(
++            context = app,
++            policy = policy,
++            store = store,
++            analytics = { events += it },
++            connection = { ic },
++            isRawInputEditor = { false },
++            setOwnsComposing = { ownsComposing = it },
++            lang = { "en-US" },
++            scope = scope.backgroundScope,
++            clock = { NOW },
++            caps = Caps,
++            engineFactory = { kind, _ -> Engine(kind).also { engines += it } },
++            online = { true },
++        )
++        val engine get() = engines.last()
++        val text get() = edit.text.toString()
++
++        /** What the framework would pass to onUpdateSelection for the current field state. */
++        fun report() {
++            val e = edit.text
++            session.onSelectionUpdate(
++                Selection.getSelectionStart(e),
++                Selection.getSelectionEnd(e),
++                BaseInputConnection.getComposingSpanStart(e),
++                BaseInputConnection.getComposingSpanEnd(e),
++            )
++        }
++    }
++
++    private fun textField() = EditorInfo().apply {
++        packageName = "some.app"
++        inputType = InputType.TYPE_CLASS_TEXT
++    }
++
++    private fun passwordField() = EditorInfo().apply {
++        packageName = "some.app"
++        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
++    }
++
++    private fun run(block: suspend TestScope.() -> Unit) = runTest(StandardTestDispatcher()) {
++        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
++        block()
++    }
++
++    private fun TestScope.listen(r: Rig, partial: String) {
++        r.policy.onStartInput(textField(), false)
++        r.session.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.engine.listener!!.onPartial(partial)
++        runCurrent()
++        r.report()
++    }
++
++    @Test fun passwordRestartFinishesThePartialWithoutCommittingIt() = run {
++        val r = Rig(this)
++        listen(r, "hel")
++        assertEquals("hel", r.text)
++        assertEquals(0, BaseInputConnection.getComposingSpanStart(r.edit.text))
++        assertTrue(r.ownsComposing)
++
++        r.policy.onStartInput(passwordField(), true)
++        runCurrent()
++
++        assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
++        assertTrue(r.commits.isEmpty())
++        assertEquals(0, r.deletes)
++        assertFalse(r.ownsComposing)
++        assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
++        assertTrue(r.engine.destroyed)
++        assertNotNull(shadowOf(r.audioManager).lastAbandonedAudioFocusRequest)
++        assertEquals("field_change", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
++
++        // A late result for the old field changes nothing.
++        r.engine.listener!!.onFinal("hello")
++        runCurrent()
++        assertEquals("hel", r.text)
++        assertTrue(r.commits.isEmpty())
++    }
++
++    @Test fun hostEditDuringAPartialDeletesNoHostText() = run {
++        val r = Rig(this, initial = "abc ")
++        listen(r, "hel")
++        assertEquals("abc hel", r.text)
++
++        // The app inserts text in front of our region; the region shifts away from where we put it.
++        r.edit.text.insert(0, "X")
++        r.report()
++        r.engine.listener!!.onPartial("hello")
++        runCurrent()
++        r.report()
++
++        assertTrue(r.text.startsWith("Xabc hel"), "host text and the earlier partial stay")
++        assertEquals("Xabc helhello", r.text)
++        assertEquals(0, r.deletes)
++        assertTrue(r.commits.isEmpty())
++    }
++
++    @Test fun ownPartialUpdatesKeepReplacingTheRegion() = run {
++        val r = Rig(this, initial = "abc ")
++        listen(r, "hel")
++        r.engine.listener!!.onPartial("hello")
++        r.engine.listener!!.onPartial("hello wor")
++        runCurrent()
++        r.report()
++        assertEquals("abc hello wor", r.text)
++        r.session.controller.toggle()
++        r.engine.listener!!.onFinal("hello world")
++        runCurrent()
++        r.report()
++        assertEquals("abc hello world ", r.text)
++        assertEquals(listOf("hello world "), r.commits)
++        assertFalse(r.ownsComposing)
++    }
++
++    @Test fun finishInputViewStopsAndAbandonsFocus() = run {
++        val r = Rig(this)
++        listen(r, "hi")
++        assertTrue(r.session.controller.ui.value is VoiceUiState.Listening)
++
++        r.policy.onFinishInputView()
++        r.session.onFinishInputView()
++        runCurrent()
++
++        assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
++        assertTrue(r.engine.destroyed)
++        assertNotNull(shadowOf(r.audioManager).lastAbandonedAudioFocusRequest)
++        assertEquals("hi", r.text)
++        assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
++    }
++
++    @Test fun firstDictationIsPersisted() = run {
++        val r = Rig(this)
++        listen(r, "hi")
++        r.session.controller.toggle()
++        r.engine.listener!!.onFinal("hi")
++        runCurrent()
++        assertEquals(1, r.events.count { it.name == "first_dictation" })
++        assertEquals(NOW, r.store.flow.first().firstDictationAt)
++    }
++
++    private companion object {
++        const val NOW = 1_234L
++    }
++}
+diff --git a/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt b/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt
+index 119a909a..3c322e1a 100644
+--- a/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt
++++ b/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt
+@@ -22,11 +22,13 @@ data class FeatureSettings(
+     val smartbarOrder: List<String> = emptyList(),
+     val voiceEnginePreference: VoiceEnginePreference = VoiceEnginePreference.AUTO,
+     val voiceSilenceMs: Int = 2000,
+     val spokenPunctuation: Boolean = true,
+     val onboardingStep: Int = 0,
+     val onboardingDone: Boolean = false,
+     val firstOpenAt: Long = 0L,
+     val translatePair: LanguagePair? = null,
+     val consentVoiceNoticeAt: Long = 0L,
+     val analyticsOptOut: Boolean = false,
++    /** When the first dictation with words was logged (first_dictation is sent once per install); 0 = never. */
++    val firstDictationAt: Long = 0L,
+ )
+diff --git a/core/datastore/src/test/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStoreTest.kt b/core/datastore/src/test/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStoreTest.kt
+index 864ab504..5c24c40f 100644
+--- a/core/datastore/src/test/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStoreTest.kt
++++ b/core/datastore/src/test/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStoreTest.kt
+@@ -34,20 +34,21 @@ class FeatureSettingsStoreTest {
+ 
+     @Test
+     fun `update round-trips`() = runTest {
+         val expected = FeatureSettings(
+             incognitoManual = true,
+             privatePackages = setOf("a.b"),
+             smartbarPinned = listOf("x"),
+             voiceEnginePreference = VoiceEnginePreference.WHISPER,
+             translatePair = LanguagePair("en", "de"),
+             onboardingStep = 3,
++            firstDictationAt = 42L,
+         )
+         val store = FeatureSettingsStore(app)
+         store.update { expected }
+         assertEquals(expected, store.flow.first())
+         assertEquals(expected, store.current)
+         // What is on disk decodes to the same value.
+         val file = File(app.filesDir, "datastore/feature_settings.json")
+         assertEquals(expected, file.inputStream().use { FeatureSettingsSerializer.readFrom(it) })
+     }
+ 
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
+index d4bab334..ffacd6f6 100644
+--- a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
+@@ -26,20 +26,22 @@ import kotlinx.coroutines.launch
+  * [output] is lossless (unbounded channel, single consumer): items emitted before a collector subscribes are
+  * delivered once it does. A [VoiceOutput.Commit] may start with punctuation; the consumer (Task 11) strips the
+  * trailing space of the previously committed text in that case, this class does not.
+  */
+ class SpeechSession(
+     private val engineFactory: () -> SpeechEngine,
+     private val scope: CoroutineScope,
+     private val timings: VoiceTimings,
+     private val punctuation: SpokenPunctuation,
+     private val clock: () -> Long,
++    /** The "spoken punctuation" setting: false commits the words as spoken ("comma" stays a word). */
++    private val punctuationEnabled: Boolean = true,
+ ) {
+     private val _state = MutableStateFlow<VoiceState>(VoiceState.Idle)
+     val state: StateFlow<VoiceState> = _state.asStateFlow()
+ 
+     private val channel = Channel<VoiceOutput>(Channel.UNLIMITED)
+     val output: Flow<VoiceOutput> = channel.receiveAsFlow()
+ 
+     private val _tapToResume = MutableStateFlow(false)
+ 
+     /** True after repeated no-speech restarts stopped the session; the UI offers "tap to resume". */
+@@ -164,28 +166,30 @@ class SpeechSession(
+         }
+         _state.value = VoiceState.Idle
+     }
+ 
+     private fun fail(kind: VoiceErrorKind) {
+         finish("error", commitPending = false, clearComposing = true)
+         _state.value = VoiceState.Error(kind)
+     }
+ 
+     private fun commit(raw: String) {
+-        val text = punctuation.apply(raw, lang).trim(' ', '\t')
++        val text = punctuate(raw).trim(' ', '\t')
+         if (text.isEmpty()) {
+             channel.trySend(VoiceOutput.ClearComposing)
+             return
+         }
+         channel.trySend(VoiceOutput.Commit(if (text.endsWith("\n")) text else "$text "))
+     }
+ 
++    private fun punctuate(text: String) = if (punctuationEnabled) punctuation.apply(text, lang) else text
++
+     private fun scheduleRestart(delayMs: Long) {
+         // Keep what was heard so far instead of dropping it with the dead engine.
+         pendingPartial?.let { commit(it) }
+         pendingPartial = null
+         destroyEngine()
+         _state.value = VoiceState.Starting
+         restartJob?.cancel()
+         restartJob = scope.launch {
+             delay(delayMs)
+             if (active && !stopping) startEngine()
+@@ -205,21 +209,21 @@ class SpeechSession(
+             if (!current() || stopping) return
+             _state.value = VoiceState.Listening(db)
+             // Still hearing speech: measure the silence window from now.
+             if (db > SPEECH_RMS_DB && silenceJob?.isActive == true) armSilence()
+         }
+ 
+         override fun onPartial(text: String) {
+             if (!current()) return
+             silenceJob?.cancel()
+             pendingPartial = text
+-            channel.trySend(VoiceOutput.Composing(punctuation.apply(text, lang)))
++            channel.trySend(VoiceOutput.Composing(punctuate(text)))
+         }
+ 
+         override fun onSegment(text: String) {
+             if (!current()) return
+             silenceJob?.cancel()
+             sawSegment = true
+             restarts = 0
+             pendingPartial = null
+             commit(text)
+         }
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
+index d78d3408..b6121cdb 100644
+--- a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
+@@ -473,11 +473,29 @@ class SpeechSessionTest {
+ 
+     @Test fun spokenPunctuationAppliesToCommit() = runSession {
+         val r = rig()
+         r.session.output.test {
+             r.session.start("en", false)
+             runCurrent()
+             r.l.onFinal("hello comma world")
+             assertEquals(VoiceOutput.Commit("hello, world "), awaitItem())
+         }
+     }
++
++    @Test fun spokenPunctuationOffKeepsWordsAsSpoken() = runSession {
++        val engine = FakeSpeechEngine()
++        val session = SpeechSession(
++            engineFactory = { engine },
++            scope = this,
++            timings = VoiceTimings(),
++            punctuation = SpokenPunctuation,
++            clock = { currentTime },
++            punctuationEnabled = false,
++        )
++        session.output.test {
++            session.start("en", false)
++            runCurrent()
++            engine.listener!!.onFinal("hello comma world")
++            assertEquals(VoiceOutput.Commit("hello comma world "), awaitItem())
++        }
++    }
+ }
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index c84e0b06..866dfcdc 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -71,20 +71,27 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/ComputingEvaluator.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickAction.kt` | S1-smartbar | Lock icon, name and tooltip for `TOGGLE_PRIVATE_APP` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-smartbar | Renders `PrivateLockIndicator` first in the main row (nothing unless the field is sensitive); the sticky action is removed when the policy disallows it |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/{QuickActionsRow,QuickActionsOverflowPanel}.kt` | S1-smartbar | Dynamic actions pass through `policyFiltered()` (disallowed chips are removed, not greyed out); the overflow panel uses the same filtered list so the visible-count arithmetic stays consistent |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionArrangement.kt` | S1-smartbar | `Default`: Mic sticky; Emoji, Clipboard, Settings and the private-app action dynamic; upstream's other actions moved to `hiddenActions` (still available in the actions editor). Translate and AI are not present. Users still on the default pref get the new default; only explicitly saved arrangements are unaffected |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-smartbar | `Settings.PrivateApps` route (`settings/privacy/private-apps`) and a home entry for it |
+ | `app/src/main/AndroidManifest.xml` | S1-smartbar | `<queries>` entry for MAIN/LAUNCHER intents so the Private apps screen can list launchable apps on API 30+ |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-onboarding | Start destination is onboarding unless `onboardingDone` and the keyboard is enabled and selected (read once before `setContent`, 1 s cap); splash held at most 1 s; `Setup.Screen` route renders `fork/onboarding/OnboardingScreen` (upstream `SetupScreen.kt` is kept, unused, untouched); Home card text "Select AI Keyboard as your keyboard" |
+ | `app/src/main/AndroidManifest.xml` | S1-onboarding | `RECORD_AUDIO` permission (requested only after the voice notice) |
+ | `app/build.gradle.kts`, `gradle/libs.versions.toml` | S1-onboarding | Turbine and Compose UI test (`ui-test-junit4`, `ui-test-manifest` as `debugImplementation`, versions from the BOM) for the onboarding tests; the commented `testImplementation(composeBom)` line is kept |
+ | `app/src/main/AndroidManifest.xml` | S1-voice | `<queries>` entry for `android.speech.RecognitionService` so `SpeechRecognizer.isRecognitionAvailable` sees recognition services on API 30+ |
++| `settings.gradle.kts`, `app/build.gradle.kts` | S1-voice | `include(":ime:voice-ui")`; `implementation(projects.core.voice)`, `implementation(projects.ime.voiceUi)` |
++| `app/src/main/AndroidManifest.xml` | S1-voice | `ACCESS_NETWORK_STATE` permission (the engine choice needs to know whether a network is up); `fork.voice.MicPermissionActivity` (translucent, `excludeFromRecents`, `noHistory`, `taskAffinity=""`, not exported) |
++| `app/src/main/res/values/strings_fork.xml` | S1-voice | Permission-denied rationale strings for the mic trampoline |
++| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-voice | Creates a `fork.voice.VoiceImeSession` in `onCreate` (after the policy controller); forwards `onUpdateSelection`, `onFinishInputView` (hiding the keyboard ends dictation) and `onDestroy`; companion `voiceSessionOrNull()` accessor |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-voice | `VOICE_INPUT` toggles in-keyboard voice typing instead of switching to another voice IME; the S1-smartbar policy gate is kept |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt` | S1-voice | `voiceOwnsComposing` flag: while voice owns the composing region, `handleSelectionUpdate` does not treat the region as a word the editor must re-sync |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-voice | After `PrivateLockIndicator`, `smartbarVoicePanel()` replaces the rest of the main row while the voice panel is open |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised
+@@ -119,20 +126,21 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
+ 
+ New code lives in our own modules (TRD §2.1, §2.2). These are new files, not upstream patches:
+ 
+ - `build-logic/` (included build): `aikeyboard.android.library`, `aikeyboard.android.library.compose`,
+   `aikeyboard.jvm.library`, `aikeyboard.module-rules`. SDK levels are read from the root
+   `gradle.properties` keys `projectCompileSdk`, `projectMinSdk`, `projectTargetSdk`, so our modules
+   always match the upstream ones. Java/Kotlin bytecode target 11 and JUnit 5, as upstream.
+ - `:core:common` (Android library): dispatcher qualifier/provider, `Outcome` result type.
+ - `:ime:policy` (pure JVM): `SensitiveFieldPolicy` (Sprint 1).
+ - `:core:datastore` (Android library, S1-policy): `FeatureSettings` and `FeatureSettingsStore` (multi-process DataStore, JSON).
++- `:ime:voice-ui` (Android library, Compose, S1-voice): `VoiceController`, `ComposingSpanController`, `VoicePanel`. No `:app` types; the IME wiring is in `:app` `fork/voice`.
+ 
+ Layout decision: the upstream IME stays in `:app` (no `:ime` module split in Sprint 0).
+ 
+ ## Module dependency rules
+ 
+ `aikeyboard.module-rules` (applied in the root `build.gradle.kts`) inspects every project-to-project
+ dependency, in any configuration, after all projects are evaluated, and fails the build when:
+ 
+ 1. `:ime` or an `:ime:*` project (not a prefix-only sibling such as `:imeTools`) reaches `:core:ads`, `:core:billing` or any `:feature:*`
+    project, directly or through other projects;
+diff --git a/ime/voice-ui/build.gradle.kts b/ime/voice-ui/build.gradle.kts
+new file mode 100644
+index 00000000..d51c4b0a
+--- /dev/null
++++ b/ime/voice-ui/build.gradle.kts
+@@ -0,0 +1,33 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++// :ime:voice-ui: voice typing inside the keyboard (controller, composing span, panel). Depends on :core:voice,
++// :core:analytics and :ime:policy only; the IME service in :app wires it to the editor and the platform.
++
++plugins {
++    alias(libs.plugins.aikeyboard.android.library.compose)
++}
++
++apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
++
++android {
++    namespace = "com.manjul.aikeyboard.ime.voiceui"
++
++    testOptions {
++        unitTests.isIncludeAndroidResources = true
++    }
++}
++
++dependencies {
++    api(projects.core.voice)
++    api(projects.core.analytics)
++    api(projects.ime.policy)
++    implementation(libs.androidx.compose.material3)
++
++    testImplementation(libs.kotlinx.coroutines.test)
++    testImplementation(libs.junit4)
++    testImplementation(libs.robolectric)
++    testRuntimeOnly(libs.junit.vintage.engine)
++}
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanController.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanController.kt
+new file mode 100644
+index 00000000..c730fbe8
+--- /dev/null
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanController.kt
+@@ -0,0 +1,117 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.voiceui
++
++/** The host text field, seen by voice typing. The text is user content: implementations never log it. */
++interface TextTarget {
++    /**
++     * Shows [text] as the composing region: replaces our own region, or starts a new one at the cursor
++     * (a region someone else set is finished first, never replaced). False if the field has no composing support.
++     */
++    fun setComposing(text: String): Boolean
++
++    /**
++     * Replaces our composing region (if any) with [text] and finishes it. With [removeSpaceBefore], a single space
++     * directly before the insertion point is removed first (the trailing space of our previous commit).
++     */
++    fun commit(text: String, removeSpaceBefore: Boolean = false): Boolean
++
++    /** Finishes our composing region: the text stays as it is. Never deletes. */
++    fun finishComposing(): Boolean
++}
++
++/**
++ * Keeps the dictation partial in a composing region and lets it go as soon as the host field moves away from what
++ * we wrote. Main thread only.
++ *
++ * Selection updates arrive late: one for each of our edits, possibly after we already made the next one. Every edit
++ * queues the composing length it will report (-1 for none); an update matching a queued entry is ours. Anything
++ * else (cursor moved, host edited the text, region gone) drops the span, so the next partial starts a new one at the
++ * cursor instead of overwriting text that is not ours.
++ */
++class ComposingSpanController(private val target: TextTarget) {
++    private class Expect(val span: Int, val length: Int)
++
++    private var span: String? = null
++    private var spanId = 0
++    private var anchor = -1
++    private val expected = ArrayDeque<Expect>()
++
++    /** The last commit ended with a space and the host has not changed the field since. */
++    private var trailingSpace = false
++
++    val hasSpan: Boolean get() = span != null
++
++    fun update(text: String) {
++        if (span == text) return
++        if (span == null) {
++            spanId++
++            anchor = -1
++        }
++        if (!target.setComposing(text)) {
++            span = null
++            return
++        }
++        span = text
++        expect(text.length)
++    }
++
++    fun commit(text: String) {
++        if (text.isEmpty()) {
++            drop()
++            return
++        }
++        val joinPunctuation = trailingSpace && text.first() in LEADING_PUNCTUATION
++        span = null
++        target.commit(text, removeSpaceBefore = joinPunctuation)
++        expect(-1)
++        trailingSpace = text.endsWith(' ')
++    }
++
++    /** Finishes the composing region and forgets it. Never deletes. */
++    fun drop() {
++        trailingSpace = false
++        if (span == null) return
++        span = null
++        target.finishComposing()
++        expect(-1)
++    }
++
++    fun onSelectionUpdate(newSelStart: Int, newSelEnd: Int, candStart: Int, candEnd: Int) {
++        val length = if (candStart < 0 || candEnd < candStart) -1 else candEnd - candStart
++        val index = expected.indexOfFirst { it.length == length }
++        if (index < 0) {
++            hostChanged()
++            return
++        }
++        repeat(index) { expected.removeFirst() }
++        // Keep the newest entry once matched (a host may report the same state twice), but not an older one:
++        // after a later edit that state cannot come back, so seeing it again means the host changed the field.
++        val match = if (expected.size > 1) expected.removeFirst() else expected.first()
++        if (span == null || length < 0 || match.span != spanId) return
++        if (newSelStart != candEnd || newSelEnd != candEnd || (anchor >= 0 && candStart != anchor)) {
++            hostChanged()
++            return
++        }
++        anchor = candStart
++    }
++
++    private fun hostChanged() {
++        expected.clear()
++        drop()
++    }
++
++    private fun expect(length: Int) {
++        if (expected.size >= MAX_EXPECTED) expected.removeFirst()
++        expected.addLast(Expect(if (length < 0) -1 else spanId, length))
++    }
++
++    private companion object {
++        /** A commit starting with one of these joins the previous word: "hello " + ", " gives "hello, ". */
++        const val LEADING_PUNCTUATION = ",.?!،؟।"
++        const val MAX_EXPECTED = 32
++    }
++}
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceChip.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceChip.kt
+new file mode 100644
+index 00000000..b2bafea9
+--- /dev/null
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceChip.kt
+@@ -0,0 +1,42 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.voiceui
++
++import androidx.compose.foundation.BorderStroke
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.LocalContentColor
++import androidx.compose.material3.Surface
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.TextStyle
++import androidx.compose.ui.text.style.TextDirection
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++
++/** A tappable pill in the voice panel ("Allow microphone…", "Tap to resume", download offers). */
++@Composable
++fun VoiceChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
++    val color = LocalContentColor.current
++    Surface(
++        onClick = onClick,
++        modifier = modifier,
++        shape = RoundedCornerShape(50),
++        color = Color.Transparent,
++        contentColor = color,
++        border = BorderStroke(1.dp, color.copy(alpha = 0.6f)),
++    ) {
++        Text(
++            text = label,
++            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
++            style = TextStyle(textDirection = TextDirection.Content),
++            maxLines = 1,
++            overflow = TextOverflow.Ellipsis,
++        )
++    }
++}
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt
+new file mode 100644
+index 00000000..6bc559ba
+--- /dev/null
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt
+@@ -0,0 +1,284 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.voiceui
++
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.analytics.EndReason
++import com.manjul.aikeyboard.core.analytics.EventCatalog
++import com.manjul.aikeyboard.core.analytics.UnavailableReason
++import com.manjul.aikeyboard.core.analytics.VoiceEngine
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++import com.manjul.aikeyboard.core.voice.SpeechSession
++import com.manjul.aikeyboard.core.voice.VoiceErrorKind
++import com.manjul.aikeyboard.core.voice.VoiceOutput
++import com.manjul.aikeyboard.core.voice.VoiceState
++import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
++import com.manjul.aikeyboard.core.voice.platform.EngineChoice
++import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.launch
++
++/** Read when a dictation starts. [lang] is the BCP-47 tag of the active subtype. */
++data class VoiceRequest(val lang: String, val preferWhisper: Boolean, val online: Boolean)
++
++/** The engines this build can run. WHISPER is not supported until its engine exists. */
++interface VoiceEngines {
++    fun supports(kind: EngineKind): Boolean
++    fun create(kind: EngineKind, segmented: Boolean): SpeechEngine
++}
++
++/** Persisted "first_dictation was logged" flag. */
++interface FirstDictationFlag {
++    val logged: Boolean
++    fun markLogged()
++}
++
++/**
++ * Voice typing in the keyboard: mic key, permission chip and the session lifecycle. Main thread only.
++ *
++ * Start order: policy decision, RECORD_AUDIO (both re-read on every [toggle]), engine selection, audio focus,
++ * session. Session output goes to [span] only while [generation] still has the value it had at the start; a field
++ * change cancels the session ([cancel]) and nothing more reaches the host. Transcript text is never logged.
++ */
++class VoiceController(
++    private val scope: CoroutineScope,
++    private val sessionFactory: (engineFactory: () -> SpeechEngine) -> SpeechSession,
++    private val engines: VoiceEngines,
++    private val selector: SpeechEngineSelector,
++    private val request: () -> VoiceRequest,
++    private val permission: () -> Boolean,
++    private val decision: () -> PolicyDecision,
++    private val generation: () -> Int,
++    private val focus: AudioFocusHolder,
++    private val span: ComposingSpanController,
++    private val analytics: (AnalyticsEvent) -> Unit,
++    private val firstDictation: FirstDictationFlag,
++    private val launchPermission: () -> Unit,
++    private val clock: () -> Long,
++    private val downloadSystemModel: ((lang: String) -> Unit)? = null,
++) {
++    private val _ui = MutableStateFlow<VoiceUiState>(VoiceUiState.Hidden)
++    val ui: StateFlow<VoiceUiState> = _ui.asStateFlow()
++
++    private inner class Active(val session: SpeechSession, val token: Int, val kind: EngineKind, val lang: String) {
++        var words = 0
++        var ended = false
++        var cancelled = false
++        var outputJob: Job? = null
++        var stateJob: Job? = null
++    }
++
++    private var startJob: Job? = null
++    private var active: Active? = null
++
++    /** An ended session whose output may still be draining (its final commit is queued before it goes idle). */
++    private var draining: Active? = null
++    private var lastLang: String? = null
++    private var firstDictationLogged = false
++    private val segmentedOff = mutableSetOf<String>()
++
++    fun toggle() {
++        active?.let {
++            it.session.stopByUser()
++            return
++        }
++        if (startJob?.isActive == true) return
++        if (!decision().allowVoice) return
++        if (!permission()) {
++            _ui.value = VoiceUiState.NeedsPermission
++            return
++        }
++        val token = generation()
++        _ui.value = VoiceUiState.Listening(0f)
++        startJob = scope.launch {
++            val req = request()
++            lastLang = req.lang
++            val choice = selector.choose(req.lang, req.preferWhisper, req.online)
++            if (generation() != token || !decision().allowVoice) {
++                _ui.value = VoiceUiState.Hidden
++                return@launch
++            }
++            val kind = when (choice) {
++                is EngineChoice.Unavailable -> {
++                    unavailable(choice.reason, choice.offerSystemDownload, choice.offerWhisperDownload)
++                    return@launch
++                }
++                is EngineChoice.Use -> choice.kind
++            }
++            if (!engines.supports(kind)) {
++                unavailable(REASON_OFFLINE_NO_MODEL, offerSystem = false, offerWhisper = false)
++                return@launch
++            }
++            if (!focus.acquire()) {
++                _ui.value = VoiceUiState.Message(MessageKind.MIC_BUSY)
++                return@launch
++            }
++            begin(kind, req.lang, token)
++        }
++    }
++
++    /** The permission chip was tapped. The only path that opens the permission screen. */
++    fun requestPermission() {
++        if (_ui.value != VoiceUiState.NeedsPermission) return
++        _ui.value = VoiceUiState.Hidden
++        launchPermission()
++    }
++
++    /** Back or the close button: stop listening (keeping what was heard) or hide the message. */
++    fun dismiss() {
++        val a = active
++        if (a != null) {
++            a.session.stopByUser()
++            return
++        }
++        startJob?.cancel()
++        _ui.value = VoiceUiState.Hidden
++    }
++
++    fun downloadSystemModel() {
++        val lang = lastLang ?: return
++        downloadSystemModel?.invoke(lang)
++        _ui.value = VoiceUiState.Hidden
++    }
++
++    val canDownloadSystemModel: Boolean get() = downloadSystemModel != null
++
++    /** Field change, keyboard hidden or a more restrictive field: drop everything, commit nothing more. */
++    fun cancel(reason: String) {
++        startJob?.cancel()
++        startJob = null
++        stopDraining()
++        val a = active
++        if (a != null) {
++            a.outputJob?.cancel()
++            a.stateJob?.cancel()
++            a.session.cancel()
++            end(a, error = null, reason = EndReason.entries.firstOrNull { it.value == reason } ?: EndReason.FIELD_CHANGE)
++        }
++        span.drop()
++        focus.release()
++        _ui.value = VoiceUiState.Hidden
++    }
++
++    fun destroy() {
++        cancel(EndReason.FIELD_CHANGE.value)
++    }
++
++    private fun stopDraining() {
++        draining?.let {
++            it.outputJob?.cancel()
++            it.stateJob?.cancel()
++        }
++        draining = null
++    }
++
++    private fun begin(kind: EngineKind, lang: String, token: Int) {
++        stopDraining()
++        val segmented = segKey(kind, lang) !in segmentedOff
++        val session = sessionFactory { engines.create(kind, segmented) }
++        val a = Active(session, token, kind, lang)
++        active = a
++        a.outputJob = scope.launch { session.output.collect { onOutput(a, it) } }
++        a.stateJob = scope.launch { session.state.collect { onState(a, it) } }
++        analytics(EventCatalog.voiceSessionStart(lang, kind.toAnalytics()))
++        session.start(lang, continuous = true)
++    }
++
++    private fun onOutput(a: Active, out: VoiceOutput) {
++        if (generation() != a.token) {
++            // The field changed under us: never write into the new one.
++            if (active === a) cancel(EndReason.FIELD_CHANGE.value) else a.outputJob?.cancel()
++            return
++        }
++        when (out) {
++            is VoiceOutput.Composing -> span.update(out.text)
++            is VoiceOutput.Commit -> {
++                span.commit(out.text)
++                a.words += countWords(out.text)
++            }
++            VoiceOutput.ClearComposing -> span.drop()
++        }
++    }
++
++    private fun onState(a: Active, s: VoiceState) {
++        when (s) {
++            // The session queues its last output before it goes idle, and that output may not be collected yet.
++            // Ending from a new coroutine lets the output collector (already resumed) run first, so the word count
++            // includes the final commit.
++            VoiceState.Idle -> if (a.session.endReason != null) scope.launch { end(a, error = null, reason = null) }
++            is VoiceState.Error -> scope.launch { end(a, error = s.kind, reason = null) }
++            VoiceState.Starting -> if (!a.ended) _ui.value = VoiceUiState.Listening(0f)
++            is VoiceState.Listening -> if (!a.ended) _ui.value = VoiceUiState.Listening(s.rmsDb)
++            VoiceState.Transcribing, VoiceState.Finalizing -> if (!a.ended) _ui.value = VoiceUiState.Transcribing
++        }
++    }
++
++    private fun end(a: Active, error: VoiceErrorKind?, reason: EndReason?) {
++        // A cancelled session shows nothing more, not even an error that was already on its way.
++        if (a.cancelled) return
++        if (reason != null) a.cancelled = true
++        if (!a.ended) {
++            a.ended = true
++            if (active === a) active = null
++            // An error state can still follow the idle state, and the last commit can still be queued.
++            if (reason == null) draining = a
++            focus.release()
++            if (!a.session.isSegmentedSupported(a.kind, a.lang)) segmentedOff += segKey(a.kind, a.lang)
++            val endReason = reason ?: EndReason.entries.firstOrNull { it.value == a.session.endReason } ?: EndReason.ERROR
++            analytics(EventCatalog.voiceSessionEnd(clock() - a.session.startedAtMs, a.words, endReason, errorCode = null))
++            if (a.words > 0) logFirstDictation(a.lang)
++            _ui.value = if (a.session.tapToResume.value) VoiceUiState.TapToResume else VoiceUiState.Hidden
++        }
++        if (error != null && reason == null) _ui.value = VoiceUiState.Message(error.toMessageKind())
++    }
++
++    private fun logFirstDictation(lang: String) {
++        if (firstDictationLogged || firstDictation.logged) return
++        firstDictationLogged = true
++        firstDictation.markLogged()
++        analytics(EventCatalog.firstDictation(lang))
++    }
++
++    private fun unavailable(reason: String, offerSystem: Boolean, offerWhisper: Boolean) {
++        val r = UnavailableReason.entries.firstOrNull { it.value == reason } ?: UnavailableReason.NO_SERVICE
++        analytics(EventCatalog.voiceUnavailable(r))
++        val kind = when (r) {
++            UnavailableReason.NO_SERVICE -> MessageKind.NO_SERVICE
++            UnavailableReason.LANG_UNSUPPORTED -> MessageKind.LANG_UNSUPPORTED
++            UnavailableReason.OFFLINE_NO_MODEL -> MessageKind.OFFLINE_NO_MODEL
++        }
++        _ui.value = VoiceUiState.Message(kind, offerSystemDownload = offerSystem, offerWhisperDownload = offerWhisper)
++    }
++
++    private fun segKey(kind: EngineKind, lang: String) = "${kind.analytics}|$lang"
++
++    private companion object {
++        const val REASON_OFFLINE_NO_MODEL = "offline_no_model"
++
++        fun countWords(text: String): Int = text.split(' ', '\n', '\t').count { w -> w.any { it.isLetterOrDigit() } }
++
++        fun EngineKind.toAnalytics(): VoiceEngine = when (this) {
++            EngineKind.SYSTEM_ON_DEVICE -> VoiceEngine.SYSTEM_ON_DEVICE
++            EngineKind.SYSTEM_DEFAULT -> VoiceEngine.SYSTEM_DEFAULT
++            EngineKind.WHISPER -> VoiceEngine.WHISPER
++        }
++
++        fun VoiceErrorKind.toMessageKind(): MessageKind = when (this) {
++            VoiceErrorKind.NO_PERMISSION -> MessageKind.NO_PERMISSION
++            VoiceErrorKind.NETWORK -> MessageKind.NETWORK
++            VoiceErrorKind.LANGUAGE_UNAVAILABLE -> MessageKind.LANG_UNSUPPORTED
++            VoiceErrorKind.BUSY -> MessageKind.MIC_BUSY
++            VoiceErrorKind.NO_ENGINE -> MessageKind.NO_SERVICE
++            VoiceErrorKind.OTHER -> MessageKind.ERROR
++        }
++    }
++}
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoicePanel.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoicePanel.kt
+new file mode 100644
+index 00000000..212a77b0
+--- /dev/null
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoicePanel.kt
+@@ -0,0 +1,132 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.voiceui
++
++import androidx.annotation.StringRes
++import androidx.compose.foundation.Canvas
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.RowScope
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxHeight
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.width
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.LocalContentColor
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.geometry.CornerRadius
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.res.stringResource
++import androidx.compose.ui.semantics.contentDescription
++import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.text.TextStyle
++import androidx.compose.ui.text.style.TextDirection
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++
++/**
++ * Smartbar content while voice typing is not [VoiceUiState.Hidden]. Colors come from [LocalContentColor] (the
++ * smartbar theme). Transcript text is never shown here: it goes to the host field as a composing region.
++ */
++@Composable
++fun VoicePanel(
++    state: VoiceUiState,
++    onStop: () -> Unit,
++    onDismiss: () -> Unit,
++    onAllowMic: () -> Unit,
++    onResume: () -> Unit,
++    onDownloadSystemModel: (() -> Unit)?,
++    modifier: Modifier = Modifier,
++) {
++    val color = LocalContentColor.current
++    Row(
++        modifier = modifier.fillMaxHeight().padding(horizontal = 8.dp),
++        verticalAlignment = Alignment.CenterVertically,
++        horizontalArrangement = Arrangement.spacedBy(8.dp),
++    ) {
++        when (state) {
++            VoiceUiState.Hidden -> Unit
++            is VoiceUiState.Listening -> {
++                Waveform(state.rms, color, Modifier.width(72.dp).height(24.dp))
++                Status(R.string.voice__listening)
++                StopButton(onStop)
++            }
++            VoiceUiState.Transcribing -> {
++                Status(R.string.voice__transcribing)
++                StopButton(onStop)
++            }
++            VoiceUiState.NeedsPermission -> {
++                VoiceChip(stringResource(R.string.voice__allow_mic), onAllowMic, Modifier.weight(1f, fill = false))
++                Spacer(Modifier.weight(1f))
++                CloseButton(onDismiss)
++            }
++            VoiceUiState.TapToResume -> {
++                VoiceChip(stringResource(R.string.voice__tap_to_resume), onResume, Modifier.weight(1f, fill = false))
++                Spacer(Modifier.weight(1f))
++                CloseButton(onDismiss)
++            }
++            is VoiceUiState.Message -> {
++                Status(state.kind.text())
++                if (state.offerSystemDownload && onDownloadSystemModel != null) {
++                    VoiceChip(stringResource(R.string.voice__download_system), onDownloadSystemModel)
++                }
++                CloseButton(onDismiss)
++            }
++        }
++    }
++}
++
++@StringRes
++private fun MessageKind.text(): Int = when (this) {
++    MessageKind.NO_SERVICE -> R.string.voice__msg_no_service
++    MessageKind.LANG_UNSUPPORTED -> R.string.voice__msg_lang_unsupported
++    MessageKind.OFFLINE_NO_MODEL -> R.string.voice__msg_offline_no_model
++    MessageKind.NETWORK -> R.string.voice__msg_network
++    MessageKind.MIC_BUSY -> R.string.voice__msg_mic_busy
++    MessageKind.NO_PERMISSION -> R.string.voice__msg_no_permission
++    MessageKind.ERROR -> R.string.voice__msg_error
++}
++
++@Composable
++private fun RowScope.Status(@StringRes text: Int) {
++    Text(
++        text = stringResource(text),
++        modifier = Modifier.weight(1f),
++        // Messages follow the script of the UI language, not the layout direction of the host.
++        style = TextStyle(textDirection = TextDirection.Content),
++        maxLines = 2,
++        overflow = TextOverflow.Ellipsis,
++    )
++}
++
++@Composable
++private fun StopButton(onClick: () -> Unit) {
++    val color = LocalContentColor.current
++    val label = stringResource(R.string.voice__stop)
++    IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = label }) {
++        Canvas(Modifier.size(14.dp)) {
++            drawRoundRect(color = color, cornerRadius = CornerRadius(size.minDimension / 6))
++        }
++    }
++}
++
++@Composable
++private fun CloseButton(onClick: () -> Unit) {
++    val color = LocalContentColor.current
++    val label = stringResource(R.string.voice__close)
++    IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = label }) {
++        Canvas(Modifier.size(12.dp)) {
++            val stroke = 2.dp.toPx()
++            drawLine(color, Offset.Zero, Offset(size.width, size.height), stroke)
++            drawLine(color, Offset(size.width, 0f), Offset(0f, size.height), stroke)
++        }
++    }
++}
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceUiState.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceUiState.kt
+new file mode 100644
+index 00000000..b76406a5
+--- /dev/null
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceUiState.kt
+@@ -0,0 +1,26 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.voiceui
++
++enum class MessageKind { NO_SERVICE, LANG_UNSUPPORTED, OFFLINE_NO_MODEL, NETWORK, MIC_BUSY, NO_PERMISSION, ERROR }
++
++/** What the smartbar shows for voice typing. Never carries transcript text. */
++sealed interface VoiceUiState {
++    data object Hidden : VoiceUiState
++
++    /** "Allow microphone, then tap the mic again"; only a tap on this chip opens the permission screen. */
++    data object NeedsPermission : VoiceUiState
++    data class Listening(val rms: Float) : VoiceUiState
++    data object Transcribing : VoiceUiState
++    data class Message(
++        val kind: MessageKind,
++        val offerSystemDownload: Boolean = false,
++        val offerWhisperDownload: Boolean = false,
++    ) : VoiceUiState
++
++    /** Repeated silence stopped the session; a tap starts a new one. */
++    data object TapToResume : VoiceUiState
++}
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/Waveform.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/Waveform.kt
+new file mode 100644
+index 00000000..aa9f922c
+--- /dev/null
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/Waveform.kt
+@@ -0,0 +1,48 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.voiceui
++
++import androidx.compose.foundation.Canvas
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.mutableStateListOf
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.geometry.CornerRadius
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Color
++
++/** Recognizer RMS (dB, noise floor near 0, speech up to about 10) as a 0..1 bar height. */
++internal fun rmsToLevel(rmsDb: Float): Float = ((rmsDb - MIN_DB) / (MAX_DB - MIN_DB)).coerceIn(0f, 1f)
++
++private const val MIN_DB = -2f
++private const val MAX_DB = 10f
++private const val BARS = 24
++
++/** Scrolling bars of the last [BARS] RMS readings, newest on the end side. */
++@Composable
++fun Waveform(rmsDb: Float, color: Color, modifier: Modifier = Modifier) {
++    val levels = remember { mutableStateListOf<Float>().apply { repeat(BARS) { add(0f) } } }
++    LaunchedEffect(rmsDb) {
++        levels.removeAt(0)
++        levels.add(rmsToLevel(rmsDb))
++    }
++    Canvas(modifier) {
++        val slot = size.width / BARS
++        val barWidth = slot * 0.6f
++        val minHeight = size.height * 0.08f
++        levels.forEachIndexed { i, level ->
++            val h = minHeight + (size.height - minHeight) * level
++            drawRoundRect(
++                color = color,
++                topLeft = Offset(i * slot + (slot - barWidth) / 2, (size.height - h) / 2),
++                size = Size(barWidth, h),
++                cornerRadius = CornerRadius(barWidth / 2),
++            )
++        }
++    }
++}
+diff --git a/ime/voice-ui/src/main/res/values/strings.xml b/ime/voice-ui/src/main/res/values/strings.xml
+new file mode 100644
+index 00000000..346f8d37
+--- /dev/null
++++ b/ime/voice-ui/src/main/res/values/strings.xml
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2026 AI Keyboard contributors. Licensed under the Apache License, Version 2.0 -->
++<resources xmlns:tools="http://schemas.android.com/tools">
++    <string name="voice__listening" tools:ignore="MissingTranslation">Listening…</string>
++    <string name="voice__transcribing" tools:ignore="MissingTranslation">Transcribing…</string>
++    <string name="voice__stop" tools:ignore="MissingTranslation">Stop voice typing</string>
++    <string name="voice__close" tools:ignore="MissingTranslation">Close</string>
++    <string name="voice__allow_mic" tools:ignore="MissingTranslation">Allow microphone, then tap the mic again</string>
++    <string name="voice__tap_to_resume" tools:ignore="MissingTranslation">Didn\'t catch that. Tap to resume</string>
++    <string name="voice__msg_no_service" tools:ignore="MissingTranslation">This phone has no speech recognition service.</string>
++    <string name="voice__msg_lang_unsupported" tools:ignore="MissingTranslation">Voice typing is not available for this language yet.</string>
++    <string name="voice__msg_offline_no_model" tools:ignore="MissingTranslation">You are offline and this language has no offline speech model.</string>
++    <string name="voice__msg_network" tools:ignore="MissingTranslation">Voice typing needs a connection. Check your network and try again.</string>
++    <string name="voice__msg_mic_busy" tools:ignore="MissingTranslation">The microphone is in use. Try again in a moment.</string>
++    <string name="voice__msg_no_permission" tools:ignore="MissingTranslation">Microphone access is off.</string>
++    <string name="voice__msg_error" tools:ignore="MissingTranslation">Voice typing stopped. Tap the mic to try again.</string>
++    <string name="voice__download_system" tools:ignore="MissingTranslation">Download offline speech</string>
++</resources>
+diff --git a/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanControllerTest.kt b/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanControllerTest.kt
+new file mode 100644
+index 00000000..793ee0f4
+--- /dev/null
++++ b/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanControllerTest.kt
+@@ -0,0 +1,192 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.voiceui
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ComposingSpanControllerTest {
++    /** A text field with a cursor and one composing region; reports selection updates like an editor would. */
++    private class FakeField(initial: String = "") : TextTarget {
++        val text = StringBuilder(initial)
++        var cursor = initial.length
++        var compStart = -1
++        var compEnd = -1
++        val calls = mutableListOf<String>()
++        val pending = ArrayDeque<IntArray>()
++        var deletes = 0
++
++        /** Whether the last setComposing call started a new region at the cursor. */
++        var lastStartedNew = false
++
++        override fun setComposing(text: String): Boolean {
++            calls += "set:$text"
++            lastStartedNew = compStart < 0
++            val start = if (compStart >= 0) compStart else cursor
++            if (compStart >= 0) this.text.delete(compStart, compEnd)
++            this.text.insert(start, text)
++            compStart = start
++            compEnd = start + text.length
++            cursor = compEnd
++            report()
++            return true
++        }
++
++        override fun commit(text: String, removeSpaceBefore: Boolean): Boolean {
++            calls += "commit:$text:$removeSpaceBefore"
++            var at = cursor
++            if (compStart >= 0) {
++                this.text.delete(compStart, compEnd)
++                at = compStart
++            }
++            compStart = -1
++            compEnd = -1
++            if (removeSpaceBefore && at > 0 && this.text[at - 1] == ' ') {
++                this.text.deleteCharAt(at - 1)
++                at--
++            }
++            this.text.insert(at, text)
++            cursor = at + text.length
++            report()
++            return true
++        }
++
++        override fun finishComposing(): Boolean {
++            calls += "finish"
++            compStart = -1
++            compEnd = -1
++            report()
++            return true
++        }
++
++        /** The host edits the field on its own (types, moves the cursor, drops the region). */
++        fun hostEdit(newCursor: Int, keepRegion: Boolean) {
++            cursor = newCursor
++            if (!keepRegion) {
++                compStart = -1
++                compEnd = -1
++            }
++            report()
++        }
++
++        private fun report() {
++            pending.addLast(intArrayOf(cursor, cursor, compStart, compEnd))
++        }
++
++        fun deliver(span: ComposingSpanController) {
++            while (pending.isNotEmpty()) {
++                val u = pending.removeFirst()
++                span.onSelectionUpdate(u[0], u[1], u[2], u[3])
++            }
++        }
++    }
++
++    @Test fun updateTwiceSetsTheLatestText() {
++        val field = FakeField()
++        val span = ComposingSpanController(field)
++        span.update("hel")
++        span.update("hello")
++        field.deliver(span)
++        assertEquals(listOf("set:hel", "set:hello"), field.calls)
++        assertEquals("hello", field.text.toString())
++        assertTrue(span.hasSpan)
++    }
++
++    @Test fun lateSelectionUpdatesOfOurOwnEditsKeepTheSpan() {
++        val field = FakeField("ab ")
++        val span = ComposingSpanController(field)
++        span.update("h")
++        span.update("he")
++        span.update("hel")
++        // All three updates arrive after the third edit.
++        field.deliver(span)
++        span.update("hello")
++        field.deliver(span)
++        assertEquals("ab hello", field.text.toString())
++        assertEquals(listOf("set:h", "set:he", "set:hel", "set:hello"), field.calls)
++        assertTrue(span.hasSpan)
++    }
++
++    @Test fun regionGoneDropsOnceAndTheNextPartialStartsANewSpanAtTheCursor() {
++        val field = FakeField("one two")
++        val span = ComposingSpanController(field)
++        span.update("hel")
++        field.deliver(span)
++        // The host finished the region and moved the cursor to the start (candStart = -1).
++        field.hostEdit(newCursor = 0, keepRegion = false)
++        field.deliver(span)
++        assertEquals(1, field.calls.count { it == "finish" })
++        assertFalse(span.hasSpan)
++        span.update("hello")
++        assertTrue(field.lastStartedNew)
++        assertEquals("helloone twohel", field.text.toString())
++    }
++
++    @Test fun cursorMovedInsideOurRegionDropsWithoutDeleting() {
++        val field = FakeField("abc ")
++        val span = ComposingSpanController(field)
++        span.update("hello")
++        field.deliver(span)
++        field.hostEdit(newCursor = 6, keepRegion = true)
++        field.deliver(span)
++        assertEquals(listOf("set:hello", "finish"), field.calls)
++        assertEquals("abc hello", field.text.toString())
++    }
++
++    @Test fun dropNeverDeletes() {
++        val field = FakeField("keep ")
++        val span = ComposingSpanController(field)
++        span.update("partial")
++        span.drop()
++        span.drop()
++        assertEquals(listOf("set:partial", "finish"), field.calls)
++        assertEquals("keep partial", field.text.toString())
++        assertEquals(0, field.deletes)
++    }
++
++    @Test fun commitReplacesTheSpan() {
++        val field = FakeField()
++        val span = ComposingSpanController(field)
++        span.update("hel")
++        span.commit("hello ")
++        field.deliver(span)
++        assertEquals("hello ", field.text.toString())
++        assertFalse(span.hasSpan)
++    }
++
++    @Test fun commitStartingWithPunctuationJoinsThePreviousWord() {
++        val field = FakeField()
++        val span = ComposingSpanController(field)
++        span.commit("hello ")
++        span.commit(", ")
++        field.deliver(span)
++        assertEquals("hello, ", field.text.toString())
++        assertEquals(listOf("commit:hello :false", "commit:, :true"), field.calls)
++    }
++
++    @Test fun punctuationDoesNotJoinAfterTheHostChangedTheField() {
++        val field = FakeField()
++        val span = ComposingSpanController(field)
++        span.commit("hello ")
++        field.deliver(span)
++        span.update("x")
++        field.deliver(span)
++        field.hostEdit(newCursor = 0, keepRegion = false)
++        field.deliver(span)
++        span.commit(", ")
++        assertEquals("commit:, :false", field.calls.last())
++    }
++
++    @Test fun emptyCommitDropsTheSpan() {
++        val field = FakeField()
++        val span = ComposingSpanController(field)
++        span.update("um")
++        span.commit("")
++        assertEquals(listOf("set:um", "finish"), field.calls)
++    }
++}
+diff --git a/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceControllerTest.kt b/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceControllerTest.kt
+new file mode 100644
+index 00000000..59e79e0f
+--- /dev/null
++++ b/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceControllerTest.kt
+@@ -0,0 +1,287 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.voiceui
++
++import android.media.AudioManager
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++import com.manjul.aikeyboard.core.voice.SpeechSession
++import com.manjul.aikeyboard.core.voice.SpokenPunctuation
++import com.manjul.aikeyboard.core.voice.VoiceTimings
++import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
++import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
++import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.Shadows.shadowOf
++import org.robolectric.annotation.Config
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class VoiceControllerTest {
++    private class Engine(override val kind: EngineKind) : SpeechEngine {
++        override val supportsPartials = true
++        var listener: SpeechEngine.Listener? = null
++        var destroyed = false
++        override fun start(lang: String, listener: SpeechEngine.Listener) { this.listener = listener }
++        override fun stop() {}
++        override fun cancel() {}
++        override fun destroy() { destroyed = true }
++    }
++
++    private class Caps(val service: Boolean = true, val onDevice: Boolean = true) : RecognizerCapabilities {
++        override val sdkInt = 34
++        override fun isRecognitionAvailable() = service
++        override fun isOnDeviceAvailable() = onDevice
++        override suspend fun onDeviceSupports(lang: String): Boolean? = true
++        override fun whisperModelReady(lang: String) = false
++        override fun whisperLangEnabled(lang: String) = false
++    }
++
++    private class Field : TextTarget {
++        val calls = mutableListOf<String>()
++        override fun setComposing(text: String): Boolean { calls += "set:$text"; return true }
++        override fun commit(text: String, removeSpaceBefore: Boolean): Boolean { calls += "commit:$text"; return true }
++        override fun finishComposing(): Boolean { calls += "finish"; return true }
++    }
++
++    private class Flag : FirstDictationFlag {
++        override var logged = false
++        override fun markLogged() { logged = true }
++    }
++
++    private class Rig(val scope: TestScope, caps: Caps = Caps()) {
++        var permission = true
++        var permissionChecks = 0
++        var decision = PolicyDecision.Unrestricted
++        var generation = 1
++        var sessionsCreated = 0
++        var launches = 0
++        val engines = mutableListOf<Engine>()
++        val events = mutableListOf<AnalyticsEvent>()
++        val field = Field()
++        val flag = Flag()
++        val audioManager: AudioManager = RuntimeEnvironment.getApplication().getSystemService(AudioManager::class.java)
++        val focus = AudioFocusHolder(audioManager)
++        // Collectors and session timers outlive a test body; the background scope cancels them at the end.
++        val controller = VoiceController(
++            scope = scope.backgroundScope,
++            sessionFactory = { factory ->
++                sessionsCreated++
++                SpeechSession(factory, scope.backgroundScope, VoiceTimings(), SpokenPunctuation, clock = { 0L })
++            },
++            engines = object : VoiceEngines {
++                override fun supports(kind: EngineKind) = kind != EngineKind.WHISPER
++                override fun create(kind: EngineKind, segmented: Boolean) = Engine(kind).also { engines += it }
++            },
++            selector = SpeechEngineSelector(caps),
++            request = { VoiceRequest("en-US", preferWhisper = false, online = true) },
++            permission = { permissionChecks++; permission },
++            decision = { decision },
++            generation = { generation },
++            focus = focus,
++            span = ComposingSpanController(field),
++            analytics = { events += it },
++            firstDictation = flag,
++            launchPermission = { launches++ },
++            clock = { 0L },
++        )
++        val engine get() = engines.last()
++
++        fun names() = events.map { it.name }
++    }
++
++    private fun run(block: suspend TestScope.() -> Unit) = runTest(StandardTestDispatcher()) { block() }
++
++    @Test fun missingPermissionShowsTheChipAndCreatesNoSession() = run {
++        val r = Rig(this)
++        r.permission = false
++        r.controller.toggle()
++        runCurrent()
++        assertEquals(VoiceUiState.NeedsPermission, r.controller.ui.value)
++        assertEquals(0, r.sessionsCreated)
++        assertEquals(0, r.launches)
++    }
++
++    @Test fun chipTapLaunchesThePermissionScreenOnce() = run {
++        val r = Rig(this)
++        r.permission = false
++        r.controller.toggle()
++        r.controller.requestPermission()
++        r.controller.requestPermission()
++        assertEquals(1, r.launches)
++        assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
++    }
++
++    @Test fun permissionIsCheckedOnEveryToggle() = run {
++        val r = Rig(this)
++        r.permission = false
++        r.controller.toggle()
++        r.controller.dismiss()
++        r.permission = true
++        r.controller.toggle()
++        runCurrent()
++        assertEquals(2, r.permissionChecks)
++        assertEquals(1, r.sessionsCreated)
++        assertTrue(r.controller.ui.value is VoiceUiState.Listening)
++    }
++
++    @Test fun policyWithoutVoiceMakesToggleANoOp() = run {
++        val r = Rig(this)
++        r.decision = PolicyDecision.Locked
++        r.controller.toggle()
++        runCurrent()
++        assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
++        assertEquals(0, r.sessionsCreated)
++        assertTrue(r.events.isEmpty())
++    }
++
++    @Test fun startAcquiresFocusAndLogsSessionStart() = run {
++        val r = Rig(this)
++        r.controller.toggle()
++        runCurrent()
++        assertTrue(r.focus.isHeld)
++        assertEquals(listOf("voice_session_start"), r.names())
++        assertEquals("system_on_device", r.events.single().params["engine"])
++    }
++
++    @Test fun cancelReleasesFocusAndLogsFieldChange() = run {
++        val r = Rig(this)
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.engine.listener!!.onPartial("hel")
++        runCurrent()
++        r.controller.cancel("field_change")
++        runCurrent()
++        assertFalse(r.focus.isHeld)
++        assertTrue(r.engine.destroyed)
++        val end = r.events.single { it.name == "voice_session_end" }
++        assertEquals("field_change", end.params["end_reason"])
++        assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
++        assertEquals(listOf("set:hel", "finish"), r.field.calls)
++    }
++
++    @Test fun lateCommitFromAnOldGenerationIsDiscarded() = run {
++        val r = Rig(this)
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        // The field changes, then the engine delivers a final result for the old one.
++        r.generation = 2
++        r.engine.listener!!.onFinal("secret words")
++        runCurrent()
++        assertTrue(r.field.calls.none { it.startsWith("commit:") })
++        assertFalse(r.focus.isHeld)
++        assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
++        assertEquals("field_change", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
++    }
++
++    @Test fun unavailableEngineShowsAMessageWithTheOffers() = run {
++        val r = Rig(this, Caps(service = true, onDevice = false))
++        val offline = VoiceController(
++            scope = backgroundScope,
++            sessionFactory = { error("no session expected") },
++            engines = object : VoiceEngines {
++                override fun supports(kind: EngineKind) = true
++                override fun create(kind: EngineKind, segmented: Boolean): SpeechEngine = error("no engine expected")
++            },
++            selector = SpeechEngineSelector(Caps(service = true, onDevice = false)),
++            request = { VoiceRequest("en-US", preferWhisper = false, online = false) },
++            permission = { true },
++            decision = { PolicyDecision.Unrestricted },
++            generation = { 1 },
++            focus = r.focus,
++            span = ComposingSpanController(r.field),
++            analytics = { r.events += it },
++            firstDictation = r.flag,
++            launchPermission = {},
++            clock = { 0L },
++        )
++        offline.toggle()
++        runCurrent()
++        assertEquals(VoiceUiState.Message(MessageKind.OFFLINE_NO_MODEL, offerSystemDownload = true), offline.ui.value)
++        assertEquals("offline_no_model", r.events.single { it.name == "voice_unavailable" }.params["reason"])
++        assertFalse(r.focus.isHeld)
++    }
++
++    @Test fun micBusyShowsAMessage() = run {
++        val r = Rig(this)
++        shadowOf(r.audioManager).setNextFocusRequestResponse(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
++        r.controller.toggle()
++        runCurrent()
++        assertEquals(VoiceUiState.Message(MessageKind.MIC_BUSY), r.controller.ui.value)
++        assertEquals(0, r.sessionsCreated)
++    }
++
++    @Test fun firstDictationIsLoggedOnceForASessionWithWords() = run {
++        val r = Rig(this)
++        repeat(2) {
++            r.controller.toggle()
++            runCurrent()
++            r.engine.listener!!.onReady()
++            r.engine.listener!!.onPartial("hello world")
++            r.controller.toggle()
++            r.engine.listener!!.onFinal("hello world")
++            runCurrent()
++        }
++        assertEquals(1, r.events.count { it.name == "first_dictation" })
++        assertEquals("en-US", r.events.single { it.name == "first_dictation" }.params["lang"])
++        assertTrue(r.flag.logged)
++        assertEquals(2, r.events.count { it.name == "voice_session_end" })
++        assertEquals(listOf("set:hello world", "commit:hello world ", "set:hello world", "commit:hello world "), r.field.calls)
++    }
++
++    @Test fun firstDictationIsNotLoggedWhenThePersistedFlagIsSet() = run {
++        val r = Rig(this)
++        r.flag.logged = true
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onFinal("hi")
++        runCurrent()
++        assertTrue(r.events.none { it.name == "first_dictation" })
++    }
++
++    @Test fun mutedSessionWithoutWordsDoesNotLogFirstDictation() = run {
++        val r = Rig(this)
++        r.controller.toggle()
++        runCurrent()
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onFinal("")
++        runCurrent()
++        assertTrue(r.events.none { it.name == "first_dictation" })
++        assertFalse(r.focus.isHeld)
++    }
++
++    @Test fun toggleWhileListeningStopsAndCommits() = run {
++        val r = Rig(this)
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.engine.listener!!.onPartial("hi there")
++        runCurrent()
++        r.controller.toggle()
++        runCurrent()
++        assertEquals(VoiceUiState.Transcribing, r.controller.ui.value)
++        r.engine.listener!!.onFinal("hi there")
++        runCurrent()
++        assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
++        assertEquals("commit:hi there ", r.field.calls.last())
++        assertEquals("user", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
++    }
++}
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+index 95d3a862..af4b7c7a 100644
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -61,13 +61,15 @@ include(":core:common")
+ include(":core:ads")
+ include(":ime:policy")
+ // FORK(S1-policy): feature settings store (DataStore)
+ include(":core:datastore")
+ // FORK(S1-clipboard): clipboard sensitivity classifier
+ include(":core:privacy")
+ // FORK(S1-analytics): event catalog and batched consent-aware relay
+ include(":core:analytics")
+ // FORK(S1-voice): speech session state machine, error policy, spoken punctuation
+ include(":core:voice")
++// FORK(S1-voice): voice typing inside the keyboard (controller, composing span, panel)
++include(":ime:voice-ui")
+ 
+ // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
+ include(":lint-rules")

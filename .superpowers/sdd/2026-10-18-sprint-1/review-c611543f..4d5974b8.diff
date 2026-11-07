@@ -1,0 +1,425 @@
+# Review package: c611543f..4d5974b8
+
+## Commits
+4d5974b8 fix(voice): address review for task 10
+
+## Files changed
+ .../manjul/aikeyboard/core/voice/SpeechSession.kt  |  2 +-
+ .../core/voice/platform/PlatformSpeechEngine.kt    |  5 +-
+ .../core/voice/platform/RecognizerCapabilities.kt  | 56 +++++++++++++---------
+ .../aikeyboard/core/voice/SpeechSessionTest.kt     |  8 ++++
+ .../core/voice/platform/AudioFocusHolderTest.kt    | 12 ++++-
+ .../core/voice/platform/LanguageInstalledTest.kt   | 24 ++++++++++
+ .../voice/platform/PlatformSpeechEngineTest.kt     | 18 ++++++-
+ .../voice/platform/SpeechEngineSelectorTest.kt     | 11 +++++
+ 8 files changed, 110 insertions(+), 26 deletions(-)
+
+## Diff
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
+index 6f62a78d..d4bab334 100644
+--- a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
+@@ -220,21 +220,21 @@ class SpeechSession(
+             silenceJob?.cancel()
+             sawSegment = true
+             restarts = 0
+             pendingPartial = null
+             commit(text)
+         }
+ 
+         override fun onFinal(text: String) {
+             if (!current()) return
+             val kind = engine?.kind
+-            if (kind != null && continuous && engine?.supportsPartials == true && !sawSegment) segmentedSupported[segKey(kind, lang)] = false
++            if (kind != null && continuous && engine?.supportsPartials == true && !sawSegment && text.isNotBlank()) segmentedSupported[segKey(kind, lang)] = false
+             pendingPartial = null
+             restarts = 0
+             commit(text)
+             if (stopping) {
+                 finish(stopReason, commitPending = false)
+             } else if (continuous) {
+                 restartAfterFinal()
+             } else {
+                 finish("silence", commitPending = false)
+             }
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngine.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngine.kt
+index 19e4dfa0..34749535 100644
+--- a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngine.kt
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngine.kt
+@@ -10,20 +10,23 @@ import android.content.Intent
+ import android.os.Build
+ import android.os.Bundle
+ import android.os.Handler
+ import android.os.Looper
+ import android.speech.RecognitionListener
+ import android.speech.RecognizerIntent
+ import android.speech.SpeechRecognizer
+ import com.manjul.aikeyboard.core.voice.EngineKind
+ import com.manjul.aikeyboard.core.voice.SpeechEngine
+ 
++/** createOnDeviceSpeechRecognizer exists from API 31 (S). */
++internal fun useOnDeviceFactory(onDevice: Boolean, sdkInt: Int): Boolean = onDevice && sdkInt >= Build.VERSION_CODES.S
++
+ /**
+  * Recognizer extras. [sdkInt] is a parameter so the API 30 / 33 differences are testable.
+  * Formatting and segmented sessions exist from API 33; [segmented] is decided by the caller
+  * (see SpeechSession.isSegmentedSupported).
+  */
+ internal fun buildRecognizerIntent(lang: String, sdkInt: Int, segmented: Boolean): Intent =
+     Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+         putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+@@ -49,21 +52,21 @@ class PlatformSpeechEngine(
+ ) : SpeechEngine {
+     override val kind: EngineKind = if (onDevice) EngineKind.SYSTEM_ON_DEVICE else EngineKind.SYSTEM_DEFAULT
+     override val supportsPartials: Boolean = true
+ 
+     private var recognizer: SpeechRecognizer? = null
+     private var destroyed = false
+ 
+     override fun start(lang: String, listener: SpeechEngine.Listener) = onMain {
+         if (destroyed) return@onMain
+         recognizer?.destroy()
+-        val r = if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
++        val r = if (useOnDeviceFactory(onDevice, Build.VERSION.SDK_INT)) {
+             SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+         } else {
+             SpeechRecognizer.createSpeechRecognizer(context)
+         }
+         r.setRecognitionListener(Bridge(listener))
+         recognizer = r
+         r.startListening(buildRecognizerIntent(lang, Build.VERSION.SDK_INT, segmented))
+     }
+ 
+     override fun stop() = onMain { recognizer?.stopListening() }
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt
+index 09f345fd..cfaac203 100644
+--- a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt
+@@ -21,62 +21,74 @@ interface RecognizerCapabilities {
+     val sdkInt: Int
+     fun isRecognitionAvailable(): Boolean
+     fun isOnDeviceAvailable(): Boolean
+ 
+     /** Null when unknown (below API 33 or the check timed out). */
+     suspend fun onDeviceSupports(lang: String): Boolean?
+     fun whisperModelReady(lang: String): Boolean
+     fun whisperLangEnabled(lang: String): Boolean
+ }
+ 
++/** True when [installed] has [lang] by exact tag or by language subtag alone (case-insensitive). */
++internal fun languageInstalled(lang: String, installed: Collection<String>): Boolean {
++    val tag = lang.lowercase()
++    val language = tag.substringBefore('-')
++    return installed.any { val t = it.lowercase(); t == tag || t.substringBefore('-') == language }
++}
++
+ private const val SUPPORT_CHECK_TIMEOUT_MS = 1_500L
+ 
+ /** Platform-backed capabilities. The whisper* answers are false until the Whisper engine is wired in. */
+ class PlatformRecognizerCapabilities(
+     private val context: Context,
+     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
+ ) : RecognizerCapabilities {
+     override val sdkInt: Int get() = Build.VERSION.SDK_INT
+ 
+     override fun isRecognitionAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
+ 
+     override fun isOnDeviceAvailable(): Boolean =
+         sdkInt >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+ 
+     override suspend fun onDeviceSupports(lang: String): Boolean? {
+         if (sdkInt < Build.VERSION_CODES.TIRAMISU) return null
+         return withTimeoutOrNull(SUPPORT_CHECK_TIMEOUT_MS) {
+             suspendCancellableCoroutine { cont ->
+                 // The recognizer must be created and used on the main thread.
+                 mainHandler.post {
+-                    val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+-                    cont.invokeOnCancellation { mainHandler.post { recognizer.destroy() } }
+-                    val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+-                    recognizer.checkRecognitionSupport(
+-                        intent,
+-                        context.mainExecutor,
+-                        object : RecognitionSupportCallback {
+-                            override fun onSupportResult(recognitionSupport: RecognitionSupport) {
+-                                val installed = recognitionSupport.installedOnDeviceLanguages
+-                                val tag = lang.lowercase()
+-                                val ok = installed.any { it.lowercase() == tag || it.substringBefore('-').lowercase() == tag.substringBefore('-') }
+-                                recognizer.destroy()
+-                                if (cont.isActive) cont.resume(ok)
+-                            }
++                    var recognizer: SpeechRecognizer? = null
++                    runCatching {
++                        recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context).also { r ->
++                            cont.invokeOnCancellation { mainHandler.post { r.destroy() } }
++                            val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
++                                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
++                                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
++                            r.checkRecognitionSupport(
++                                intent,
++                                context.mainExecutor,
++                                object : RecognitionSupportCallback {
++                                    override fun onSupportResult(recognitionSupport: RecognitionSupport) {
++                                        val ok = languageInstalled(lang, recognitionSupport.installedOnDeviceLanguages)
++                                        r.destroy()
++                                        if (cont.isActive) cont.resume(ok)
++                                    }
+ 
+-                            override fun onError(error: Int) {
+-                                recognizer.destroy()
+-                                if (cont.isActive) cont.resume(null)
+-                            }
+-                        },
+-                    )
++                                    override fun onError(error: Int) {
++                                        r.destroy()
++                                        if (cont.isActive) cont.resume(null)
++                                    }
++                                },
++                            )
++                        }
++                    }.onFailure {
++                        runCatching { recognizer?.destroy() }
++                        if (cont.isActive) cont.resume(null)
++                    }
+                 }
+             }
+         }
+     }
+ 
+     override fun whisperModelReady(lang: String): Boolean = false
+ 
+     override fun whisperLangEnabled(lang: String): Boolean = false
+ }
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
+index 86445935..d78d3408 100644
+--- a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
+@@ -443,20 +443,28 @@ class SpeechSessionTest {
+         val r = rig()
+         assertTrue(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
+         r.session.start("en", true)
+         runCurrent()
+         r.l.onFinal("hello")
+         assertFalse(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
+         assertTrue(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "ur"))
+         assertTrue(r.session.isSegmentedSupported(EngineKind.WHISPER, "en"))
+     }
+ 
++    @Test fun blankFinalWithoutSegmentsKeepsSegmentedSupported() = runSession {
++        val r = rig()
++        r.session.start("en", true)
++        runCurrent()
++        r.l.onFinal("")
++        assertTrue(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
++    }
++
+     @Test fun segmentsCommitAndKeepSegmentedSupported() = runSession {
+         val r = rig()
+         r.session.output.test {
+             r.session.start("en", true)
+             runCurrent()
+             r.l.onSegment("one")
+             assertEquals(VoiceOutput.Commit("one "), awaitItem())
+             r.l.onFinal("two")
+             assertEquals(VoiceOutput.Commit("two "), awaitItem())
+         }
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolderTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolderTest.kt
+index b5279608..35605781 100644
+--- a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolderTest.kt
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolderTest.kt
+@@ -1,27 +1,29 @@
+ /*
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.core.voice.platform
+ 
+ import android.content.Context
+ import android.media.AudioManager
+-import org.robolectric.RuntimeEnvironment
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertFalse
+ import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNotSame
++import org.junit.Assert.assertSame
+ import org.junit.Assert.assertTrue
+ import org.junit.Test
+ import org.junit.runner.RunWith
+ import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
+ import org.robolectric.Shadows.shadowOf
+ import org.robolectric.annotation.Config
+ 
+ @RunWith(RobolectricTestRunner::class)
+ @Config(sdk = [34])
+ class AudioFocusHolderTest {
+     private val audioManager = RuntimeEnvironment.getApplication().getSystemService(Context.AUDIO_SERVICE) as AudioManager
+ 
+     @Test
+     fun acquireThenReleaseAbandonsFocus() {
+@@ -32,14 +34,22 @@ class AudioFocusHolderTest {
+         assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, shadow.lastAudioFocusRequest.audioFocusRequest.focusGain)
+         holder.release()
+         assertNotNull(shadow.lastAbandonedAudioFocusRequest)
+     }
+ 
+     @Test
+     fun doubleReleaseIsSafe() {
+         val holder = AudioFocusHolder(audioManager)
+         holder.acquire()
+         holder.release()
++        val first = shadowOf(audioManager).lastAbandonedAudioFocusRequest
++        // Another holder abandons in between; a second abandon by the first would overwrite this.
++        val other = AudioFocusHolder(audioManager)
++        other.acquire()
++        other.release()
++        val second = shadowOf(audioManager).lastAbandonedAudioFocusRequest
++        assertNotSame(first, second)
+         holder.release()
++        assertSame(second, shadowOf(audioManager).lastAbandonedAudioFocusRequest)
+         assertFalse(holder.isHeld)
+     }
+ }
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/LanguageInstalledTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/LanguageInstalledTest.kt
+new file mode 100644
+index 00000000..02fc35e8
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/LanguageInstalledTest.kt
+@@ -0,0 +1,24 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.platform
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class LanguageInstalledTest {
++    @Test fun exactTagMatchIgnoresCase() = assertTrue(languageInstalled("en-US", listOf("EN-us")))
++
++    @Test fun languageOnlyMatchesRegionalTag() {
++        assertTrue(languageInstalled("en-GB", listOf("en-US")))
++        assertTrue(languageInstalled("ur", listOf("ur-PK")))
++    }
++
++    @Test fun noMatch() {
++        assertFalse(languageInstalled("ur-PK", listOf("en-US", "de-DE")))
++        assertFalse(languageInstalled("en", emptyList()))
++    }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngineTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngineTest.kt
+index a770dd40..8a8a6b71 100644
+--- a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngineTest.kt
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngineTest.kt
+@@ -3,29 +3,29 @@
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.core.voice.platform
+ 
+ import android.os.Bundle
+ import android.os.Handler
+ import android.os.Looper
+ import android.speech.RecognizerIntent
+ import android.speech.SpeechRecognizer
+-import org.robolectric.RuntimeEnvironment
+ import com.manjul.aikeyboard.core.voice.EngineKind
+ import com.manjul.aikeyboard.core.voice.SpeechEngine
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertFalse
+ import org.junit.Assert.assertTrue
+ import org.junit.Test
+ import org.junit.runner.RunWith
+ import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
+ import org.robolectric.Shadows.shadowOf
+ import org.robolectric.annotation.Config
+ 
+ @RunWith(RobolectricTestRunner::class)
+ @Config(sdk = [34])
+ class PlatformSpeechEngineTest {
+     private val context = RuntimeEnvironment.getApplication()
+ 
+     private class Recorder : SpeechEngine.Listener {
+         val events = mutableListOf<String>()
+@@ -64,20 +64,36 @@ class PlatformSpeechEngineTest {
+     }
+ 
+     @Test
+     fun intentOnApi30OmitsFormattingAndSegmented() {
+         val intent = buildRecognizerIntent("en-US", sdkInt = 30, segmented = true)
+         assertFalse(intent.hasExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING))
+         assertFalse(intent.hasExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION))
+         assertTrue(intent.getBooleanExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false))
+     }
+ 
++    @Test
++    fun onDeviceFactoryFromApi31() {
++        assertFalse(useOnDeviceFactory(onDevice = true, sdkInt = 30))
++        assertTrue(useOnDeviceFactory(onDevice = true, sdkInt = 31))
++        assertTrue(useOnDeviceFactory(onDevice = true, sdkInt = 33))
++        assertFalse(useOnDeviceFactory(onDevice = false, sdkInt = 34))
++    }
++
++    @Test
++    fun onDeviceEngineStartsOnDeviceRecognizer() {
++        val engine = PlatformSpeechEngine(context, onDevice = true, segmented = false, mainHandler = Handler(Looper.getMainLooper()))
++        engine.start("en-US", Recorder())
++        assertEquals(EngineKind.SYSTEM_ON_DEVICE, engine.kind)
++        assertEquals("en-US", latest().lastRecognizerIntent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE))
++    }
++
+     private fun latest() = shadowOf(org.robolectric.shadows.ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+ 
+     @Test
+     fun startCreatesRecognizerAndMapsCallbacks() {
+         val engine = engine()
+         val rec = Recorder()
+         engine.start("en-US", rec)
+         val shadow = latest()
+         shadowOf(Looper.getMainLooper()).idle()
+         assertEquals("en-US", shadow.lastRecognizerIntent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE))
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelectorTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelectorTest.kt
+index 17f56e44..31d90202 100644
+--- a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelectorTest.kt
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelectorTest.kt
+@@ -54,20 +54,31 @@ class SpeechEngineSelectorTest {
+             Case(
+                 "offline, no on-device, no model, sdk 34",
+                 Caps(onDevice = false, whisperEnabled = true), false, false,
+                 EngineChoice.Unavailable("offline_no_model", offerSystemDownload = true, offerWhisperDownload = true),
+             ),
+             Case(
+                 "offline, no on-device, no model, sdk 30",
+                 Caps(sdkInt = 30, onDevice = false), false, false,
+                 EngineChoice.Unavailable("offline_no_model", offerSystemDownload = false, offerWhisperDownload = false),
+             ),
++            Case(
++                "sdk 30 offline with onDevice flag set",
++                Caps(sdkInt = 30, onDevice = true), false, false,
++                EngineChoice.Unavailable("offline_no_model", offerSystemDownload = false, offerWhisperDownload = false),
++            ),
++            Case(
++                "whisper ready but not enabled, offline",
++                Caps(onDevice = false, modelReady = true, whisperEnabled = false), false, false,
++                EngineChoice.Unavailable("offline_no_model", offerSystemDownload = true, offerWhisperDownload = false),
++            ),
++            Case("preferWhisper, model ready, lang not enabled", Caps(modelReady = true, whisperEnabled = false), true, true, use(EngineKind.WHISPER)),
+             Case(
+                 "offline, on-device lacks lang",
+                 Caps(supports = false), false, false,
+                 EngineChoice.Unavailable("lang_unsupported", offerSystemDownload = true, offerWhisperDownload = false),
+             ),
+         )
+         for (c in cases) {
+             assertEquals(c.name, c.expected, SpeechEngineSelector(c.caps).choose("en-US", c.preferWhisper, c.online))
+         }
+     }

@@ -1,0 +1,211 @@
+# Review package: 855a9c77..HEAD
+
+## Commits
+956a8b0f fix(clipboard): address review for task 3
+
+## Files changed
+ .../manjul/aikeyboard/fork/clipboard/ClipboardCaptureGate.kt   |  6 ++++++
+ .../com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt    | 10 ++++++----
+ .../aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt       |  9 +++++++++
+ .../aikeyboard/core/privacy/ClipSensitivityClassifier.kt       |  6 ++++--
+ .../aikeyboard/core/privacy/ClipSensitivityClassifierTest.kt   |  7 +++++--
+ 5 files changed, 30 insertions(+), 8 deletions(-)
+
+## Diff
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardCaptureGate.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardCaptureGate.kt
+index 281220df..c60797ad 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardCaptureGate.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardCaptureGate.kt
+@@ -36,13 +36,19 @@ class ClipboardCaptureGate(
+     companion object {
+         /** Value of `ClipDescription.EXTRA_IS_SENSITIVE`, which exists from API 33. */
+         const val EXTRA_IS_SENSITIVE_KEY = "android.content.extra.IS_SENSITIVE"
+ 
+         fun isFlaggedSensitive(description: ClipDescription?): Boolean {
+             val extras = description?.extras ?: return false
+             if (AndroidVersion.ATLEAST_API33_T && extras.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE)) return true
+             return extras.getBoolean(EXTRA_IS_SENSITIVE_KEY)
+         }
+ 
++        /** Oldest-first unpinned items beyond [limit]; [unpinnedNewestFirst] is ordered newest first. */
++        fun <T> itemsOverLimit(unpinnedNewestFirst: List<T>, limit: Int): List<T> {
++            val nToRemove = unpinnedNewestFirst.size - limit
++            return if (nToRemove > 0) unpinnedNewestFirst.asReversed().take(nToRemove) else emptyList()
++        }
++
+         fun expiryCutoffMs(nowMs: Long, afterMinutes: Int): Long = nowMs - afterMinutes * 60_000L
+     }
+ }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt
+index 7c94c55e..91143235 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt
+@@ -201,21 +201,24 @@ class ClipboardManager(
+                     return@launch
+                 }
+ 
+                 if (!syncBehavior.shouldSyncSet) {
+                     return@launch
+                 }
+ 
+                 val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true
+                 if (!isEqual) {
+                     // FORK(S1-clipboard): sensitive or policy-blocked clips are neither stored nor cloned
+-                    if (!captureGate.mayCapture(systemPrimaryClip)) return@launch
++                    if (!captureGate.mayCapture(systemPrimaryClip)) {
++                        primaryClip = null // FORK(S1-clipboard): do not keep offering the previous clip
++                        return@launch
++                    }
+                     val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
+                     primaryClip = item
+                     insertOrMoveBeginning(item)
+                 }
+             }
+         }
+     }
+ 
+     /**
+      * Change the current text on clipboard, update history (if enabled).
+@@ -253,23 +256,22 @@ class ClipboardManager(
+                 )
+             } else {
+                 insertClip(newItem)
+             }
+         }
+     }
+ 
+     private fun enforceHistoryLimit(clipHistory: ClipboardHistory) {
+         if (prefs.clipboard.historySizeLimitEnabled.get()) {
+             val nonPinnedItems = clipHistory.recent + clipHistory.other
+-            val nToRemove = nonPinnedItems.size - prefs.clipboard.historySizeLimit.get()
+-            if (nToRemove > 0) {
+-                val itemsToRemove = nonPinnedItems.asReversed().filterIndexed { n, _ -> n < nToRemove }
++            val itemsToRemove = ClipboardCaptureGate.itemsOverLimit(nonPinnedItems, prefs.clipboard.historySizeLimit.get()) // FORK(S1-clipboard): testable trim
++            if (itemsToRemove.isNotEmpty()) {
+                 ioScope.launch {
+                     clipHistoryDao?.delete(itemsToRemove)
+                 }
+             }
+         }
+     }
+ 
+     private fun enforceExpiryDate(clipHistory: ClipboardHistory) {
+         val itemsToRemove = mutableSetOf<ClipboardItem>()
+         if (prefs.clipboard.historyAutoCleanOldEnabled.get()) {
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt
+index 9a4233f1..61d644b4 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt
+@@ -100,11 +100,20 @@ class ClipboardCaptureGateTest {
+ 
+         dao.deleteUnpinnedOlderThan(ClipboardCaptureGate.expiryCutoffMs(now, 1440))
+ 
+         assertEquals(setOf("old pinned", "fresh"), dao.getAll().map { it.text }.toSet())
+     }
+ 
+     @Test
+     fun `expiry cutoff is minutes before now`() {
+         assertEquals(1_000_000L - 24 * 3_600_000L, ClipboardCaptureGate.expiryCutoffMs(1_000_000L, 1440))
+     }
++
++    @Test
++    fun `history trim keeps the newest items up to the limit`() {
++        val newestFirst = (1..25).toList()
++        val removed = ClipboardCaptureGate.itemsOverLimit(newestFirst, 20)
++        assertEquals(listOf(25, 24, 23, 22, 21), removed)
++        assertEquals(20, newestFirst.size - removed.size)
++        assertTrue(ClipboardCaptureGate.itemsOverLimit((1..20).toList(), 20).isEmpty())
++    }
+ }
+diff --git a/core/privacy/src/main/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifier.kt b/core/privacy/src/main/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifier.kt
+index 583c673f..e069082f 100644
+--- a/core/privacy/src/main/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifier.kt
++++ b/core/privacy/src/main/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifier.kt
+@@ -3,36 +3,38 @@
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.core.privacy
+ 
+ /**
+  * Heuristic for clips that must never be stored: one-time codes and password-like tokens, plus anything the
+  * source app flagged as sensitive. Never logs or retains the text.
+  */
+ object ClipSensitivityClassifier {
+-    private const val MAX_OTP_SENTENCE_LENGTH = 60
++    private const val MAX_OTP_SENTENCE_LENGTH = 160 // one SMS
+     private const val MIN_PASSWORD_LENGTH = 10
+ 
+     /** Bare code, optionally with a short alphabetic prefix such as `G-482913`. */
+     private val bareOtp = Regex("""^(?:[A-Za-z]{1,4}[- ])?\d{4,8}$""")
+     private val digitRun = Regex("""(?<![\d.:/-])\d{4,8}(?![\d.:/-])""")
++    private val splitCode = Regex("""(?<![\d.:/-])\d{3}[ -]\d{3}(?![\d.:/-])""")
+     private val otpKeyword = Regex("""(?i)\b(code|otp|pin|passcode|password|verification|one-time|token)\b""")
+ 
+     fun isSensitive(text: String?, flaggedSensitive: Boolean): Boolean {
+         if (flaggedSensitive) return true
+         val trimmed = text?.trim()
+         if (trimmed.isNullOrEmpty()) return false
+         return looksLikeOtp(trimmed) || looksLikePassword(trimmed)
+     }
+ 
+     private fun looksLikeOtp(text: String): Boolean {
+         if (bareOtp.matches(text)) return true
+-        return text.length <= MAX_OTP_SENTENCE_LENGTH && otpKeyword.containsMatchIn(text) && digitRun.containsMatchIn(text)
++        if (text.length > MAX_OTP_SENTENCE_LENGTH || !otpKeyword.containsMatchIn(text)) return false
++        return digitRun.containsMatchIn(text) || splitCode.containsMatchIn(text)
+     }
+ 
+     private fun looksLikePassword(text: String): Boolean {
+         if (text.length < MIN_PASSWORD_LENGTH || text.any { it.isWhitespace() } || "://" in text) return false
+         return text.any { it.isUpperCase() } && text.any { it.isLowerCase() } &&
+             text.any { it.isDigit() } && text.any { !it.isLetterOrDigit() }
+     }
+ }
+diff --git a/core/privacy/src/test/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifierTest.kt b/core/privacy/src/test/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifierTest.kt
+index bc6bb169..6646a2bd 100644
+--- a/core/privacy/src/test/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifierTest.kt
++++ b/core/privacy/src/test/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifierTest.kt
+@@ -12,37 +12,40 @@ import kotlin.test.assertFalse
+ import kotlin.test.assertTrue
+ 
+ class ClipSensitivityClassifierTest {
+     @Test
+     fun `flagged clips are sensitive whatever the text`() {
+         assertTrue(ClipSensitivityClassifier.isSensitive("hello world", flaggedSensitive = true))
+         assertTrue(ClipSensitivityClassifier.isSensitive(null, flaggedSensitive = true))
+     }
+ 
+     @ParameterizedTest
+-    @ValueSource(strings = ["482913", "Your code is 482913", "G-482913", "1234", "12345678", "  482913\n"])
++    @ValueSource(strings = ["482913", "Your code is 482913", "G-482913", "1234", "12345678", "  482913\n",
++        "482913 is your verification code. Do not share it with anyone.", "Your code: 482 913", "OTP 482-913"])
+     fun `otp-like text is sensitive`(text: String) {
+         assertTrue(ClipSensitivityClassifier.isSensitive(text, false), text)
+     }
+ 
+     @ParameterizedTest
+     @ValueSource(strings = ["Tr0ub4dor&3xK!", "aB3\$eFgH1jK"])
+     fun `password-like token is sensitive`(text: String) {
+         assertTrue(ClipSensitivityClassifier.isSensitive(text, false), text)
+     }
+ 
+     @ParameterizedTest
+     @ValueSource(
+         strings = [
+             "hello world", "call me at 5", "https://example.com", "2026-10-18", "123", "123456789",
+             "https://example.com/a?b=C3d&e=F!", "Hello, World 2026!", "meet at 10:30 on 18.10.2026",
+-            "short1A!", "",
++            "short1A!", "", "482 913",
++            "The code review for the 2026 release went on for a long time because the team argued about naming, " +
++                "structure and tests, and nobody wanted to merge anything before the end of the quarter came around.",
+         ],
+     )
+     fun `ordinary text is not sensitive`(text: String) {
+         assertFalse(ClipSensitivityClassifier.isSensitive(text, false), text)
+     }
+ 
+     @Test
+     fun `null is not sensitive`() {
+         assertFalse(ClipSensitivityClassifier.isSensitive(null, false))
+     }

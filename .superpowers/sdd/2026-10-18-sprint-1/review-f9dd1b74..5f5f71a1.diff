@@ -1,0 +1,1490 @@
+# Review package: f9dd1b74..HEAD
+
+## Commits
+5f5f71a1 feat(smartbar): policy-aware chips, private lock and private apps
+
+## Files changed
+ app/src/main/AndroidManifest.xml                   |   5 +
+ .../kotlin/com/manjul/aikeyboard/app/Routes.kt     |   8 ++
+ .../manjul/aikeyboard/app/settings/HomeScreen.kt   |   7 ++
+ .../aikeyboard/fork/privacy/BankingPackages.kt     |  14 +++
+ .../manjul/aikeyboard/fork/privacy/PrivateApps.kt  |  24 +++++
+ .../fork/privacy/PrivateAppsRepository.kt          |  48 ++++++++++
+ .../aikeyboard/fork/privacy/PrivateAppsScreen.kt   | 103 +++++++++++++++++++++
+ .../aikeyboard/fork/smartbar/ChipArrangement.kt    |  48 ++++++++++
+ .../com/manjul/aikeyboard/fork/smartbar/ChipId.kt  |  36 +++++++
+ .../aikeyboard/fork/smartbar/PolicyQuickActions.kt |  56 +++++++++++
+ .../fork/smartbar/PrivateLockIndicator.kt          |  62 +++++++++++++
+ .../aikeyboard/ime/keyboard/ComputingEvaluator.kt  |   2 +
+ .../aikeyboard/ime/keyboard/KeyboardManager.kt     |  17 +++-
+ .../com/manjul/aikeyboard/ime/smartbar/Smartbar.kt |   9 +-
+ .../ime/smartbar/quickaction/QuickAction.kt        |   2 +
+ .../smartbar/quickaction/QuickActionArrangement.kt |  18 ++--
+ .../quickaction/QuickActionsOverflowPanel.kt       |   7 +-
+ .../ime/smartbar/quickaction/QuickActionsRow.kt    |   4 +-
+ .../com/manjul/aikeyboard/ime/text/key/KeyCode.kt  |   1 +
+ .../aikeyboard/ime/text/keyboard/TextKeyData.kt    |   7 ++
+ app/src/main/res/values/strings_fork.xml           |  12 +++
+ .../fork/privacy/PrivateAppsRepositoryTest.kt      |  85 +++++++++++++++++
+ .../fork/smartbar/ChipArrangementTest.kt           |  85 +++++++++++++++++
+ .../fork/smartbar/PolicyChipFilterTest.kt          |  56 +++++++++++
+ docs/FORK_PATCHES.md                               |   8 ++
+ 25 files changed, 710 insertions(+), 14 deletions(-)
+
+## Diff
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 7e688390..14ba0f80 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -12,20 +12,25 @@
+           ship with an IME or Spell Check service. This is used to guide the user
+           in the Settings Ui why FlorisBoard may not be working.
+      -->
+     <queries>
+         <intent>
+             <action android:name="android.view.InputMethod"/>
+         </intent>
+         <intent>
+             <action android:name="android.service.textservice.SpellCheckerService"/>
+         </intent>
++        <!-- FORK(S1-smartbar): launcher apps, listed in Settings > Privacy > Private apps -->
++        <intent>
++            <action android:name="android.intent.action.MAIN"/>
++            <category android:name="android.intent.category.LAUNCHER"/>
++        </intent>
+     </queries>
+ 
+     <!-- dataExtractionRules (API 31+) gets its own file in the <data-extraction-rules> format (upstream
+          pointed it at the API 26-30 full-backup file); networkSecurityConfig blocks cleartext and user
+          CAs in release (TRD §6.3).
+          FORK(S0-hardening): as above; android:name shares the <application line to keep this marker in reach -->
+     <application android:name="com.manjul.aikeyboard.FlorisApplication"
+         android:allowBackup="true"
+         android:dataExtractionRules="@xml/data_extraction_rules"
+         android:networkSecurityConfig="@xml/network_security_config"
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt b/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
+index 2d3d3ab4..97a909d6 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
+@@ -64,20 +64,21 @@ import com.manjul.aikeyboard.app.settings.dictionary.UserDictionaryType
+ import com.manjul.aikeyboard.app.settings.gestures.GesturesScreen
+ import com.manjul.aikeyboard.app.settings.keyboard.InputFeedbackScreen
+ import com.manjul.aikeyboard.app.settings.keyboard.KeyboardScreen
+ import com.manjul.aikeyboard.app.settings.localization.LanguagePackManagerScreen
+ import com.manjul.aikeyboard.app.settings.localization.LanguagePackManagerScreenAction
+ import com.manjul.aikeyboard.app.settings.localization.LocalizationScreen
+ import com.manjul.aikeyboard.app.settings.localization.SelectLocaleScreen
+ import com.manjul.aikeyboard.app.settings.localization.SubtypeEditorScreen
+ import com.manjul.aikeyboard.app.settings.media.MediaScreen
+ import com.manjul.aikeyboard.app.settings.smartbar.SmartbarScreen
++import com.manjul.aikeyboard.fork.privacy.PrivateAppsScreen // FORK(S1-smartbar)
+ import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
+ import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
+ import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
+ import com.manjul.aikeyboard.app.settings.typing.TypingScreen
+ import com.manjul.aikeyboard.app.setup.SetupScreen
+ import kotlinx.serialization.SerialName
+ import kotlinx.serialization.Serializable
+ import kotlin.reflect.KClass
+ 
+ @Target(AnnotationTarget.CLASS)
+@@ -141,20 +142,25 @@ object Routes {
+         object Keyboard
+ 
+         @Serializable
+         @Deeplink("settings/keyboard/input-feedback")
+         object InputFeedback
+ 
+         @Serializable
+         @Deeplink("settings/smartbar")
+         object Smartbar
+ 
++        // FORK(S1-smartbar): Privacy > Private apps
++        @Serializable
++        @Deeplink("settings/privacy/private-apps")
++        object PrivateApps
++
+         @Serializable
+         @Deeplink("settings/typing")
+         object Typing
+ 
+         @Serializable
+         @Deeplink("settings/dictionary")
+         object Dictionary
+ 
+         @Serializable
+         @Deeplink("settings/dictionary/user-dictionary")
+@@ -293,20 +299,22 @@ object Routes {
+             composableWithDeepLink(Settings.ThemeManager::class) { navBackStack ->
+                 val payload = navBackStack.toRoute<Settings.ThemeManager>()
+                 ThemeManagerScreen(payload.action)
+             }
+ 
+             composableWithDeepLink(Settings.Keyboard::class) { KeyboardScreen() }
+             composableWithDeepLink(Settings.InputFeedback::class) { InputFeedbackScreen() }
+ 
+             composableWithDeepLink(Settings.Smartbar::class) { SmartbarScreen() }
+ 
++            composableWithDeepLink(Settings.PrivateApps::class) { PrivateAppsScreen() } // FORK(S1-smartbar)
++
+             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
+ 
+             composableWithDeepLink(Settings.Dictionary::class) { DictionaryScreen() }
+             composableWithDeepLink(Settings.UserDictionary::class) { navBackStack ->
+                 val payload = navBackStack.toRoute<Settings.UserDictionary>()
+                 UserDictionaryScreen(payload.type)
+             }
+ 
+             composableWithDeepLink(Settings.Gestures::class) { GesturesScreen() }
+ 
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt b/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt
+index ff37b542..e0e1a486 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt
+@@ -15,20 +15,21 @@
+  */
+ 
+ package com.manjul.aikeyboard.app.settings
+ 
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.automirrored.outlined.Assignment
+ import androidx.compose.material.icons.filled.Extension
+ import androidx.compose.material.icons.filled.Gesture
+ import androidx.compose.material.icons.filled.Language
++import androidx.compose.material.icons.filled.Lock // FORK(S1-smartbar)
+ import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+ import androidx.compose.material.icons.filled.SmartButton
+ import androidx.compose.material.icons.filled.Spellcheck
+ import androidx.compose.material.icons.outlined.Build
+ import androidx.compose.material.icons.outlined.Info
+ import androidx.compose.material.icons.outlined.Keyboard
+ import androidx.compose.material.icons.outlined.Palette
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
+ import androidx.compose.ui.Modifier
+@@ -118,20 +119,26 @@ fun HomeScreen() = FlorisScreen {
+         Preference(
+             icon = Icons.Outlined.Keyboard,
+             title = stringRes(R.string.settings__keyboard__title),
+             onClick = { navController.navigate(Routes.Settings.Keyboard) },
+         )
+         Preference(
+             icon = Icons.Default.SmartButton,
+             title = stringRes(R.string.settings__smartbar__title),
+             onClick = { navController.navigate(Routes.Settings.Smartbar) },
+         )
++        // FORK(S1-smartbar): Privacy > Private apps
++        Preference(
++            icon = Icons.Default.Lock,
++            title = stringRes(R.string.private_apps__title),
++            onClick = { navController.navigate(Routes.Settings.PrivateApps) },
++        )
+         Preference(
+             icon = Icons.Default.Spellcheck,
+             title = stringRes(R.string.settings__typing__title),
+             onClick = { navController.navigate(Routes.Settings.Typing) },
+         )
+         Preference(
+             icon = Icons.Default.Gesture,
+             title = stringRes(R.string.settings__gestures__title),
+             onClick = { navController.navigate(Routes.Settings.Gestures) },
+         )
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/BankingPackages.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/BankingPackages.kt
+new file mode 100644
+index 00000000..48cc81a5
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/BankingPackages.kt
+@@ -0,0 +1,14 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.privacy
++
++/** Known banking apps per market, offered (never auto-added) as private-app suggestions. */
++object BankingPackages {
++    // TODO(RN-05): fill per launch market once the list is reviewed.
++    val byMarket: Map<String, Set<String>> = emptyMap()
++
++    val all: Set<String> get() = byMarket.values.flatten().toSet()
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateApps.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateApps.kt
+new file mode 100644
+index 00000000..608b4ba3
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateApps.kt
+@@ -0,0 +1,24 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.privacy
++
++import android.content.Context
++import com.manjul.aikeyboard.FlorisApplication
++
++fun Context.privateAppsRepository(): PrivateAppsRepository {
++    val app = applicationContext as FlorisApplication
++    return PrivateAppsRepository(
++        store = app.featureSettingsStore.value,
++        pm = packageManager,
++        log = { app.analytics.value.log(it) },
++    )
++}
++
++/** Adds the app of the focused editor to the private apps. The package name is never logged. */
++suspend fun Context.makeAppPrivate(packageName: String?) {
++    if (packageName.isNullOrBlank()) return
++    privateAppsRepository().add(packageName)
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsRepository.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsRepository.kt
+new file mode 100644
+index 00000000..a86d6501
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsRepository.kt
+@@ -0,0 +1,48 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.privacy
++
++import android.content.Intent
++import android.content.pm.PackageManager
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.analytics.EventCatalog
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++
++data class AppEntry(val packageName: String, val label: String)
++
++/** Apps the user marked private: the policy treats every field in them as sensitive. */
++class PrivateAppsRepository(
++    private val store: FeatureSettingsStore,
++    private val pm: PackageManager,
++    private val log: (AnalyticsEvent) -> Unit = {},
++) {
++    val privatePackages get() = store.flow
++
++    suspend fun add(pkg: String) {
++        store.update { it.copy(privatePackages = it.privatePackages + pkg) }
++        log(EventCatalog.privacyPrivateAppAdd())
++    }
++
++    suspend fun remove(pkg: String) {
++        store.update { it.copy(privatePackages = it.privatePackages - pkg) }
++    }
++
++    /** Apps with a launcher entry, sorted by label. Needs the LAUNCHER `<queries>` entry on API 30+. */
++    fun launchableApps(): List<AppEntry> {
++        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
++        return pm.queryIntentActivities(intent, 0)
++            .map { AppEntry(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
++            .distinctBy { it.packageName }
++            .sortedBy { it.label.lowercase() }
++    }
++
++    /** Known banking apps that are installed. Suggestions only: never added without the user's action. */
++    fun suggestions(): List<AppEntry> {
++        val banking = BankingPackages.all
++        if (banking.isEmpty()) return emptyList()
++        return launchableApps().filter { it.packageName in banking }
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsScreen.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsScreen.kt
+new file mode 100644
+index 00000000..9b8689c7
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsScreen.kt
+@@ -0,0 +1,103 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.privacy
++
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.selection.toggleable
++import androidx.compose.material3.ListItem
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Switch
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.unit.dp
++import com.manjul.aikeyboard.R
++import com.manjul.aikeyboard.core.datastore.FeatureSettings
++import com.manjul.aikeyboard.lib.compose.FlorisScreen
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import org.florisboard.lib.compose.stringRes
++
++/** Settings > Privacy > Private apps: every field in a toggled app is treated as sensitive. */
++@Composable
++fun PrivateAppsScreen() = FlorisScreen {
++    title = stringRes(R.string.private_apps__title)
++    previewFieldVisible = false
++    scrollable = false
++
++    val context = LocalContext.current
++    val repository = remember { context.privateAppsRepository() }
++    val scope = rememberCoroutineScope()
++    var apps by remember { mutableStateOf(emptyList<AppEntry>()) }
++    var suggestions by remember { mutableStateOf(emptyList<AppEntry>()) }
++    LaunchedEffect(repository) {
++        withContext(Dispatchers.IO) {
++            apps = repository.launchableApps()
++            suggestions = repository.suggestions()
++        }
++    }
++    val settings by repository.privatePackages.collectAsState(initial = FeatureSettings())
++    val privatePackages = settings.privatePackages
++
++    content {
++        @Composable
++        fun AppRow(app: AppEntry) {
++            val checked = app.packageName in privatePackages
++            ListItem(
++                modifier = Modifier.toggleable(
++                    value = checked,
++                    role = Role.Switch,
++                    onValueChange = { on ->
++                        scope.launch {
++                            if (on) repository.add(app.packageName) else repository.remove(app.packageName)
++                        }
++                    },
++                ),
++                headlineContent = { Text(app.label) },
++                trailingContent = { Switch(checked = checked, onCheckedChange = null) },
++            )
++        }
++
++        @Composable
++        fun Header(text: String) {
++            Text(
++                text = text,
++                style = MaterialTheme.typography.titleSmall,
++                color = MaterialTheme.colorScheme.primary,
++                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
++            )
++        }
++
++        LazyColumn(modifier = Modifier.fillMaxSize()) {
++            item {
++                Text(
++                    text = stringRes(R.string.private_apps__summary),
++                    style = MaterialTheme.typography.bodyMedium,
++                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
++                )
++            }
++            if (suggestions.isNotEmpty()) {
++                item { Header(stringRes(R.string.private_apps__suggested)) }
++                items(suggestions, key = { "s:" + it.packageName }) { AppRow(it) }
++            }
++            item { Header(stringRes(R.string.private_apps__all_apps)) }
++            items(apps, key = { it.packageName }) { AppRow(it) }
++        }
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipArrangement.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipArrangement.kt
+new file mode 100644
+index 00000000..4667b563
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipArrangement.kt
+@@ -0,0 +1,48 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.smartbar
++
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++
++object ChipArrangement {
++    const val MAX_PINS = 3
++
++    /** Appends [chip] to the pins. Fixed chips, duplicates and a 4th pin leave [current] unchanged. */
++    fun pin(current: List<ChipId>, chip: ChipId): List<ChipId> =
++        if (chip in ChipId.fixed || chip in current || current.size >= MAX_PINS) current else current + chip
++
++    /**
++     * Moves the chip at [from] to [to] among the movable chips. Fixed chips keep their positions; a move
++     * that starts or ends on a fixed chip, or outside the list, changes nothing.
++     */
++    fun reorder(order: List<ChipId>, from: Int, to: Int): List<ChipId> {
++        if (from !in order.indices || to !in order.indices || from == to) return order
++        if (order[from] in ChipId.fixed || order[to] in ChipId.fixed) return order
++        val slots = order.indices.filter { order[it] !in ChipId.fixed }
++        val movable = slots.map { order[it] }.toMutableList()
++        movable.add(slots.indexOf(to), movable.removeAt(slots.indexOf(from)))
++        val result = order.toMutableList()
++        slots.forEachIndexed { i, slot -> result[slot] = movable[i] }
++        return result
++    }
++
++    /** The chips to render, in [order]. Chips the [decision] disallows are removed, not disabled. */
++    fun visible(
++        order: List<ChipId>,
++        registered: Set<ChipId>,
++        decision: PolicyDecision,
++        clipboardHistoryOn: Boolean,
++    ): List<ChipId> = order.filter { it in registered && allowed(it, decision, clipboardHistoryOn) }
++
++    fun allowed(chip: ChipId, decision: PolicyDecision, clipboardHistoryOn: Boolean): Boolean = when (chip) {
++        ChipId.MIC -> decision.allowVoice
++        ChipId.TRANSLATE -> decision.allowTranslate
++        ChipId.AI -> decision.allowAi
++        ChipId.CLIPBOARD -> decision.allowClipboardHistory && clipboardHistoryOn
++        ChipId.STICKERS -> decision.allowCloud
++        ChipId.EMOJI, ChipId.SETTINGS -> true
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipId.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipId.kt
+new file mode 100644
+index 00000000..1fdeb55d
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipId.kt
+@@ -0,0 +1,36 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.smartbar
++
++import com.manjul.aikeyboard.ime.text.key.KeyCode
++
++/** Fork smartbar chips (PRD FR-20). Persisted by [name] in `FeatureSettings.smartbarPinned/Order`. */
++enum class ChipId {
++    MIC, TRANSLATE, AI, EMOJI, CLIPBOARD, STICKERS, SETTINGS;
++
++    /** The upstream quick-action key this chip is wired to; null while the chip has no handler. */
++    val keyCode: Int?
++        get() = when (this) {
++            MIC -> KeyCode.VOICE_INPUT // Task 11 replaces the handler
++            EMOJI -> KeyCode.IME_UI_MODE_MEDIA
++            CLIPBOARD -> KeyCode.IME_UI_MODE_CLIPBOARD
++            SETTINGS -> KeyCode.SETTINGS
++            TRANSLATE, AI, STICKERS -> null
++        }
++
++    companion object {
++        /** Chips that can be neither pinned nor moved. */
++        val fixed: Set<ChipId> = setOf(MIC, TRANSLATE)
++
++        /** Chips with a handler this sprint. Translate and AI stay hidden; upstream has no stickers. */
++        val registered: Set<ChipId> = setOf(MIC, EMOJI, CLIPBOARD, SETTINGS)
++
++        /** Parses persisted names, dropping unknown ones (e.g. written by a newer version). */
++        fun parse(names: List<String>): List<ChipId> = names.mapNotNull { n -> entries.firstOrNull { it.name == n } }
++
++        fun forKeyCode(code: Int): ChipId? = entries.firstOrNull { it.keyCode == code }
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActions.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActions.kt
+new file mode 100644
+index 00000000..663a6661
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActions.kt
+@@ -0,0 +1,56 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.smartbar
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.remember
++import com.manjul.aikeyboard.FlorisImeService
++import com.manjul.aikeyboard.app.FlorisPreferenceStore
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import com.manjul.aikeyboard.ime.policy.SensitivityReason
++import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickAction
++import com.manjul.aikeyboard.ime.text.key.KeyCode
++import dev.patrickgold.jetpref.datastore.model.observeAsState
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++
++private val FailClosed: StateFlow<PolicyDecision> = MutableStateFlow(PolicyDecision.Locked)
++
++/** The live policy decision for UI code. Without a running IME service it is [PolicyDecision.Locked]. */
++@Composable
++fun rememberPolicyDecision(): PolicyDecision {
++    val flow = remember { FlorisImeService.policyControllerOrNull()?.decision ?: FailClosed }
++    val decision by flow.collectAsState()
++    return decision
++}
++
++/** True if [action] may be shown under [decision]. Chip-backed actions follow [ChipArrangement.allowed]. */
++fun QuickAction.isAllowedBy(decision: PolicyDecision, clipboardHistoryOn: Boolean): Boolean {
++    val code = (this as? QuickAction.InsertKey)?.data?.code ?: return true
++    if (code == KeyCode.TOGGLE_PRIVATE_APP) return SensitivityReason.PRIVATE_APP !in decision.reasons
++    val chip = ChipId.forKeyCode(code) ?: return true
++    return ChipArrangement.allowed(chip, decision, clipboardHistoryOn)
++}
++
++/** Actions the current decision disallows are removed, not greyed out. */
++@Composable
++fun List<QuickAction>.policyFiltered(): List<QuickAction> {
++    val decision = rememberPolicyDecision()
++    val prefs by FlorisPreferenceStore
++    val clipboardHistoryOn by prefs.clipboard.historyEnabled.observeAsState()
++    val actions = this
++    return remember(actions, decision, clipboardHistoryOn) {
++        actions.filter { it.isAllowedBy(decision, clipboardHistoryOn) }
++    }
++}
++
++@Composable
++fun QuickAction?.policyFilteredOrNull(): QuickAction? {
++    if (this == null) return null
++    return listOf(this).policyFiltered().firstOrNull()
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PrivateLockIndicator.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PrivateLockIndicator.kt
+new file mode 100644
+index 00000000..098a2da6
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PrivateLockIndicator.kt
+@@ -0,0 +1,62 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.smartbar
++
++import androidx.compose.foundation.ExperimentalFoundationApi
++import androidx.compose.foundation.combinedClickable
++import androidx.compose.foundation.layout.fillMaxHeight
++import androidx.compose.foundation.layout.aspectRatio
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Lock
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalContext
++import com.manjul.aikeyboard.R
++import com.manjul.aikeyboard.ime.policy.SensitivityReason
++import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickAction
++import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
++import com.manjul.aikeyboard.ime.theme.FlorisImeUi
++import org.florisboard.lib.compose.stringRes
++import org.florisboard.lib.snygg.ui.SnyggBox
++import org.florisboard.lib.snygg.ui.SnyggIcon
++
++/**
++ * Shown while the field is sensitive. A long-press offers "Make this app private" unless the app already is.
++ */
++@OptIn(ExperimentalFoundationApi::class)
++@Composable
++fun PrivateLockIndicator(modifier: Modifier = Modifier) {
++    val decision = rememberPolicyDecision()
++    if (!decision.sensitive && decision.reasons.isEmpty()) return
++    val context = LocalContext.current
++    val canMakePrivate = SensitivityReason.PRIVATE_APP !in decision.reasons
++    val makePrivate = QuickAction.InsertKey(TextKeyData.TOGGLE_PRIVATE_APP)
++
++    SnyggBox(
++        elementName = FlorisImeUi.SmartbarActionKey.elementName,
++        modifier = modifier,
++        clickAndSemanticsModifier = Modifier
++            .fillMaxHeight()
++            .aspectRatio(1f)
++            .combinedClickable(
++                onLongClickLabel = if (canMakePrivate) stringRes(R.string.private_lock__make_private) else null,
++                onLongClick = if (canMakePrivate) {
++                    {
++                        makePrivate.onPointerDown(context)
++                        makePrivate.onPointerUp(context)
++                    }
++                } else null,
++                onClick = {},
++            ),
++        contentAlignment = Alignment.Center,
++    ) {
++        SnyggIcon(
++            imageVector = Icons.Default.Lock,
++            contentDescription = stringRes(R.string.private_lock__description),
++        )
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/ComputingEvaluator.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/ComputingEvaluator.kt
+index e69e7685..5358c68b 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/ComputingEvaluator.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/ComputingEvaluator.kt
+@@ -11,20 +11,21 @@
+  * distributed under the License is distributed on an "AS IS" BASIS,
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
+ 
+ package com.manjul.aikeyboard.ime.keyboard
+ 
+ import android.content.Context
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Lock // FORK(S1-smartbar)
+ import androidx.compose.material.icons.automirrored.filled.ArrowRightAlt
+ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+ import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
+ import androidx.compose.material.icons.automirrored.filled.Redo
+ import androidx.compose.material.icons.automirrored.filled.Send
+ import androidx.compose.material.icons.automirrored.filled.Undo
+ import androidx.compose.material.icons.automirrored.outlined.Assignment
+ import androidx.compose.material.icons.automirrored.outlined.Backspace
+ import androidx.compose.material.icons.filled.Close
+@@ -247,20 +248,21 @@ fun ComputingEvaluator.computeImageVector(data: KeyData): ImageVector? {
+         }
+         KeyCode.IME_UI_MODE_CLIPBOARD -> {
+             Icons.AutoMirrored.Outlined.Assignment
+         }
+         KeyCode.LANGUAGE_SWITCH -> {
+             Icons.Default.Language
+         }
+         KeyCode.SETTINGS -> {
+             Icons.Default.Settings
+         }
++        KeyCode.TOGGLE_PRIVATE_APP -> Icons.Default.Lock // FORK(S1-smartbar)
+         KeyCode.SHIFT -> {
+             when (evaluator.state.inputShiftState != InputShiftState.UNSHIFTED) {
+                 true -> Icons.Default.KeyboardCapslock
+                 else -> Icons.Default.KeyboardArrowUp
+             }
+         }
+         KeyCode.SPACE, KeyCode.CJK_SPACE -> {
+             when (evaluator.keyboard.mode) {
+                 KeyboardMode.NUMERIC,
+                 KeyboardMode.NUMERIC_ADVANCED,
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
+index 35aa2a70..406e7373 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
+@@ -18,20 +18,22 @@ package com.manjul.aikeyboard.ime.keyboard
+ 
+ import android.content.Context
+ import android.icu.lang.UCharacter
+ import android.view.KeyEvent
+ import android.widget.Toast
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableIntStateOf
+ import androidx.compose.runtime.setValue
+ import androidx.lifecycle.MutableLiveData
+ import com.manjul.aikeyboard.FlorisImeService
++import com.manjul.aikeyboard.fork.privacy.makeAppPrivate // FORK(S1-smartbar)
++import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
+ import com.manjul.aikeyboard.appContext
+ import com.manjul.aikeyboard.clipboardManager
+ import com.manjul.aikeyboard.editorInstance
+ import com.manjul.aikeyboard.extensionManager
+ import com.manjul.aikeyboard.ime.ImeUiMode
+ import com.manjul.aikeyboard.ime.core.DisplayLanguageNamesIn
+ import com.manjul.aikeyboard.ime.core.Subtype
+ import com.manjul.aikeyboard.ime.core.SubtypePreset
+@@ -87,20 +89,25 @@ private val DoubleSpacePeriodMatcher = """([^.!?‽\s]\s)""".toRegex()
+ class KeyboardManager(context: Context) : InputKeyEventReceiver {
+     private val prefs by FlorisPreferenceStore
+     private val appContext by context.appContext()
+     private val clipboardManager by context.clipboardManager()
+     private val editorInstance by context.editorInstance()
+     private val extensionManager by context.extensionManager()
+     private val nlpManager by context.nlpManager()
+     private val subtypeManager by context.subtypeManager()
+ 
+     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
++
++    // FORK(S1-smartbar): fail closed when the IME service (and with it the policy controller) is not running
++    private fun policyDecision(): PolicyDecision =
++        FlorisImeService.policyControllerOrNull()?.decision?.value ?: PolicyDecision.Locked
++
+     val layoutManager = LayoutManager(context)
+     private val keyboardCache = TextKeyboardCache()
+ 
+     val resources = KeyboardManagerResources()
+     val activeState = ObservableKeyboardState.new()
+     var smartbarVisibleDynamicActionsCount by mutableIntStateOf(0)
+     private var lastToastReference = WeakReference<Toast>(null)
+ 
+     private val activeEvaluatorGuard = Mutex(locked = false)
+     private var activeEvaluatorVersion = AtomicInteger(0)
+@@ -738,21 +745,22 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
+             KeyCode.ENTER -> handleEnter()
+             KeyCode.FORWARD_DELETE -> handleForwardDelete(OperationUnit.CHARACTERS)
+             KeyCode.FORWARD_DELETE_WORD -> handleForwardDelete(OperationUnit.WORDS)
+             KeyCode.IME_SHOW_UI -> FlorisImeService.showUi()
+             KeyCode.IME_HIDE_UI -> FlorisImeService.hideUi()
+             KeyCode.IME_PREV_SUBTYPE -> subtypeManager.switchToPrevSubtype()
+             KeyCode.IME_NEXT_SUBTYPE -> subtypeManager.switchToNextSubtype()
+             KeyCode.IME_UI_MODE_TEXT -> activeState.imeUiMode = ImeUiMode.TEXT
+             KeyCode.IME_UI_MODE_MEDIA -> activeState.imeUiMode = ImeUiMode.MEDIA
+             KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ImeUiMode.CLIPBOARD
+-            KeyCode.VOICE_INPUT -> FlorisImeService.switchToVoiceInputMethod()
++            // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires; Task 11 replaces this handler
++            KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.switchToVoiceInputMethod()
+             KeyCode.KANA_SWITCHER -> handleKanaSwitch()
+             KeyCode.KANA_HIRA -> handleKanaHira()
+             KeyCode.KANA_KATA -> handleKanaKata()
+             KeyCode.KANA_HALF_KATA -> handleKanaHalfKata()
+             KeyCode.LANGUAGE_SWITCH -> handleLanguageSwitch()
+             KeyCode.REDO -> editorInstance.performRedo()
+             KeyCode.SETTINGS -> FlorisImeService.launchSettings()
+             KeyCode.SHIFT -> handleShiftUp(data)
+             KeyCode.SPACE -> handleSpace(data)
+             KeyCode.SYSTEM_INPUT_METHOD_PICKER -> InputMethodUtils.showImePicker(appContext)
+@@ -765,20 +773,24 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
+                 prefs.smartbar.enabled.let { it.set(!it.get()) }
+             }
+             KeyCode.TOGGLE_ACTIONS_OVERFLOW -> {
+                 activeState.isActionsOverflowVisible = !activeState.isActionsOverflowVisible
+             }
+             KeyCode.TOGGLE_ACTIONS_EDITOR -> {
+                 activeState.isActionsEditorVisible = !activeState.isActionsEditorVisible
+             }
+             KeyCode.TOGGLE_INCOGNITO_MODE -> scope.launch { handleToggleIncognitoMode() }
+             KeyCode.TOGGLE_AUTOCORRECT -> handleToggleAutocorrect()
++            // FORK(S1-smartbar): the package is read here (main thread) and never logged
++            KeyCode.TOGGLE_PRIVATE_APP -> editorInstance.activeInfo.packageName.let { pkg ->
++                scope.launch { appContext.makeAppPrivate(pkg) }
++            }
+             KeyCode.UNDO -> editorInstance.performUndo()
+             KeyCode.VIEW_CHARACTERS -> activeState.keyboardMode = KeyboardMode.CHARACTERS
+             KeyCode.VIEW_NUMERIC -> activeState.keyboardMode = KeyboardMode.NUMERIC
+             KeyCode.VIEW_NUMERIC_ADVANCED -> activeState.keyboardMode = KeyboardMode.NUMERIC_ADVANCED
+             KeyCode.VIEW_PHONE -> activeState.keyboardMode = KeyboardMode.PHONE
+             KeyCode.VIEW_PHONE2 -> activeState.keyboardMode = KeyboardMode.PHONE2
+             KeyCode.VIEW_SYMBOLS -> activeState.keyboardMode = KeyboardMode.SYMBOLS
+             KeyCode.VIEW_SYMBOLS2 -> activeState.keyboardMode = KeyboardMode.SYMBOLS2
+             else -> {
+                 if (activeState.imeUiMode == ImeUiMode.MEDIA) {
+@@ -985,20 +997,23 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
+                 KeyCode.CLIPBOARD_PASTE -> {
+                     !androidKeyguardManager.let { it.isDeviceLocked || it.isKeyguardLocked }
+                         && clipboardManager.canBePasted(clipboardManager.primaryClip)
+                 }
+                 KeyCode.CLIPBOARD_CLEAR_PRIMARY_CLIP -> {
+                     clipboardManager.canBePasted(clipboardManager.primaryClip)
+                 }
+                 KeyCode.CLIPBOARD_SELECT_ALL -> {
+                     editorInfo.isRichInputEditor
+                 }
++                // FORK(S1-smartbar): chips follow the policy decision (fail closed without a service)
++                KeyCode.VOICE_INPUT -> policyDecision().allowVoice
++                KeyCode.IME_UI_MODE_CLIPBOARD -> policyDecision().allowClipboardHistory
+                 KeyCode.TOGGLE_INCOGNITO_MODE -> when (prefs.suggestion.incognitoMode.get()) {
+                     IncognitoMode.FORCE_OFF, IncognitoMode.FORCE_ON -> false
+                     IncognitoMode.DYNAMIC_ON_OFF -> !editorInfo.imeOptions.flagNoPersonalizedLearning
+                 }
+                 KeyCode.LANGUAGE_SWITCH -> {
+                     subtypeManager.subtypes.size > 1
+                 }
+                 else -> true
+             }
+         }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt
+index 178cb751..dd26ce36 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt
+@@ -48,20 +48,22 @@ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.alpha
+ import androidx.compose.ui.draw.rotate
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.graphics.isUnspecified
+ import androidx.compose.ui.graphics.vector.ImageVector
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.res.vectorResource
+ import androidx.compose.ui.unit.dp
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
++import com.manjul.aikeyboard.fork.smartbar.PrivateLockIndicator // FORK(S1-smartbar)
++import com.manjul.aikeyboard.fork.smartbar.policyFilteredOrNull // FORK(S1-smartbar)
+ import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
+ import com.manjul.aikeyboard.ime.nlp.NlpInlineAutofill
+ import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickActionButton
+ import com.manjul.aikeyboard.ime.smartbar.quickaction.QuickActionsRow
+ import com.manjul.aikeyboard.ime.smartbar.quickaction.ToggleOverflowPanelAction
+ import com.manjul.aikeyboard.ime.theme.FlorisImeUi
+ import com.manjul.aikeyboard.keyboardManager
+ import com.manjul.aikeyboard.nlpManager
+ import dev.patrickgold.jetpref.datastore.model.observeAsState
+ import kotlinx.coroutines.launch
+@@ -275,23 +277,25 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
+                 imageVector = Icons.Default.UnfoldMore,
+             )
+         }
+     }
+ 
+     @Composable
+     fun StickyAction() {
+         val actionArrangement by prefs.smartbar.actionArrangement.observeAsState()
+         val evaluator by keyboardManager.activeSmartbarEvaluator.collectAsState()
+ 
++        // FORK(S1-smartbar): a sticky action the policy disallows (mic in a password field) is removed
++        val stickyAction = actionArrangement.stickyAction.policyFilteredOrNull()
+         val action = when {
+-            actionArrangement.stickyAction != null -> {
+-                actionArrangement.stickyAction
++            stickyAction != null -> {
++                stickyAction
+             }
+ 
+             smartbarLayout == SmartbarLayout.SUGGESTIONS_ACTIONS_SHARED && sharedActionsExpanded -> {
+                 ToggleOverflowPanelAction
+             }
+ 
+             else -> null
+         }
+ 
+         if (action != null) {
+@@ -315,20 +319,21 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
+                 prefs.smartbar.sharedActionsExpandWithAnimation.set(true)
+             }
+         }
+     }
+ 
+     SnyggRow(
+         modifier = modifier
+             .fillMaxWidth()
+             .height(FlorisImeSizing.smartbarHeight),
+     ) {
++        PrivateLockIndicator() // FORK(S1-smartbar): renders nothing unless the field is sensitive
+         when (smartbarLayout) {
+             SmartbarLayout.SUGGESTIONS_ONLY -> {
+                 if (shouldShowInlineSuggestionsUi) {
+                     InlineSuggestionsUi(inlineSuggestions)
+                 } else {
+                     CandidatesRow()
+                 }
+             }
+ 
+             SmartbarLayout.ACTIONS_ONLY -> {
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickAction.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickAction.kt
+index 176baa97..08ec27be 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickAction.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickAction.kt
+@@ -90,20 +90,21 @@ fun QuickAction.computeDisplayName(evaluator: ComputingEvaluator): String {
+             KeyCode.FORWARD_DELETE -> R.string.quick_action__forward_delete
+             KeyCode.IME_UI_MODE_CLIPBOARD -> R.string.quick_action__ime_ui_mode_clipboard
+             KeyCode.IME_UI_MODE_MEDIA -> R.string.quick_action__ime_ui_mode_media
+             KeyCode.LANGUAGE_SWITCH -> R.string.quick_action__language_switch
+             KeyCode.SETTINGS -> R.string.quick_action__settings
+             KeyCode.UNDO -> R.string.quick_action__undo
+             KeyCode.REDO -> R.string.quick_action__redo
+             KeyCode.TOGGLE_ACTIONS_OVERFLOW -> R.string.quick_action__toggle_actions_overflow
+             KeyCode.TOGGLE_INCOGNITO_MODE -> R.string.quick_action__toggle_incognito_mode
+             KeyCode.TOGGLE_AUTOCORRECT -> R.string.quick_action__toggle_autocorrect
++            KeyCode.TOGGLE_PRIVATE_APP -> R.string.quick_action__toggle_private_app // FORK(S1-smartbar)
+             KeyCode.VOICE_INPUT -> R.string.quick_action__voice_input
+             KeyCode.IME_HIDE_UI -> R.string.quick_action__ime_hide_ui
+             // TODO: In the future this will be merged into the resize keyboard panel, for now it is a separate action
+             KeyCode.TOGGLE_COMPACT_LAYOUT -> R.string.quick_action__one_handed_mode
+             KeyCode.DRAG_MARKER -> if (evaluator.state.debugShowDragAndDropHelpers) {
+                 R.string.quick_action__drag_marker
+             } else {
+                 R.string.general__empty_string
+             }
+             KeyCode.NOOP -> R.string.quick_action__noop
+@@ -128,20 +129,21 @@ fun QuickAction.computeTooltip(evaluator: ComputingEvaluator): String {
+             KeyCode.CLIPBOARD_SELECT_ALL -> R.string.quick_action__clipboard_select_all__tooltip
+             KeyCode.IME_UI_MODE_CLIPBOARD -> R.string.quick_action__ime_ui_mode_clipboard__tooltip
+             KeyCode.IME_UI_MODE_MEDIA -> R.string.quick_action__ime_ui_mode_media__tooltip
+             KeyCode.LANGUAGE_SWITCH -> R.string.quick_action__language_switch__tooltip
+             KeyCode.SETTINGS -> R.string.quick_action__settings__tooltip
+             KeyCode.UNDO -> R.string.quick_action__undo__tooltip
+             KeyCode.REDO -> R.string.quick_action__redo__tooltip
+             KeyCode.TOGGLE_ACTIONS_OVERFLOW -> R.string.quick_action__toggle_actions_overflow__tooltip
+             KeyCode.TOGGLE_INCOGNITO_MODE -> R.string.quick_action__toggle_incognito_mode__tooltip
+             KeyCode.TOGGLE_AUTOCORRECT -> R.string.quick_action__toggle_autocorrect__tooltip
++            KeyCode.TOGGLE_PRIVATE_APP -> R.string.quick_action__toggle_private_app__tooltip // FORK(S1-smartbar)
+             KeyCode.VOICE_INPUT -> R.string.quick_action__voice_input__tooltip
+             KeyCode.IME_HIDE_UI -> R.string.quick_action__ime_hide_ui__tooltip
+             // TODO: In the future this will be merged into the resize keyboard panel, for now it is a separate action
+             KeyCode.TOGGLE_COMPACT_LAYOUT -> R.string.quick_action__one_handed_mode__tooltip
+             KeyCode.DRAG_MARKER -> if (evaluator.state.debugShowDragAndDropHelpers) {
+                 R.string.quick_action__drag_marker__tooltip
+             } else {
+                 R.string.general__empty_string
+             }
+             KeyCode.NOOP -> R.string.quick_action__noop__tooltip
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionArrangement.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionArrangement.kt
+index 7ab2c1b5..db0e9b41 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionArrangement.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionArrangement.kt
+@@ -58,45 +58,49 @@ data class QuickActionArrangement(
+         val distinctDynamicActions = dynamicActions.filter { distinctSet.add(it) }
+         val distinctHiddenActions = hiddenActions.filter { distinctSet.add(it) }
+         return QuickActionArrangement(
+             stickyAction = stickyAction,
+             dynamicActions = distinctDynamicActions,
+             hiddenActions = distinctHiddenActions,
+         )
+     }
+ 
+     companion object {
++        // FORK(S1-smartbar): Mic sticky, then Emoji, Clipboard and Settings (Translate and AI have no handler yet).
++        // The private-app action is last so it lands in the overflow panel. Upstream's other actions stay
++        // available through the actions editor.
+         val Default = QuickActionArrangement(
+             stickyAction = QuickAction.InsertKey(TextKeyData.VOICE_INPUT),
+             dynamicActions = listOf(
+-                QuickAction.InsertKey(TextKeyData.UNDO),
+-                QuickAction.InsertKey(TextKeyData.REDO),
++                QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA), // FORK(S1-smartbar)
++                QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
+                 QuickAction.InsertKey(TextKeyData.SETTINGS),
++                QuickAction.InsertKey(TextKeyData.TOGGLE_PRIVATE_APP),
++            ),
++            hiddenActions = listOf( // FORK(S1-smartbar)
++                QuickAction.InsertKey(TextKeyData.UNDO),
++                QuickAction.InsertKey(TextKeyData.REDO), // FORK(S1-smartbar)
+                 QuickAction.InsertKey(TextKeyData.TOGGLE_INCOGNITO_MODE),
+-                QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
+-                QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA),
+                 QuickAction.InsertKey(TextKeyData.TOGGLE_COMPACT_LAYOUT),
+                 QuickAction.InsertKey(TextKeyData.TOGGLE_AUTOCORRECT),
+                 QuickAction.InsertKey(TextKeyData.ARROW_UP),
+                 QuickAction.InsertKey(TextKeyData.ARROW_DOWN),
+                 QuickAction.InsertKey(TextKeyData.ARROW_LEFT),
+                 QuickAction.InsertKey(TextKeyData.ARROW_RIGHT),
+                 QuickAction.InsertKey(TextKeyData.CLIPBOARD_CLEAR_PRIMARY_CLIP),
+                 QuickAction.InsertKey(TextKeyData.CLIPBOARD_COPY),
+                 QuickAction.InsertKey(TextKeyData.CLIPBOARD_CUT),
+                 QuickAction.InsertKey(TextKeyData.CLIPBOARD_PASTE),
+                 QuickAction.InsertKey(TextKeyData.CLIPBOARD_SELECT_ALL),
+                 QuickAction.InsertKey(TextKeyData.LANGUAGE_SWITCH),
+                 QuickAction.InsertKey(TextKeyData.FORWARD_DELETE),
+-                QuickAction.InsertKey(TextKeyData.IME_HIDE_UI),
+-            ),
+-            hiddenActions = listOf(
++                QuickAction.InsertKey(TextKeyData.IME_HIDE_UI), // FORK(S1-smartbar)
+             ),
+         )
+     }
+ 
+     object Serializer : PreferenceSerializer<QuickActionArrangement> {
+         override fun serialize(value: QuickActionArrangement): String {
+             return QuickActionJsonConfig.encodeToString(value)
+         }
+ 
+         override fun deserialize(value: String): QuickActionArrangement {
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionsOverflowPanel.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionsOverflowPanel.kt
+index 6e8c04d3..8bff9c14 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionsOverflowPanel.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionsOverflowPanel.kt
+@@ -24,47 +24,48 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
+ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+ import androidx.compose.foundation.lazy.grid.items
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.collectAsState
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.remember
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.platform.LocalContext
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
++import com.manjul.aikeyboard.fork.smartbar.policyFiltered // FORK(S1-smartbar)
+ import com.manjul.aikeyboard.ime.keyboard.FlorisImeSizing
+ import com.manjul.aikeyboard.ime.theme.FlorisImeUi
+ import com.manjul.aikeyboard.keyboardManager
+ import dev.patrickgold.jetpref.datastore.model.observeAsState
+ import org.florisboard.lib.compose.stringRes
+ import org.florisboard.lib.snygg.ui.SnyggBox
+ import org.florisboard.lib.snygg.ui.SnyggButton
+ import org.florisboard.lib.snygg.ui.SnyggText
+ 
+ @Composable
+ fun QuickActionsOverflowPanel() {
+     val prefs by FlorisPreferenceStore
+     val context = LocalContext.current
+     val keyboardManager by context.keyboardManager()
+ 
+     val actionArrangement by prefs.smartbar.actionArrangement.observeAsState()
+     val evaluator by keyboardManager.activeSmartbarEvaluator.collectAsState()
+ 
+-    val dynamicActions = actionArrangement.dynamicActions
++    val dynamicActions = actionArrangement.dynamicActions.policyFiltered() // FORK(S1-smartbar)
+     val dynamicActionsCountToShow = when {
+         dynamicActions.isEmpty() -> 0
+         else -> {
+             (dynamicActions.size - keyboardManager.smartbarVisibleDynamicActionsCount).coerceIn(dynamicActions.indices)
+         }
+     }
+-    val visibleActions = remember(actionArrangement, dynamicActionsCountToShow) {
+-        actionArrangement.dynamicActions.takeLast(dynamicActionsCountToShow)
++    val visibleActions = remember(dynamicActions, dynamicActionsCountToShow) {
++        dynamicActions.takeLast(dynamicActionsCountToShow) // FORK(S1-smartbar): same filtered list as the row
+     }
+ 
+     SnyggBox(
+         elementName = FlorisImeUi.SmartbarActionsOverflow.elementName,
+         modifier = Modifier
+             .fillMaxWidth()
+             .height(FlorisImeSizing.keyboardUiHeight()),
+     ) {
+         LazyVerticalGrid(
+             modifier = Modifier
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionsRow.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionsRow.kt
+index ae2d4dca..b59b2f7e 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionsRow.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionsRow.kt
+@@ -23,20 +23,21 @@ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.SideEffect
+ import androidx.compose.runtime.collectAsState
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.remember
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.platform.LocalDensity
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
++import com.manjul.aikeyboard.fork.smartbar.policyFiltered // FORK(S1-smartbar)
+ import com.manjul.aikeyboard.ime.smartbar.SmartbarLayout
+ import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
+ import com.manjul.aikeyboard.keyboardManager
+ import dev.patrickgold.jetpref.datastore.model.observeAsState
+ import org.florisboard.lib.snygg.ui.SnyggRow
+ 
+ internal val ToggleOverflowPanelAction = QuickAction.InsertKey(TextKeyData.TOGGLE_ACTIONS_OVERFLOW)
+ 
+ @SuppressLint("UnusedBoxWithConstraintsScope")
+ @Composable
+@@ -47,30 +48,31 @@ fun QuickActionsRow(
+     val prefs by FlorisPreferenceStore
+     val context = LocalContext.current
+     val keyboardManager by context.keyboardManager()
+ 
+     val flipToggles by prefs.smartbar.flipToggles.observeAsState()
+     val evaluator by keyboardManager.activeSmartbarEvaluator.collectAsState()
+     val smartbarLayout by prefs.smartbar.layout.observeAsState()
+     val actionArrangement by prefs.smartbar.actionArrangement.observeAsState()
+     val sharedActionsExpanded by prefs.smartbar.sharedActionsExpanded.observeAsState()
+ 
++    // FORK(S1-smartbar): actions the policy decision disallows are removed, not greyed out
+     val dynamicActions = remember(smartbarLayout, actionArrangement) {
+         if (smartbarLayout == SmartbarLayout.ACTIONS_ONLY && actionArrangement.stickyAction != null) {
+             buildList {
+                 add(actionArrangement.stickyAction!!)
+                 addAll(actionArrangement.dynamicActions)
+             }
+         } else {
+             actionArrangement.dynamicActions
+         }
+-    }
++    }.policyFiltered() // FORK(S1-smartbar)
+     val showOverflowAction = actionArrangement.stickyAction != null ||
+         smartbarLayout != SmartbarLayout.SUGGESTIONS_ACTIONS_SHARED || !sharedActionsExpanded
+ 
+     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+         val width = constraints.maxWidth.toDp()
+         val height = constraints.maxHeight.toDp()
+         val numActionsToShow = ((width / height).toInt() - (if (showOverflowAction) 1 else 0)).coerceAtLeast(0)
+         val visibleActions = dynamicActions
+             .subList(0, numActionsToShow.coerceAtMost(dynamicActions.size))
+ 
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/text/key/KeyCode.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/text/key/KeyCode.kt
+index 9c9b9b4b..a1a93fdc 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/text/key/KeyCode.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/text/key/KeyCode.kt
+@@ -100,20 +100,21 @@ object KeyCode {
+ 
+     const val IME_SHOW_UI =                 -231
+     const val IME_HIDE_UI =                 -232
+     const val VOICE_INPUT =                 -233
+ 
+     const val TOGGLE_SMARTBAR_VISIBILITY =  -241
+     const val TOGGLE_ACTIONS_OVERFLOW =     -242
+     const val TOGGLE_ACTIONS_EDITOR =       -243
+     const val TOGGLE_INCOGNITO_MODE =       -244
+     const val TOGGLE_AUTOCORRECT =          -245
++    const val TOGGLE_PRIVATE_APP =          -246 // FORK(S1-smartbar): makes the focused editor's app private
+ 
+     const val URI_COMPONENT_TLD =           -255
+ 
+     const val SETTINGS =                    -301
+ 
+     const val CURRENCY_SLOT_1 =             -801
+     const val CURRENCY_SLOT_2 =             -802
+     const val CURRENCY_SLOT_3 =             -803
+     const val CURRENCY_SLOT_4 =             -804
+     const val CURRENCY_SLOT_5 =             -805
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/text/keyboard/TextKeyData.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/text/keyboard/TextKeyData.kt
+index 8d40dad5..91172dbf 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/text/keyboard/TextKeyData.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/text/keyboard/TextKeyData.kt
+@@ -142,20 +142,21 @@ data class TextKeyData(
+                 LANGUAGE_SWITCH,
+                 IME_SHOW_UI,
+                 IME_HIDE_UI,
+                 SETTINGS,
+                 VOICE_INPUT,
+                 TOGGLE_SMARTBAR_VISIBILITY,
+                 TOGGLE_ACTIONS_OVERFLOW,
+                 TOGGLE_ACTIONS_EDITOR,
+                 TOGGLE_INCOGNITO_MODE,
+                 TOGGLE_AUTOCORRECT,
++                TOGGLE_PRIVATE_APP, // FORK(S1-smartbar)
+             )
+         }
+ 
+         /** Predefined key data for [KeyCode.UNSPECIFIED] */
+         val UNSPECIFIED = TextKeyData(
+             type = KeyType.UNSPECIFIED,
+             code = KeyCode.UNSPECIFIED,
+             label = "unspecified",
+         )
+ 
+@@ -506,20 +507,26 @@ data class TextKeyData(
+             type = KeyType.SYSTEM_GUI,
+             code = KeyCode.TOGGLE_ACTIONS_EDITOR,
+             label = "toggle_actions_editor",
+         )
+         /** Predefined key data for [KeyCode.TOGGLE_INCOGNITO_MODE] */
+         val TOGGLE_INCOGNITO_MODE = TextKeyData(
+             type = KeyType.FUNCTION,
+             code = KeyCode.TOGGLE_INCOGNITO_MODE,
+             label = "toggle_incognito_mode",
+         )
++        // FORK(S1-smartbar): predefined key data for [KeyCode.TOGGLE_PRIVATE_APP]
++        val TOGGLE_PRIVATE_APP = TextKeyData(
++            type = KeyType.FUNCTION,
++            code = KeyCode.TOGGLE_PRIVATE_APP,
++            label = "toggle_private_app",
++        )
+         /** Predefined key data for [KeyCode.TOGGLE_AUTOCORRECT] */
+         val TOGGLE_AUTOCORRECT = TextKeyData(
+             type = KeyType.FUNCTION,
+             code = KeyCode.TOGGLE_AUTOCORRECT,
+             label = "toggle_autocorrect",
+         )
+     }
+ }
+ 
+ @Serializable
+diff --git a/app/src/main/res/values/strings_fork.xml b/app/src/main/res/values/strings_fork.xml
+index 605983cb..8db03a0d 100644
+--- a/app/src/main/res/values/strings_fork.xml
++++ b/app/src/main/res/values/strings_fork.xml
+@@ -21,11 +21,23 @@
+ 
+     <!-- System IME subtype labels (method.xml). Each language is named in itself. -->
+     <string name="subtype__en_us" tools:ignore="MissingTranslation">English (US)</string>
+     <string name="subtype__es_es" tools:ignore="MissingTranslation">Español (España)</string>
+     <string name="subtype__fr_fr" tools:ignore="MissingTranslation">Français (France)</string>
+     <string name="subtype__pt_br" tools:ignore="MissingTranslation">Português (Brasil)</string>
+     <string name="subtype__ar" tools:ignore="MissingTranslation">العربية</string>
+     <string name="subtype__ur_pk" tools:ignore="MissingTranslation">اردو</string>
+     <string name="subtype__id" tools:ignore="MissingTranslation">Bahasa Indonesia</string>
+     <string name="subtype__hi_in" tools:ignore="MissingTranslation">हिन्दी</string>
++
++    <!-- Smartbar private lock indicator and the "Make this app private" quick action. -->
++    <string name="private_lock__description" tools:ignore="MissingTranslation">Private field</string>
++    <string name="private_lock__make_private" tools:ignore="MissingTranslation">Make this app private</string>
++    <string name="quick_action__toggle_private_app" tools:ignore="MissingTranslation">Make private</string>
++    <string name="quick_action__toggle_private_app__tooltip" tools:ignore="MissingTranslation">Make this app private</string>
++
++    <!-- Settings > Privacy > Private apps. -->
++    <string name="private_apps__title" tools:ignore="MissingTranslation">Private apps</string>
++    <string name="private_apps__summary" tools:ignore="MissingTranslation">In private apps the keyboard does not learn, suggest, or save anything.</string>
++    <string name="private_apps__suggested" tools:ignore="MissingTranslation">Suggested</string>
++    <string name="private_apps__all_apps" tools:ignore="MissingTranslation">All apps</string>
+ </resources>
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsRepositoryTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsRepositoryTest.kt
+new file mode 100644
+index 00000000..80a6a235
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/privacy/PrivateAppsRepositoryTest.kt
+@@ -0,0 +1,85 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.privacy
++
++import android.app.Application
++import android.text.InputType
++import android.view.inputmethod.EditorInfo
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.fork.policy.ImePolicyController
++import com.manjul.aikeyboard.ime.policy.SensitivityReason
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.runTest
++import org.junit.After
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = Application::class)
++class PrivateAppsRepositoryTest {
++    private val dispatcher = UnconfinedTestDispatcher()
++    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
++    private val app = RuntimeEnvironment.getApplication()
++    private val store = FeatureSettingsStore(app, dispatcher)
++    private val logged = mutableListOf<AnalyticsEvent>()
++    private val repo = PrivateAppsRepository(store, app.packageManager) { logged += it }
++    private val controller = ImePolicyController(store, { false }, { emptySet() }, scope)
++
++    @After
++    fun tearDown() = scope.cancel()
++
++    private fun field(pkg: String) = EditorInfo().apply {
++        packageName = pkg
++        inputType = InputType.TYPE_CLASS_TEXT
++    }
++
++    @Test
++    fun `added package is reported as private on the next start input`() = runTest {
++        controller.onStartInput(field("com.bank"), false)
++        assertFalse(SensitivityReason.PRIVATE_APP in controller.decision.value.reasons)
++
++        repo.add("com.bank")
++        controller.onStartInput(field("com.bank"), false)
++
++        assertTrue(SensitivityReason.PRIVATE_APP in controller.decision.value.reasons)
++        assertTrue(controller.decision.value.sensitive)
++    }
++
++    @Test
++    fun `removed package is no longer private`() = runTest {
++        repo.add("com.bank")
++        repo.remove("com.bank")
++        controller.onStartInput(field("com.bank"), false)
++        assertFalse(SensitivityReason.PRIVATE_APP in controller.decision.value.reasons)
++    }
++
++    @Test
++    fun `add logs the event without params`() = runTest {
++        repo.add("com.bank")
++        assertEquals(listOf(AnalyticsEvent("privacy_private_app_add", emptyMap())), logged)
++    }
++
++    @Test
++    fun `remove does not log`() = runTest {
++        repo.remove("com.bank")
++        assertTrue(logged.isEmpty())
++    }
++
++    @Test
++    fun `suggestions are empty while the banking list is empty`() {
++        assertTrue(repo.suggestions().isEmpty())
++    }
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipArrangementTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipArrangementTest.kt
+new file mode 100644
+index 00000000..ed785a68
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/ChipArrangementTest.kt
+@@ -0,0 +1,85 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.smartbar
++
++import android.app.Application
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.runTest
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import com.manjul.aikeyboard.fork.smartbar.ChipId.*
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = Application::class)
++class ChipArrangementTest {
++    @Test
++    fun `fourth pin is rejected and the list is unchanged`() {
++        val three = listOf(EMOJI, CLIPBOARD, SETTINGS)
++        assertEquals(three, ChipArrangement.pin(three, STICKERS))
++    }
++
++    @Test
++    fun `pins up to three chips in order`() {
++        assertEquals(listOf(EMOJI, SETTINGS), ChipArrangement.pin(listOf(EMOJI), SETTINGS))
++    }
++
++    @Test
++    fun `pinning a pinned chip does not duplicate it`() {
++        assertEquals(listOf(EMOJI), ChipArrangement.pin(listOf(EMOJI), EMOJI))
++    }
++
++    @Test
++    fun `pinning a fixed chip is a no-op`() {
++        assertEquals(emptyList(), ChipArrangement.pin(emptyList(), MIC))
++        assertEquals(listOf(EMOJI), ChipArrangement.pin(listOf(EMOJI), TRANSLATE))
++    }
++
++    @Test
++    fun `reorder never moves fixed chips`() {
++        val order = listOf(MIC, TRANSLATE, AI, EMOJI, CLIPBOARD, SETTINGS)
++        // moving a fixed chip, or onto a fixed slot, changes nothing
++        assertEquals(order, ChipArrangement.reorder(order, 0, 3))
++        assertEquals(order, ChipArrangement.reorder(order, 1, 4))
++        assertEquals(order, ChipArrangement.reorder(order, 3, 0))
++        assertEquals(order, ChipArrangement.reorder(order, 3, 1))
++    }
++
++    @Test
++    fun `reorder moves movable chips and keeps fixed positions`() {
++        val order = listOf(MIC, AI, TRANSLATE, EMOJI, CLIPBOARD, SETTINGS)
++        val moved = ChipArrangement.reorder(order, 1, 4)
++        assertEquals(listOf(MIC, EMOJI, TRANSLATE, CLIPBOARD, AI, SETTINGS), moved)
++        assertEquals(MIC, moved[0])
++        assertEquals(TRANSLATE, moved[2])
++    }
++
++    @Test
++    fun `reorder ignores out of range indices`() {
++        val order = listOf(MIC, EMOJI)
++        assertEquals(order, ChipArrangement.reorder(order, 1, 5))
++        assertEquals(order, ChipArrangement.reorder(order, -1, 1))
++    }
++
++    @Test
++    fun `order and pins persist through the settings store`() = runTest {
++        val store = FeatureSettingsStore(RuntimeEnvironment.getApplication(), UnconfinedTestDispatcher(testScheduler))
++        val order = listOf(MIC, EMOJI, CLIPBOARD, SETTINGS)
++        val pins = listOf(CLIPBOARD, EMOJI)
++        store.update { it.copy(smartbarOrder = order.map(ChipId::name), smartbarPinned = pins.map(ChipId::name)) }
++        assertEquals(order, ChipId.parse(store.current.smartbarOrder))
++        assertEquals(pins, ChipId.parse(store.current.smartbarPinned))
++    }
++
++    @Test
++    fun `parse drops unknown names`() {
++        assertEquals(listOf(EMOJI), ChipId.parse(listOf("GONE", "EMOJI")))
++    }
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyChipFilterTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyChipFilterTest.kt
+new file mode 100644
+index 00000000..0c89d102
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyChipFilterTest.kt
+@@ -0,0 +1,56 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.smartbar
++
++import com.manjul.aikeyboard.fork.smartbar.ChipId.*
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import com.manjul.aikeyboard.ime.policy.SensitivityReason
++import org.junit.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++class PolicyChipFilterTest {
++    private val all = ChipId.entries.toList()
++    private val allRegistered = ChipId.entries.toSet()
++
++    // Same capabilities as SensitiveFieldPolicy gives a password field.
++    private val password = PolicyDecision.Locked.copy(reasons = setOf(SensitivityReason.PASSWORD))
++
++    @Test
++    fun `password field keeps only emoji and settings`() {
++        val visible = ChipArrangement.visible(all, allRegistered, password, clipboardHistoryOn = true)
++        assertEquals(listOf(EMOJI, SETTINGS), visible)
++    }
++
++    @Test
++    fun `unrestricted field shows every registered chip in order`() {
++        val visible = ChipArrangement.visible(all, allRegistered, PolicyDecision.Unrestricted, true)
++        assertEquals(all, visible)
++    }
++
++    @Test
++    fun `unregistered translate and ai are never visible`() {
++        val registered = setOf(MIC, EMOJI, CLIPBOARD, SETTINGS)
++        val visible = ChipArrangement.visible(all, registered, PolicyDecision.Unrestricted, true)
++        assertFalse(TRANSLATE in visible)
++        assertFalse(AI in visible)
++        assertEquals(listOf(MIC, EMOJI, CLIPBOARD, SETTINGS), visible)
++    }
++
++    @Test
++    fun `clipboard is hidden when history is off`() {
++        val visible = ChipArrangement.visible(all, allRegistered, PolicyDecision.Unrestricted, false)
++        assertFalse(CLIPBOARD in visible)
++        assertTrue(EMOJI in visible)
++    }
++
++    @Test
++    fun `locked decision hides everything but emoji and settings`() {
++        val visible = ChipArrangement.visible(all, allRegistered, PolicyDecision.Locked, true)
++        assertEquals(listOf(EMOJI, SETTINGS), visible)
++    }
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index f6bd3959..78304023 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -58,20 +58,28 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/build.gradle.kts` | S1-clipboard | `implementation(projects.core.privacy)` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt` | S1-clipboard | Takes a `ClipboardCaptureGate` (fail-closed policy gate plus sensitivity classifier): `onPrimaryClipChanged` returns before `fromClipData`/URI clone for blocked or sensitive clips, `insertOrMoveBeginning` re-checks; `enforceExpiryDate` deletes unpinned items older than the TTL through the DAO |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt` | S1-clipboard | `deleteUnpinnedOlderThan` DAO query; `fallbackToDestructiveMigration()` removed from both clipboard databases (schema versions unchanged, so no migration is needed) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt` | S1-clipboard | `historyAutoCleanOldEnabled` default true, `historyAutoCleanOldAfter` default 1440 (minutes, 24 h) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt` | S1-clipboard | Auto-clean slider max 120 -> 1440 minutes so the 24 h default is reachable |
+ | `app/src/main/res/xml/method.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt` | S1-subtypes | `method.xml`: the single placeholder subtype is replaced by the 8 MVP subtypes (en-US, es-ES, fr-FR, pt-BR, ar, ur-PK, id, hi-IN; labels in `strings_fork.xml`). `SubtypeManager.ensureDefaultSubtypes(tags)` adds missing presets by primary locale, in order, idempotently; called from onboarding only, never on IME start |
+ | `app/src/main/assets/ime/keyboard/org.florisboard.localization/extension.json` | S1-layouts | `ur-PK` preset: `numericRow` set to `org.florisboard.layouts:persian` (Extended Arabic-Indic digits U+06F0-U+06F9, the Urdu digits; each key's long-press gives the western digit). The number-row layout is also the top row of the symbols layer, so this is the per-subtype native/western digit choice; users switch it with "Number row layout" in the subtype editor (`western_arabic` for western). `ar` and `hi-IN` already default to native digits. Characters defaults are unchanged (`urdu_phonetic`, `hindi_in`); our `org.aikeyboard.layouts` layouts need no preset entry because the subtype editor lists every indexed characters layout |
+ | `app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ur-PK.json` | S1-layouts | Coverage gaps in `urdu_phonetic` (guarded by `ScriptCoverageTest`): its h key is Arabic heh `ه` (U+0647), so the mapping's `ہ` entry never matched; a new `ه` entry offers `ہ` (main), `ھ`, `ۂ`. `~right` (the `.` key) now starts with `۔` and `؟` |
+ | `app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ar.json` | S1-layouts | `؛` (U+061B) added first in `~right` relevant (after the `؟` main): the Arabic characters keyboard had no Arabic semicolon |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/lib/FlorisLocale.kt` | S1-layouts | `supportsCapitalization` is false for `ur`: Urdu has no case, and auto-shift at sentence start would otherwise type the shift layer of `urdu_standard` (our layout, which puts `ھ`, `ۓ`, `ۂ`, `آ`, ... on shift) |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/text/key/KeyCode.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/text/keyboard/TextKeyData.kt` | S1-smartbar | `TOGGLE_PRIVATE_APP` (-246) key code and predefined key data (also in the internal key list) |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-smartbar | Handles `TOGGLE_PRIVATE_APP` (adds the focused editor's package to the private apps; package read on the main thread, never logged); `VOICE_INPUT` is dispatched and enabled only when the policy decision allows voice, `IME_UI_MODE_CLIPBOARD` is enabled only when it allows clipboard history; fail closed (`PolicyDecision.Locked`) without a service |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/ComputingEvaluator.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickAction.kt` | S1-smartbar | Lock icon, name and tooltip for `TOGGLE_PRIVATE_APP` |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-smartbar | Renders `PrivateLockIndicator` first in the main row (nothing unless the field is sensitive); the sticky action is removed when the policy disallows it |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/{QuickActionsRow,QuickActionsOverflowPanel}.kt` | S1-smartbar | Dynamic actions pass through `policyFiltered()` (disallowed chips are removed, not greyed out); the overflow panel uses the same filtered list so the visible-count arithmetic stays consistent |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionArrangement.kt` | S1-smartbar | `Default`: Mic sticky; Emoji, Clipboard, Settings and the private-app action dynamic; upstream's other actions moved to `hiddenActions` (still available in the actions editor). Translate and AI are not present. Saved user arrangements are unaffected |
++| `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-smartbar | `Settings.PrivateApps` route (`settings/privacy/private-apps`) and a home entry for it |
++| `app/src/main/AndroidManifest.xml` | S1-smartbar | `<queries>` entry for MAIN/LAUNCHER intents so the Private apps screen can list launchable apps on API 30+ |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised

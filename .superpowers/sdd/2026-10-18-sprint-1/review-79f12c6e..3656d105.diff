@@ -1,0 +1,3118 @@
+# Review package: 79f12c6e..3656d105
+
+## Commits
+3656d105 feat(voice): on-device Whisper fallback with model manager and voice settings
+
+## Files changed
+ app/build.gradle.kts                               |   7 +
+ app/src/main/AndroidManifest.xml                   |   7 +
+ .../com/manjul/aikeyboard/FlorisApplication.kt     |  23 +-
+ .../kotlin/com/manjul/aikeyboard/app/Routes.kt     |   7 +
+ .../manjul/aikeyboard/app/settings/HomeScreen.kt   |   7 +
+ .../fork/settings/VoiceSettingsScreen.kt           | 236 +++++++++++++++++
+ .../aikeyboard/fork/voice/MicPermissionActivity.kt |   4 +-
+ .../aikeyboard/fork/voice/VoiceImeSession.kt       |  12 +-
+ .../manjul/aikeyboard/fork/voice/WhisperVoice.kt   |  77 ++++++
+ app/src/main/res/values/strings_fork.xml           |  27 ++
+ .../fork/onboarding/OnboardingScreenTest.kt        |   6 +-
+ .../aikeyboard/fork/settings/VoiceSettingsTest.kt  | 146 +++++++++++
+ .../fork/testing/ComposeHostActivityRule.kt        |  37 +++
+ .../buildlogic/ExportedComponentRules.kt           |  16 ++
+ .../buildlogic/ExportedComponentRulesTest.kt       |  25 ++
+ .../aikeyboard/core/analytics/AnalyticsEnums.kt    |   9 +
+ .../manjul/aikeyboard/core/analytics/Buckets.kt    |   9 +
+ .../aikeyboard/core/analytics/EventCatalog.kt      |  16 ++
+ .../aikeyboard/core/analytics/BucketsTest.kt       |   8 +
+ .../core/analytics/EventCatalogLimitsTest.kt       |  12 +
+ .../aikeyboard/core/datastore/FeatureSettings.kt   |   2 +
+ core/voice/build.gradle.kts                        |   8 +-
+ .../core/voice/platform/RecognizerCapabilities.kt  |  11 +-
+ .../core/voice/whisper/ModelDownloadWorker.kt      |  45 ++++
+ .../aikeyboard/core/voice/whisper/PcmRecorder.kt   |  97 +++++++
+ .../core/voice/whisper/WhisperContexts.kt          | 102 ++++++++
+ .../core/voice/whisper/WhisperIdleUnloader.kt      |  58 +++++
+ .../core/voice/whisper/WhisperLanguageGate.kt      |  25 ++
+ .../core/voice/whisper/WhisperModelManager.kt      | 284 +++++++++++++++++++++
+ .../core/voice/whisper/WhisperModelSpec.kt         |  28 ++
+ .../core/voice/whisper/WhisperSpeechEngine.kt      | 226 ++++++++++++++++
+ .../core/voice/whisper/WhisperIdleUnloaderTest.kt  |  77 ++++++
+ .../core/voice/whisper/WhisperModelManagerTest.kt  | 171 +++++++++++++
+ .../core/voice/whisper/WhisperSpeechEngineTest.kt  | 267 +++++++++++++++++++
+ docs/FORK_PATCHES.md                               |  10 +-
+ gradle/libs.versions.toml                          |   8 +
+ .../aikeyboard/ime/voiceui/VoiceController.kt      |   2 +-
+ 37 files changed, 2097 insertions(+), 15 deletions(-)
+
+## Diff
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 837cd73c..8e02426d 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -75,20 +75,24 @@ android {
+         minSdk = projectMinSdk.toInt()
+         targetSdk = projectTargetSdk.toInt()
+         versionCode = projectVersionCode.toInt()
+         versionName = projectVersionName.substringBefore("-")
+ 
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+ 
+         buildConfigField("String", "BUILD_COMMIT_HASH", "\"${getGitCommitHash().get()}\"")
+         buildConfigField("String", "FLADDONS_API_VERSION", "\"v~draft2\"")
+         buildConfigField("String", "FLADDONS_STORE_URL", "\"beta.addons.florisboard.org\"")
++        // FORK(S1-whisper): Whisper model host (TODO(OD-01): placeholder until the product host exists; the files
++        // are SHA-256 pinned in WhisperModelSpec) and the languages Whisper may serve ("*" = all; release: none)
++        buildConfigField("String", "WHISPER_MODEL_BASE_URL", "\"https://example.com/models/\"")
++        buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"*\"")
+ 
+         sourceSets {
+             maybeCreate("main").apply {
+                 assets {
+                     srcDirs("src/main/assets")
+                 }
+                 java {
+                     srcDirs("src/main/kotlin")
+                 }
+             }
+@@ -146,20 +150,22 @@ android {
+             // FORK(S0-hardening): strip Log.v/d/i and flog calls from minified builds (TRD §6.3)
+             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "proguard-hardening.pro")
+             isMinifyEnabled = true
+             isShrinkResources = true
+ 
+             resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_stable")
+             resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_stable_round")
+             // FORK(S0-branding): placeholder app name and neutral launcher glyph instead of FlorisBoard branding
+             resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_keyboard_foreground")
+             resValue("string", "floris_app_name", "@string/app_name")
++            // FORK(S1-whisper): no language uses Whisper in release until each is checked (decision 5)
++            buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"\"")
+         }
+ 
+         create("benchmark") {
+             initWith(getByName("release"))
+             signingConfig = signingConfigs.getByName("debug")
+             matchingFallbacks += listOf("release")
+         }
+     }
+ 
+     aboutLibraries {
+@@ -272,20 +278,21 @@ dependencies {
+     implementation(projects.core.datastore)
+     implementation(projects.ime.policy)
+     // FORK(S1-clipboard): clipboard sensitivity classifier used by the capture gate
+     implementation(projects.core.privacy)
+     implementation(projects.core.analytics) // FORK(S1-analytics): event catalog and relay
+     // FORK(S1-voice): speech session, platform engines and the in-keyboard voice UI
+     implementation(projects.core.voice)
+     implementation(projects.ime.voiceUi)
+     // FORK(S1-whisper): on-device whisper.cpp (libaikb_whisper.so); WhisperSpeechEngine builds on it
+     implementation(projects.lib.whisper)
++    implementation(libs.androidx.work.runtime) // FORK(S1-whisper): model download worker, on-demand init
+ 
+     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
+     lintChecks(projects.lintRules)
+ 
+     testImplementation(libs.kotlin.test.junit5)
+     // FORK(S1-policy): Robolectric (JUnit 4) tests run on the JUnit 5 platform through the vintage engine
+     testImplementation(platform(libs.junit.bom))
+     testImplementation(libs.junit4)
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 286f4ab2..45ac33cf 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -4,20 +4,23 @@
+ 
+     <!-- Permission needed to vibrate if the user has key press vibration enabled -->
+     <uses-permission android:name="android.permission.VIBRATE"/>
+ 
+     <!-- FORK(S1-onboarding): microphone for voice input; requested only after the voice notice, in onboarding or Task 11's trampoline -->
+     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+ 
+     <!-- FORK(S1-voice): network state for the voice engine choice (a server recognizer needs a network) -->
+     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+ 
++    <!-- FORK(S1-whisper): network for the Whisper model download worker only; dictation audio never leaves the phone -->
++    <uses-permission android:name="android.permission.INTERNET"/>
++
+     <!-- Permission needed to create notifications on devices running Android 13+ -->
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+ 
+     <!-- Android 11+ only: Define that FlorisBoard requests to see all apps that
+           ship with an IME or Spell Check service. This is used to guide the user
+           in the Settings Ui why FlorisBoard may not be working.
+      -->
+     <queries>
+         <intent>
+             <action android:name="android.view.InputMethod"/>
+@@ -176,15 +179,19 @@
+ 
+         <!-- Disable default EmojiCompat initializer -->
+         <provider
+             android:name="androidx.startup.InitializationProvider"
+             android:authorities="${applicationId}.androidx-startup"
+             android:exported="false"
+             tools:node="merge">
+             <meta-data
+                 android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                 tools:node="remove"/>
++            <!-- FORK(S1-whisper): WorkManager starts on demand (FlorisApplication is its Configuration.Provider) -->
++            <meta-data
++                android:name="androidx.work.WorkManagerInitializer"
++                tools:node="remove"/>
+         </provider>
+ 
+     </application>
+ 
+ </manifest>
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+index a15f0c08..30743080 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+@@ -49,30 +49,34 @@ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.launch
+ import org.florisboard.lib.kotlin.io.deleteContentsRecursively
+ import org.florisboard.lib.kotlin.tryOrNull
+ import org.florisboard.libnative.dummyAdd
+ // FORK(S1-policy): import for the fork settings store
+ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+ // FORK(S1-analytics): imports for the analytics relay
+ import com.manjul.aikeyboard.core.analytics.BatchingRelay
+ import com.manjul.aikeyboard.core.analytics.LogcatSink
+ import com.manjul.aikeyboard.core.analytics.NoopSink
++// FORK(S1-whisper): imports for the Whisper model download and unloading
++import androidx.work.Configuration
++import com.manjul.aikeyboard.core.voice.whisper.ModelDownloadWorkerFactory
++import com.manjul.aikeyboard.fork.voice.WhisperVoice
+ import java.lang.ref.WeakReference
+ 
+ /**
+  * Global weak reference for the [FlorisApplication] class. This is needed as in certain scenarios an application
+  * reference is needed, but the Android framework hasn't finished setting up
+  */
+ private var FlorisApplicationReference = WeakReference<FlorisApplication?>(null)
+ 
+ @Suppress("unused")
+-class FlorisApplication : Application() {
++class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whisper): on-demand WorkManager
+     companion object {
+         init {
+             try {
+                 System.loadLibrary("fl_native")
+             } catch (_: Exception) {
+             }
+         }
+     }
+ 
+     private val mainHandler by lazy { Handler(mainLooper) }
+@@ -94,20 +98,34 @@ class FlorisApplication : Application() {
+     val analytics = lazy {
+         BatchingRelay(
+             sink = if (BuildConfig.DEBUG) LogcatSink else NoopSink,
+             clock = System::currentTimeMillis,
+             scope = scope,
+             optOut = { featureSettingsStore.value.current.analyticsOptOut },
+             // null policy = no IME field context (app-side events): not minimal, by design
+             policy = { FlorisImeService.policyControllerOrNull()?.decision?.value },
+         )
+     }
++    // FORK(S1-whisper): Whisper model, idle unloader and model manager; created on first Whisper use
++    val whisperVoice = lazy { WhisperVoice(this) { analytics.value::log } }
++
++    // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
++    override val workManagerConfiguration: Configuration
++        get() = Configuration.Builder()
++            .setWorkerFactory(ModelDownloadWorkerFactory { whisperVoice.value.models })
++            .build()
++
++    // FORK(S1-whisper): free the Whisper model under memory pressure; never creates it, never blocks
++    override fun onTrimMemory(level: Int) {
++        super.onTrimMemory(level)
++        if (whisperVoice.isInitialized()) whisperVoice.value.unloader.onTrimMemory(level)
++    }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         FlorisApplicationReference = WeakReference(this)
+         try {
+             Flog.install(
+                 context = this,
+                 isFloggingEnabled = BuildConfig.DEBUG,
+                 flogTopics = LogTopic.ALL,
+                 flogLevels = Flog.LEVEL_ALL,
+@@ -188,10 +206,13 @@ fun Context.glideTypingManager() = this.florisApplication().glideTypingManager
+ fun Context.keyboardManager() = this.florisApplication().keyboardManager
+ 
+ fun Context.nlpManager() = this.florisApplication().nlpManager
+ 
+ fun Context.subtypeManager() = this.florisApplication().subtypeManager
+ 
+ fun Context.themeManager() = this.florisApplication().themeManager
+ 
+ // FORK(S1-policy): accessor for the fork settings store
+ fun Context.featureSettingsStore() = this.florisApplication().featureSettingsStore
++
++// FORK(S1-whisper): accessor for the app-wide Whisper pieces
++fun Context.whisperVoice() = this.florisApplication().whisperVoice
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt b/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
+index 904ac142..42305a2a 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
+@@ -65,20 +65,21 @@ import com.manjul.aikeyboard.app.settings.gestures.GesturesScreen
+ import com.manjul.aikeyboard.app.settings.keyboard.InputFeedbackScreen
+ import com.manjul.aikeyboard.app.settings.keyboard.KeyboardScreen
+ import com.manjul.aikeyboard.app.settings.localization.LanguagePackManagerScreen
+ import com.manjul.aikeyboard.app.settings.localization.LanguagePackManagerScreenAction
+ import com.manjul.aikeyboard.app.settings.localization.LocalizationScreen
+ import com.manjul.aikeyboard.app.settings.localization.SelectLocaleScreen
+ import com.manjul.aikeyboard.app.settings.localization.SubtypeEditorScreen
+ import com.manjul.aikeyboard.app.settings.media.MediaScreen
+ import com.manjul.aikeyboard.app.settings.smartbar.SmartbarScreen
+ import com.manjul.aikeyboard.fork.privacy.PrivateAppsScreen // FORK(S1-smartbar)
++import com.manjul.aikeyboard.fork.settings.VoiceSettingsScreen // FORK(S1-whisper)
+ import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
+ import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
+ import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
+ import com.manjul.aikeyboard.app.settings.typing.TypingScreen
+ import com.manjul.aikeyboard.fork.onboarding.OnboardingScreen // FORK(S1-onboarding)
+ import kotlinx.serialization.SerialName
+ import kotlinx.serialization.Serializable
+ import kotlin.reflect.KClass
+ 
+ @Target(AnnotationTarget.CLASS)
+@@ -147,20 +148,25 @@ object Routes {
+ 
+         @Serializable
+         @Deeplink("settings/smartbar")
+         object Smartbar
+ 
+         // FORK(S1-smartbar): Private apps screen, reached from the Settings home (no Privacy parent screen)
+         @Serializable
+         @Deeplink("settings/privacy/private-apps")
+         object PrivateApps
+ 
++        // FORK(S1-whisper): Voice settings (engine, auto-stop, offline Whisper models), reached from the Settings home
++        @Serializable
++        @Deeplink("settings/voice")
++        object Voice
++
+         @Serializable
+         @Deeplink("settings/typing")
+         object Typing
+ 
+         @Serializable
+         @Deeplink("settings/dictionary")
+         object Dictionary
+ 
+         @Serializable
+         @Deeplink("settings/dictionary/user-dictionary")
+@@ -302,20 +308,21 @@ object Routes {
+                 val payload = navBackStack.toRoute<Settings.ThemeManager>()
+                 ThemeManagerScreen(payload.action)
+             }
+ 
+             composableWithDeepLink(Settings.Keyboard::class) { KeyboardScreen() }
+             composableWithDeepLink(Settings.InputFeedback::class) { InputFeedbackScreen() }
+ 
+             composableWithDeepLink(Settings.Smartbar::class) { SmartbarScreen() }
+ 
+             composableWithDeepLink(Settings.PrivateApps::class) { PrivateAppsScreen() } // FORK(S1-smartbar)
++            composableWithDeepLink(Settings.Voice::class) { VoiceSettingsScreen() } // FORK(S1-whisper)
+ 
+             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
+ 
+             composableWithDeepLink(Settings.Dictionary::class) { DictionaryScreen() }
+             composableWithDeepLink(Settings.UserDictionary::class) { navBackStack ->
+                 val payload = navBackStack.toRoute<Settings.UserDictionary>()
+                 UserDictionaryScreen(payload.type)
+             }
+ 
+             composableWithDeepLink(Settings.Gestures::class) { GesturesScreen() }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt b/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt
+index 3c1093fb..70819af1 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt
+@@ -16,20 +16,21 @@
+ 
+ package com.manjul.aikeyboard.app.settings
+ 
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.automirrored.outlined.Assignment
+ import androidx.compose.material.icons.filled.Extension
+ import androidx.compose.material.icons.filled.Gesture
+ import androidx.compose.material.icons.filled.Language
+ import androidx.compose.material.icons.filled.Lock // FORK(S1-smartbar)
++import androidx.compose.material.icons.filled.Mic // FORK(S1-whisper)
+ import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+ import androidx.compose.material.icons.filled.SmartButton
+ import androidx.compose.material.icons.filled.Spellcheck
+ import androidx.compose.material.icons.outlined.Build
+ import androidx.compose.material.icons.outlined.Info
+ import androidx.compose.material.icons.outlined.Keyboard
+ import androidx.compose.material.icons.outlined.Palette
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
+ import androidx.compose.ui.Modifier
+@@ -126,20 +127,26 @@ fun HomeScreen() = FlorisScreen {
+             icon = Icons.Default.SmartButton,
+             title = stringRes(R.string.settings__smartbar__title),
+             onClick = { navController.navigate(Routes.Settings.Smartbar) },
+         )
+         // FORK(S1-smartbar): home entry for the Private apps screen (no Privacy parent screen)
+         Preference(
+             icon = Icons.Default.Lock,
+             title = stringRes(R.string.private_apps__title),
+             onClick = { navController.navigate(Routes.Settings.PrivateApps) },
+         )
++        // FORK(S1-whisper): home entry for the Voice settings screen
++        Preference(
++            icon = Icons.Default.Mic,
++            title = stringRes(R.string.voice_settings__title),
++            onClick = { navController.navigate(Routes.Settings.Voice) },
++        )
+         Preference(
+             icon = Icons.Default.Spellcheck,
+             title = stringRes(R.string.settings__typing__title),
+             onClick = { navController.navigate(Routes.Settings.Typing) },
+         )
+         Preference(
+             icon = Icons.Default.Gesture,
+             title = stringRes(R.string.settings__gestures__title),
+             onClick = { navController.navigate(Routes.Settings.Gestures) },
+         )
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/settings/VoiceSettingsScreen.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/settings/VoiceSettingsScreen.kt
+new file mode 100644
+index 00000000..4cbfe648
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/settings/VoiceSettingsScreen.kt
+@@ -0,0 +1,236 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.settings
++
++import android.text.format.Formatter
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.selection.selectable
++import androidx.compose.foundation.selection.selectableGroup
++import androidx.compose.foundation.selection.toggleable
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.ListItem
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.RadioButton
++import androidx.compose.material3.Slider
++import androidx.compose.material3.Switch
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.unit.dp
++import com.manjul.aikeyboard.R
++import com.manjul.aikeyboard.core.datastore.FeatureSettings
++import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
++import com.manjul.aikeyboard.core.voice.whisper.ModelState
++import com.manjul.aikeyboard.core.voice.whisper.WhisperModelSpec
++import com.manjul.aikeyboard.featureSettingsStore
++import com.manjul.aikeyboard.lib.compose.FlorisScreen
++import com.manjul.aikeyboard.whisperVoice
++import kotlin.math.roundToInt
++import kotlinx.coroutines.launch
++import org.florisboard.lib.compose.stringRes
++
++private const val SILENCE_MIN_MS = 2000
++private const val SILENCE_MAX_MS = 5000
++private const val SILENCE_STEP_MS = 500
++
++/** The auto-stop slider value as stored: 2 to 5 seconds in half-second steps. */
++internal fun silenceMsFromSlider(value: Float): Int =
++    ((value / SILENCE_STEP_MS).roundToInt() * SILENCE_STEP_MS).coerceIn(SILENCE_MIN_MS, SILENCE_MAX_MS)
++
++/** Voice settings (a Settings home entry): speech engine, punctuation, auto-stop and the offline models. */
++@Composable
++fun VoiceSettingsScreen() = FlorisScreen {
++    title = stringRes(R.string.voice_settings__title)
++    previewFieldVisible = false
++    scrollable = false
++
++    val context = LocalContext.current
++    val store = remember { context.featureSettingsStore().value }
++    val whisper = remember { context.whisperVoice().value }
++    val scope = rememberCoroutineScope()
++    val settings by store.flow.collectAsState(initial = store.current)
++    val states by whisper.models.states.collectAsState()
++    val offered = remember { whisper.models.offered() }
++
++    content {
++        VoiceSettingsContent(
++            settings = settings,
++            onUpdate = { transform -> scope.launch { store.update(transform) } },
++            whisperOffered = whisper.gate.anyEnabled,
++            models = states.filterKeys { it in offered },
++            onDownload = { whisper.models.download(it, settings.whisperWifiOnly) },
++            onDelete = { whisper.models.delete(it) },
++        )
++    }
++}
++
++/** The screen body; [models] lists the models this device can run. */
++@Composable
++internal fun VoiceSettingsContent(
++    settings: FeatureSettings,
++    onUpdate: ((FeatureSettings) -> FeatureSettings) -> Unit,
++    whisperOffered: Boolean,
++    models: Map<WhisperModelSpec, ModelState>,
++    onDownload: (WhisperModelSpec) -> Unit,
++    onDelete: (WhisperModelSpec) -> Unit,
++) {
++    val context = LocalContext.current
++    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
++        Header(stringRes(R.string.voice_settings__engine))
++        Column(modifier = Modifier.selectableGroup()) {
++            val options = buildList {
++                add(Triple(VoiceEnginePreference.AUTO, R.string.voice_settings__engine_auto,
++                    R.string.voice_settings__engine_auto_summary))
++                add(Triple(VoiceEnginePreference.ON_DEVICE, R.string.voice_settings__engine_on_device,
++                    R.string.voice_settings__engine_on_device_summary))
++                if (whisperOffered) {
++                    add(Triple(VoiceEnginePreference.WHISPER, R.string.voice_settings__engine_whisper,
++                        R.string.voice_settings__engine_whisper_summary))
++                }
++            }
++            for ((preference, title, summary) in options) {
++                val selected = settings.voiceEnginePreference == preference
++                ListItem(
++                    modifier = Modifier.selectable(
++                        selected = selected,
++                        role = Role.RadioButton,
++                        onClick = { onUpdate { it.copy(voiceEnginePreference = preference) } },
++                    ),
++                    headlineContent = { Text(stringRes(title)) },
++                    supportingContent = { Text(stringRes(summary)) },
++                    leadingContent = { RadioButton(selected = selected, onClick = null) },
++                )
++            }
++        }
++        val noModel = models.values.none { it == ModelState.READY }
++        if (whisperOffered && settings.voiceEnginePreference == VoiceEnginePreference.WHISPER && noModel) {
++            Text(
++                text = stringRes(R.string.voice_settings__needs_model),
++                style = MaterialTheme.typography.bodyMedium,
++                color = MaterialTheme.colorScheme.error,
++                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
++            )
++        }
++
++        SwitchRow(
++            title = stringRes(R.string.voice_settings__spoken_punctuation),
++            summary = stringRes(R.string.voice_settings__spoken_punctuation_summary),
++            checked = settings.spokenPunctuation,
++            onChange = { on -> onUpdate { it.copy(spokenPunctuation = on) } },
++        )
++
++        val silence = settings.voiceSilenceMs.coerceIn(SILENCE_MIN_MS, SILENCE_MAX_MS)
++        ListItem(
++            headlineContent = { Text(stringRes(R.string.voice_settings__auto_stop)) },
++            supportingContent = {
++                Text(stringRes(R.string.voice_settings__auto_stop_value, "s" to formatSeconds(silence)))
++            },
++        )
++        Slider(
++            value = silence.toFloat(),
++            onValueChange = { value ->
++                val ms = silenceMsFromSlider(value)
++                if (ms != settings.voiceSilenceMs) onUpdate { it.copy(voiceSilenceMs = ms) }
++            },
++            valueRange = SILENCE_MIN_MS.toFloat()..SILENCE_MAX_MS.toFloat(),
++            steps = (SILENCE_MAX_MS - SILENCE_MIN_MS) / SILENCE_STEP_MS - 1,
++            modifier = Modifier.padding(horizontal = 16.dp),
++        )
++
++        if (whisperOffered) {
++            Header(stringRes(R.string.voice_settings__models))
++            for ((spec, state) in models) {
++                val size = Formatter.formatShortFileSize(context, spec.bytes)
++                val status = when (state) {
++                    ModelState.ABSENT -> R.string.voice_settings__model_absent
++                    ModelState.DOWNLOADING -> R.string.voice_settings__model_downloading
++                    ModelState.READY -> R.string.voice_settings__model_ready
++                    ModelState.FAILED -> R.string.voice_settings__model_failed
++                }
++                ListItem(
++                    headlineContent = { Text(stringRes(spec.titleRes())) },
++                    supportingContent = { Text(stringRes(status, "size" to size)) },
++                    trailingContent = {
++                        Row {
++                            when (state) {
++                                ModelState.ABSENT, ModelState.FAILED -> TextButton(onClick = { onDownload(spec) }) {
++                                    Text(stringRes(spec.downloadRes()))
++                                }
++                                ModelState.DOWNLOADING -> TextButton(onClick = { onDelete(spec) }) {
++                                    Text(stringRes(spec.cancelRes()))
++                                }
++                                ModelState.READY -> TextButton(onClick = { onDelete(spec) }) {
++                                    Text(stringRes(spec.deleteRes()))
++                                }
++                            }
++                        }
++                    },
++                )
++            }
++            SwitchRow(
++                title = stringRes(R.string.voice_settings__wifi_only),
++                summary = null,
++                checked = settings.whisperWifiOnly,
++                onChange = { on -> onUpdate { it.copy(whisperWifiOnly = on) } },
++            )
++        }
++    }
++}
++
++@Composable
++private fun Header(text: String) {
++    Text(
++        text = text,
++        style = MaterialTheme.typography.titleSmall,
++        color = MaterialTheme.colorScheme.primary,
++        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
++    )
++}
++
++@Composable
++private fun SwitchRow(title: String, summary: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
++    ListItem(
++        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
++        headlineContent = { Text(title) },
++        supportingContent = summary?.let { { Text(it) } },
++        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
++    )
++}
++
++/** 2000 -> "2", 2500 -> "2.5". */
++private fun formatSeconds(ms: Int): String =
++    if (ms % 1000 == 0) (ms / 1000).toString() else "%.1f".format(ms / 1000f)
++
++private fun WhisperModelSpec.titleRes() = when (this) {
++    WhisperModelSpec.BASE -> R.string.voice_settings__model_base
++    WhisperModelSpec.SMALL -> R.string.voice_settings__model_small
++}
++
++private fun WhisperModelSpec.downloadRes() = when (this) {
++    WhisperModelSpec.BASE -> R.string.voice_settings__download_base
++    WhisperModelSpec.SMALL -> R.string.voice_settings__download_small
++}
++
++private fun WhisperModelSpec.deleteRes() = when (this) {
++    WhisperModelSpec.BASE -> R.string.voice_settings__delete_base
++    WhisperModelSpec.SMALL -> R.string.voice_settings__delete_small
++}
++
++private fun WhisperModelSpec.cancelRes() = when (this) {
++    WhisperModelSpec.BASE -> R.string.voice_settings__cancel_base
++    WhisperModelSpec.SMALL -> R.string.voice_settings__cancel_small
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt
+index 8792f1b2..26153f94 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt
+@@ -26,23 +26,23 @@ import androidx.lifecycle.lifecycleScope
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.app.AppTheme
+ import com.manjul.aikeyboard.app.apptheme.FlorisAppTheme
+ import com.manjul.aikeyboard.appContext
+ import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
+ import com.manjul.aikeyboard.core.analytics.EventCatalog
+ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+ import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
+ import com.manjul.aikeyboard.core.voice.EngineKind
+ import com.manjul.aikeyboard.core.voice.platform.EngineChoice
+-import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
+ import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
+ import com.manjul.aikeyboard.featureSettingsStore
++import com.manjul.aikeyboard.whisperVoice
+ import com.manjul.aikeyboard.fork.onboarding.DisclosureEngineKind
+ import com.manjul.aikeyboard.fork.onboarding.VoiceDisclosureSheet
+ import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.launch
+ import org.florisboard.lib.compose.ProvideLocalizedResources
+ import org.florisboard.lib.compose.stringRes
+ 
+ /**
+  * Microphone permission trampoline for the keyboard, which cannot ask for permissions itself. Opened only by a tap
+  * on the keyboard's permission chip. Shows the voice notice first unless it was agreed to before, asks for
+@@ -154,21 +154,21 @@ class MicPermissionActivity : ComponentActivity() {
+         @VisibleForTesting
+         internal var depsOverride: Deps? = null
+ 
+         fun intent(context: Context, lang: String): Intent =
+             Intent(context, MicPermissionActivity::class.java)
+                 .putExtra(EXTRA_LANG, lang)
+                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+ 
+         private fun defaultDeps(context: Context): Deps {
+             val store = context.featureSettingsStore().value
+-            val selector = SpeechEngineSelector(PlatformRecognizerCapabilities(context))
++            val selector = SpeechEngineSelector(context.whisperVoice().value.capabilities(context))
+             return Deps(
+                 store = store,
+                 analytics = context.appContext().value.analytics.value::log,
+                 engineKind = { lang ->
+                     val preferWhisper = store.current.voiceEnginePreference == VoiceEnginePreference.WHISPER
+                     selector.choose(lang, preferWhisper, isOnline(context)).toDisclosureKind()
+                 },
+                 clock = System::currentTimeMillis,
+             )
+         }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt
+index 7202ac1b..af14683b 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt
+@@ -19,25 +19,25 @@ import android.view.inputmethod.InputConnection
+ import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
+ import com.manjul.aikeyboard.core.analytics.EndReason
+ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+ import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
+ import com.manjul.aikeyboard.core.voice.EngineKind
+ import com.manjul.aikeyboard.core.voice.SpeechEngine
+ import com.manjul.aikeyboard.core.voice.SpeechSession
+ import com.manjul.aikeyboard.core.voice.SpokenPunctuation
+ import com.manjul.aikeyboard.core.voice.VoiceTimings
+ import com.manjul.aikeyboard.core.voice.platform.AudioFocusHolder
+-import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
+ import com.manjul.aikeyboard.core.voice.platform.PlatformSpeechEngine
+ import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
+ import com.manjul.aikeyboard.core.voice.platform.SpeechEngineSelector
+ import com.manjul.aikeyboard.fork.policy.ImePolicyController
++import com.manjul.aikeyboard.whisperVoice
+ import com.manjul.aikeyboard.ime.voiceui.ComposingSpanController
+ import com.manjul.aikeyboard.ime.voiceui.FirstDictationFlag
+ import com.manjul.aikeyboard.ime.voiceui.VoiceController
+ import com.manjul.aikeyboard.ime.voiceui.VoiceEngines
+ import com.manjul.aikeyboard.ime.voiceui.VoiceRequest
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.launch
+ 
+ /**
+  * Voice typing for one IME service instance: wires [VoiceController] to the policy controller, the settings
+@@ -50,44 +50,46 @@ class VoiceImeSession(
+     private val context: Context,
+     private val policy: ImePolicyController,
+     private val store: FeatureSettingsStore,
+     analytics: (AnalyticsEvent) -> Unit,
+     connection: () -> InputConnection?,
+     isRawInputEditor: () -> Boolean,
+     setOwnsComposing: (Boolean) -> Unit,
+     private val lang: () -> String,
+     private val scope: CoroutineScope,
+     private val clock: () -> Long = System::currentTimeMillis,
+-    caps: RecognizerCapabilities = PlatformRecognizerCapabilities(context),
++    caps: RecognizerCapabilities = context.whisperVoice().value.capabilities(context),
+     private val engineFactory: (EngineKind, segmented: Boolean) -> SpeechEngine = { kind, segmented ->
+-        PlatformSpeechEngine(context, onDevice = kind == EngineKind.SYSTEM_ON_DEVICE, segmented = segmented)
++        when (kind) {
++            EngineKind.WHISPER -> context.whisperVoice().value.engine(scope)
++            else -> PlatformSpeechEngine(context, onDevice = kind == EngineKind.SYSTEM_ON_DEVICE, segmented = segmented)
++        }
+     },
+     private val online: () -> Boolean = { isOnline(context) },
+ ) {
+     val span = ComposingSpanController(ImeTextTarget(connection, isRawInputEditor, setOwnsComposing))
+ 
+     val controller = VoiceController(
+         scope = scope,
+         sessionFactory = { factory ->
+             val settings = store.current
+             SpeechSession(
+                 engineFactory = factory,
+                 scope = scope,
+                 timings = VoiceTimings(silenceMs = settings.voiceSilenceMs.toLong()),
+                 punctuation = SpokenPunctuation,
+                 clock = clock,
+                 punctuationEnabled = settings.spokenPunctuation,
+             )
+         },
+         engines = object : VoiceEngines {
+-            // WHISPER has no engine before Task 13: the controller reports it as unavailable.
+-            override fun supports(kind: EngineKind) = kind != EngineKind.WHISPER
++            override fun supports(kind: EngineKind) = true
+             override fun create(kind: EngineKind, segmented: Boolean) = engineFactory(kind, segmented)
+         },
+         selector = SpeechEngineSelector(caps),
+         request = {
+             VoiceRequest(
+                 lang = lang(),
+                 preferWhisper = store.current.voiceEnginePreference == VoiceEnginePreference.WHISPER,
+                 online = online(),
+             )
+         },
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/WhisperVoice.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/WhisperVoice.kt
+new file mode 100644
+index 00000000..bc84881a
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/WhisperVoice.kt
+@@ -0,0 +1,77 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.voice
++
++import android.app.ActivityManager
++import android.content.Context
++import android.os.SystemClock
++import androidx.work.WorkManager
++import com.manjul.aikeyboard.BuildConfig
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
++import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
++import com.manjul.aikeyboard.core.voice.whisper.AudioRecordPcmRecorder
++import com.manjul.aikeyboard.core.voice.whisper.WhisperContexts
++import com.manjul.aikeyboard.core.voice.whisper.WhisperIdleUnloader
++import com.manjul.aikeyboard.core.voice.whisper.WhisperLanguageGate
++import com.manjul.aikeyboard.core.voice.whisper.WhisperModelManager
++import com.manjul.aikeyboard.core.voice.whisper.WhisperSpeechEngine
++import com.manjul.aikeyboard.lib.whisper.WhisperNative
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++
++/**
++ * The app-wide Whisper pieces, owned by FlorisApplication: the loaded model (shared by every engine), its
++ * idle unloader and the model manager. Nothing touches WorkManager or the native library until Whisper is
++ * actually used, so the IME cold start does not pay for it.
++ */
++class WhisperVoice(private val context: Context, analytics: () -> (AnalyticsEvent) -> Unit) {
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
++
++    /** Languages Whisper may serve in this build: all in debug and beta, none in release (decision 5). */
++    val gate = WhisperLanguageGate.parse(BuildConfig.WHISPER_ENABLED_LANGS)
++
++    val contexts = WhisperContexts(WhisperNative)
++
++    val unloader = WhisperIdleUnloader(clock = SystemClock::elapsedRealtime, scope = scope, free = contexts::release)
++
++    val models: WhisperModelManager by lazy {
++        WhisperModelManager(
++            noBackupDir = context.noBackupFilesDir,
++            workManager = WorkManager.getInstance(context),
++            ramBytes = totalRam(context),
++            baseUrl = BuildConfig.WHISPER_MODEL_BASE_URL,
++            analytics = { analytics()(it) },
++            scope = scope,
++        )
++    }
++
++    /** Recognizer capabilities with the Whisper answers filled in from the gate and the downloaded models. */
++    fun capabilities(context: Context): RecognizerCapabilities = PlatformRecognizerCapabilities(
++        context,
++        whisperReady = { lang -> gate.enabled(lang) && models.readyModel() != null },
++        whisperEnabled = gate::enabled,
++    )
++
++    /** A Whisper engine whose callbacks run on [scope] (the IME's main-thread scope). */
++    fun engine(scope: CoroutineScope): SpeechEngine = WhisperSpeechEngine(
++        contexts = contexts,
++        models = models,
++        recorder = AudioRecordPcmRecorder(),
++        scope = scope,
++        idle = unloader,
++    )
++
++    private companion object {
++        fun totalRam(context: Context): Long {
++            val info = ActivityManager.MemoryInfo()
++            context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(info) ?: return 0L
++            return info.totalMem
++        }
++    }
++}
+diff --git a/app/src/main/res/values/strings_fork.xml b/app/src/main/res/values/strings_fork.xml
+index 51713413..b10da627 100644
+--- a/app/src/main/res/values/strings_fork.xml
++++ b/app/src/main/res/values/strings_fork.xml
+@@ -64,11 +64,38 @@
+     <string name="onboarding__voice_notice_on_device" tools:ignore="MissingTranslation">Voice typing uses the on-device speech recognition. Your voice stays on this phone.</string>
+     <string name="onboarding__voice_notice_system" tools:ignore="MissingTranslation">Voice typing uses the speech service on your phone. It may send audio to the service provider to turn it into text.</string>
+     <string name="onboarding__voice_notice_whisper" tools:ignore="MissingTranslation">Voice typing uses a Whisper speech model that runs on your device. Your voice stays on this phone.</string>
+     <string name="onboarding__voice_notice_agree" tools:ignore="MissingTranslation">Agree</string>
+     <string name="onboarding__voice_notice_not_now" tools:ignore="MissingTranslation">Not now</string>
+     <string name="onboarding__home_select_card" tools:ignore="MissingTranslation">Select AI Keyboard as your keyboard</string>
+     <string name="voice__permission_denied_title" tools:ignore="MissingTranslation">Microphone is off</string>
+     <string name="voice__permission_denied_body" tools:ignore="MissingTranslation">Voice typing needs the microphone. You can allow it in the app settings, then tap the mic again.</string>
+     <string name="voice__permission_open_settings" tools:ignore="MissingTranslation">Open app settings</string>
+     <string name="voice__permission_not_now" tools:ignore="MissingTranslation">Not now</string>
++    <string name="voice_settings__title" tools:ignore="MissingTranslation">Voice</string>
++    <string name="voice_settings__engine" tools:ignore="MissingTranslation">Speech engine</string>
++    <string name="voice_settings__engine_auto" tools:ignore="MissingTranslation">Auto</string>
++    <string name="voice_settings__engine_auto_summary" tools:ignore="MissingTranslation">Use the best speech engine this phone has.</string>
++    <string name="voice_settings__engine_on_device" tools:ignore="MissingTranslation">On-device only</string>
++    <string name="voice_settings__engine_on_device_summary" tools:ignore="MissingTranslation">Use only the phone\'s on-device speech recognition.</string>
++    <string name="voice_settings__engine_whisper" tools:ignore="MissingTranslation">Offline (Whisper)</string>
++    <string name="voice_settings__engine_whisper_summary" tools:ignore="MissingTranslation">Use a downloaded Whisper model. Text appears when you stop speaking.</string>
++    <string name="voice_settings__needs_model" tools:ignore="MissingTranslation">Offline (Whisper) needs a model before it can work.</string>
++    <string name="voice_settings__spoken_punctuation" tools:ignore="MissingTranslation">Spoken punctuation</string>
++    <string name="voice_settings__spoken_punctuation_summary" tools:ignore="MissingTranslation">Say "comma" or "full stop" to type the symbol.</string>
++    <string name="voice_settings__auto_stop" tools:ignore="MissingTranslation">Stop after silence</string>
++    <string name="voice_settings__auto_stop_value" tools:ignore="MissingTranslation">{s} seconds</string>
++    <string name="voice_settings__models" tools:ignore="MissingTranslation">Offline models</string>
++    <string name="voice_settings__model_base" tools:ignore="MissingTranslation">Base</string>
++    <string name="voice_settings__model_small" tools:ignore="MissingTranslation">Small</string>
++    <string name="voice_settings__model_absent" tools:ignore="MissingTranslation">Not downloaded, {size}</string>
++    <string name="voice_settings__model_downloading" tools:ignore="MissingTranslation">Downloading, {size}</string>
++    <string name="voice_settings__model_ready" tools:ignore="MissingTranslation">Downloaded, {size}</string>
++    <string name="voice_settings__model_failed" tools:ignore="MissingTranslation">Download failed, {size}</string>
++    <string name="voice_settings__download_base" tools:ignore="MissingTranslation">Download Base</string>
++    <string name="voice_settings__download_small" tools:ignore="MissingTranslation">Download Small</string>
++    <string name="voice_settings__delete_base" tools:ignore="MissingTranslation">Delete Base</string>
++    <string name="voice_settings__delete_small" tools:ignore="MissingTranslation">Delete Small</string>
++    <string name="voice_settings__cancel_base" tools:ignore="MissingTranslation">Cancel Base download</string>
++    <string name="voice_settings__cancel_small" tools:ignore="MissingTranslation">Cancel Small download</string>
++    <string name="voice_settings__wifi_only" tools:ignore="MissingTranslation">Download on Wi-Fi only</string>
+ </resources>
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreenTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreenTest.kt
+index b33f9aeb..51fd4af7 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreenTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreenTest.kt
+@@ -7,36 +7,40 @@ package com.manjul.aikeyboard.fork.onboarding
+ 
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.test.assertIsDisplayed
+ import androidx.compose.ui.test.hasSetTextAction
+ import androidx.compose.ui.test.junit4.createComposeRule
+ import androidx.compose.ui.test.onAllNodesWithText
+ import androidx.compose.ui.test.onNodeWithText
+ import androidx.compose.ui.test.performClick
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.fork.testing.ComposeHostActivityRule
+ import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.runBlocking
+ import org.junit.Rule
+ import org.junit.Test
+ import org.junit.runner.RunWith
+ import org.florisboard.lib.compose.ProvideLocalizedResources
+ import org.robolectric.RobolectricTestRunner
+ import org.robolectric.RuntimeEnvironment
+ import org.robolectric.annotation.Config
+ import kotlin.test.assertEquals
+ import kotlin.test.assertTrue
+ 
+ @RunWith(RobolectricTestRunner::class)
+ @Config(sdk = [34], application = android.app.Application::class)
+ class OnboardingScreenTest {
+-    @get:Rule
++    @get:Rule(order = 0)
++    val host = ComposeHostActivityRule()
++
++    @get:Rule(order = 1)
+     val compose = createComposeRule()
+ 
+     private val store = FeatureSettingsStore(RuntimeEnvironment.getApplication())
+     private var micRequests = 0
+ 
+     private fun show(micGranted: Boolean? = null) = compose.setContent {
+         ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
+         TryItStep(
+             engineKind = { DisclosureEngineKind.ON_DEVICE },
+             store = store,
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/settings/VoiceSettingsTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/settings/VoiceSettingsTest.kt
+new file mode 100644
+index 00000000..ba3cdd13
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/settings/VoiceSettingsTest.kt
+@@ -0,0 +1,146 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.settings
++
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.semantics.SemanticsActions
++import androidx.compose.ui.semantics.SemanticsProperties
++import androidx.compose.ui.test.SemanticsMatcher
++import androidx.compose.ui.test.assertIsDisplayed
++import androidx.compose.ui.test.hasProgressBarRangeInfo
++import androidx.compose.ui.test.junit4.createComposeRule
++import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performClick
++import androidx.compose.ui.test.performScrollTo
++import androidx.compose.ui.test.performSemanticsAction
++import androidx.compose.ui.semantics.ProgressBarRangeInfo
++import com.manjul.aikeyboard.BuildConfig
++import com.manjul.aikeyboard.R
++import com.manjul.aikeyboard.core.datastore.FeatureSettings
++import com.manjul.aikeyboard.core.datastore.VoiceEnginePreference
++import com.manjul.aikeyboard.core.voice.whisper.ModelState
++import com.manjul.aikeyboard.core.voice.whisper.WhisperLanguageGate
++import com.manjul.aikeyboard.core.voice.whisper.WhisperModelSpec
++import com.manjul.aikeyboard.fork.testing.ComposeHostActivityRule
++import org.florisboard.lib.compose.ProvideLocalizedResources
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class VoiceSettingsTest {
++    @get:Rule(order = 0)
++    val host = ComposeHostActivityRule()
++
++    @get:Rule(order = 1)
++    val compose = createComposeRule()
++
++    private var settings by mutableStateOf(FeatureSettings())
++    private val downloads = mutableListOf<Pair<WhisperModelSpec, Boolean>>()
++
++    private fun show(
++        whisperOffered: Boolean = true,
++        models: Map<WhisperModelSpec, ModelState> = mapOf(WhisperModelSpec.BASE to ModelState.ABSENT),
++    ) = compose.setContent {
++        ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
++            VoiceSettingsContent(
++                settings = settings,
++                onUpdate = { settings = it(settings) },
++                whisperOffered = whisperOffered,
++                models = models,
++                onDownload = { downloads += it to settings.whisperWifiOnly },
++                onDelete = {},
++            )
++        }
++    }
++
++    @Test fun sliderValuesMapToTwoToFiveSecondsOnly() {
++        assertEquals(2000, silenceMsFromSlider(-10_000f))
++        assertEquals(2000, silenceMsFromSlider(2000f))
++        assertEquals(2500, silenceMsFromSlider(2600f))
++        assertEquals(5000, silenceMsFromSlider(5000f))
++        assertEquals(5000, silenceMsFromSlider(99_000f))
++    }
++
++    @Test fun theSliderWritesOnlyTwoThousandToFiveThousand() {
++        show()
++        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo(2000f, 2000f..5000f, steps = 5))).assertExists()
++        val slider = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
++        slider.performSemanticsAction(SemanticsActions.SetProgress) { it(9_999f) }
++        compose.waitForIdle()
++        assertEquals(5000, settings.voiceSilenceMs)
++        slider.performSemanticsAction(SemanticsActions.SetProgress) { it(100f) }
++        compose.waitForIdle()
++        assertEquals(2000, settings.voiceSilenceMs)
++        slider.performSemanticsAction(SemanticsActions.SetProgress) { it(3_400f) }
++        compose.waitForIdle()
++        assertEquals(3500, settings.voiceSilenceMs)
++    }
++
++    @Test fun pickingOfflineWithoutAModelShowsTheDownloadRow() {
++        show()
++        assertTrue(compose.onAllNodesWithText(NEEDS_MODEL).isEmpty())
++        compose.onNodeWithText("Offline (Whisper)").performClick()
++        compose.waitForIdle()
++        assertEquals(VoiceEnginePreference.WHISPER, settings.voiceEnginePreference)
++        compose.onNodeWithText(NEEDS_MODEL).performScrollTo().assertIsDisplayed()
++        compose.onNodeWithText("Download Base").performScrollTo().performClick()
++        assertEquals(listOf(WhisperModelSpec.BASE to true), downloads)
++    }
++
++    @Test fun aReadyModelNeedsNoDownloadRow() {
++        settings = FeatureSettings(voiceEnginePreference = VoiceEnginePreference.WHISPER)
++        show(models = mapOf(WhisperModelSpec.BASE to ModelState.READY))
++        assertTrue(compose.onAllNodesWithText(NEEDS_MODEL).isEmpty())
++    }
++
++    @Test fun wifiOnlyIsOnByDefaultAndCanBeTurnedOff() {
++        assertTrue(FeatureSettings().whisperWifiOnly)
++        show()
++        compose.onNodeWithText("Download on Wi-Fi only").performScrollTo().performClick()
++        compose.waitForIdle()
++        assertFalse(settings.whisperWifiOnly)
++    }
++
++    @Test fun withNoWhisperLanguageTheOfflineOptionAndModelsAreHidden() {
++        show(whisperOffered = false)
++        compose.onNodeWithText("Auto").assertIsDisplayed()
++        assertTrue(compose.onAllNodesWithText("Offline (Whisper)").isEmpty())
++        assertTrue(compose.onAllNodesWithText("Offline models").isEmpty())
++    }
++
++    @Test fun releaseHidesWhisperForEveryLanguageAndDebugAndBetaShowAll() {
++        val release = WhisperLanguageGate.parse("")
++        for (lang in listOf("en-US", "hi-IN", "ur", "ar", "pt-BR")) assertFalse(release.enabled(lang), lang)
++        assertFalse(release.anyEnabled)
++
++        // Debug and beta enable every language; release (and benchmark, built from it) none.
++        val built = WhisperLanguageGate.parse(BuildConfig.WHISPER_ENABLED_LANGS)
++        val all = BuildConfig.BUILD_TYPE == "debug" || BuildConfig.BUILD_TYPE == "beta"
++        for (lang in listOf("en-US", "hi-IN", "ur", "ar", "pt-BR")) assertEquals(all, built.enabled(lang), lang)
++        assertEquals(all, built.anyEnabled)
++
++        val some = WhisperLanguageGate.parse("en, hi")
++        assertTrue(some.enabled("en-US") && some.enabled("hi-IN"))
++        assertFalse(some.enabled("ur"))
++    }
++
++    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithText(t: String) =
++        onAllNodes(androidx.compose.ui.test.hasText(t)).fetchSemanticsNodes()
++
++    private companion object {
++        const val NEEDS_MODEL = "Offline (Whisper) needs a model before it can work."
++    }
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/testing/ComposeHostActivityRule.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/testing/ComposeHostActivityRule.kt
+new file mode 100644
+index 00000000..aa5eb4cc
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/testing/ComposeHostActivityRule.kt
+@@ -0,0 +1,37 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.testing
++
++import android.content.ComponentName
++import android.content.Intent
++import android.content.IntentFilter
++import androidx.activity.ComponentActivity
++import org.junit.rules.TestRule
++import org.junit.runner.Description
++import org.junit.runners.model.Statement
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.Shadows.shadowOf
++
++/**
++ * Registers the empty activity `createComposeRule()` launches. `ui-test-manifest` declares it only in the debug
++ * variant (it must never reach a release build), so the beta, release and benchmark unit tests need it added to
++ * Robolectric's package manager. Use with a lower `order` than the compose rule.
++ */
++class ComposeHostActivityRule : TestRule {
++    override fun apply(base: Statement, description: Description): Statement = object : Statement() {
++        override fun evaluate() {
++            val context = RuntimeEnvironment.getApplication()
++            val host = ComponentName(context, ComponentActivity::class.java)
++            val packageManager = shadowOf(context.packageManager)
++            packageManager.addActivityIfNotPresent(host)
++            packageManager.addIntentFilterForActivity(
++                host,
++                IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) },
++            )
++            base.evaluate()
++        }
++    }
++}
+diff --git a/build-logic/convention/src/main/kotlin/com/manjul/aikeyboard/buildlogic/ExportedComponentRules.kt b/build-logic/convention/src/main/kotlin/com/manjul/aikeyboard/buildlogic/ExportedComponentRules.kt
+index 033a4105..13af2794 100644
+--- a/build-logic/convention/src/main/kotlin/com/manjul/aikeyboard/buildlogic/ExportedComponentRules.kt
++++ b/build-logic/convention/src/main/kotlin/com/manjul/aikeyboard/buildlogic/ExportedComponentRules.kt
+@@ -52,20 +52,36 @@ object ExportedComponentRules {
+         "androidx.profileinstaller.ProfileInstallReceiver" to ExportedComponentAllowance(
+             "Baseline profile install/dump hook for adb and benchmarks; DUMP-protected",
+             requiredPermission = "android.permission.DUMP",
+         ),
+         // androidx.compose.ui:ui-tooling is a debugImplementation dependency: Android Studio launches
+         // @Preview composables through it. It must never reach a non-debuggable build.
+         "androidx.compose.ui.tooling.PreviewActivity" to ExportedComponentAllowance(
+             "Android Studio @Preview launcher from ui-tooling (debug builds only)",
+             debuggableOnly = true,
+         ),
++        // androidx.compose.ui:ui-test-manifest is a debugImplementation dependency: Compose unit tests host
++        // their content in this empty activity. It must never reach a non-debuggable build.
++        "androidx.activity.ComponentActivity" to ExportedComponentAllowance(
++            "Compose test host activity from ui-test-manifest (debug builds only)",
++            debuggableOnly = true,
++        ),
++        // androidx.work (Whisper model downloads): JobScheduler binds the job service, and adb can ask for
++        // WorkManager diagnostics. Only the system (BIND_JOB_SERVICE) or shell (DUMP) can reach them.
++        "androidx.work.impl.background.systemjob.SystemJobService" to ExportedComponentAllowance(
++            "WorkManager's JobScheduler service; bound by the system only",
++            requiredPermission = "android.permission.BIND_JOB_SERVICE",
++        ),
++        "androidx.work.impl.diagnostics.DiagnosticsReceiver" to ExportedComponentAllowance(
++            "WorkManager diagnostics dump for adb; DUMP-protected",
++            requiredPermission = "android.permission.DUMP",
++        ),
+     )
+ 
+     /** @return one message per violation; empty when every exported component is allowed. */
+     fun findViolations(
+         manifest: InputStream,
+         allowList: Map<String, ExportedComponentAllowance> = ALLOW_LIST,
+     ): List<String> {
+         val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+         val document = factory.newDocumentBuilder().parse(manifest)
+         val root = document.documentElement
+diff --git a/build-logic/convention/src/test/kotlin/com/manjul/aikeyboard/buildlogic/ExportedComponentRulesTest.kt b/build-logic/convention/src/test/kotlin/com/manjul/aikeyboard/buildlogic/ExportedComponentRulesTest.kt
+index 86c2f3b5..c58ce497 100644
+--- a/build-logic/convention/src/test/kotlin/com/manjul/aikeyboard/buildlogic/ExportedComponentRulesTest.kt
++++ b/build-logic/convention/src/test/kotlin/com/manjul/aikeyboard/buildlogic/ExportedComponentRulesTest.kt
+@@ -85,11 +85,36 @@ class ExportedComponentRulesTest {
+     }
+ 
+     @Test
+     fun `allow-listed component without its permission fails`() {
+         val result = violations(
+             """<receiver android:name="androidx.profileinstaller.ProfileInstallReceiver" android:exported="true" />""",
+         )
+         assertEquals(1, result.size)
+         assertTrue(result.single().contains("android.permission.DUMP"))
+     }
++
++    @Test
++    fun `work manager components pass only with their system permissions`() {
++        val guarded = """
++            <service android:name="androidx.work.impl.background.systemjob.SystemJobService" android:exported="true"
++                android:permission="android.permission.BIND_JOB_SERVICE" />
++            <receiver android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver" android:exported="true"
++                android:permission="android.permission.DUMP" />
++        """
++        assertEquals(emptyList<String>(), violations(appComponents + guarded))
++        val open = """
++            <service android:name="androidx.work.impl.background.systemjob.SystemJobService" android:exported="true" />
++            <receiver android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver" android:exported="true" />
++        """
++        assertEquals(2, violations(open).size)
++    }
++
++    @Test
++    fun `compose test host activity fails in a non-debuggable manifest`() {
++        val result = violations(
++            """<activity android:name="androidx.activity.ComponentActivity" android:exported="true" />""",
++        )
++        assertEquals(1, result.size)
++        assertTrue(result.single().contains("debuggable builds only"))
++    }
+ }
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEnums.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEnums.kt
+index 9d4fb431..d5759a8d 100644
+--- a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEnums.kt
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEnums.kt
+@@ -14,10 +14,19 @@ enum class VoiceEngine(val value: String) {
+     SYSTEM_ON_DEVICE("system_on_device"), SYSTEM_DEFAULT("system_default"), WHISPER("whisper")
+ }
+ 
+ enum class EndReason(val value: String) {
+     USER("user"), SILENCE("silence"), ERROR("error"), CAP("cap"), FIELD_CHANGE("field_change")
+ }
+ 
+ enum class UnavailableReason(val value: String) {
+     NO_SERVICE("no_service"), LANG_UNSUPPORTED("lang_unsupported"), OFFLINE_NO_MODEL("offline_no_model")
+ }
++
++/** Kind of downloadable pack; only [WHISPER] is downloaded so far. */
++enum class PackKind(val value: String) {
++    TRANSLATE("translate"), DICT("dict"), TRANSLIT("translit"), WHISPER("whisper")
++}
++
++enum class PackResult(val value: String) {
++    OK("ok"), FAILED("failed"), HASH_MISMATCH("hash_mismatch"), CANCELLED("cancelled")
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/Buckets.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/Buckets.kt
+index 61a772af..de7a7c06 100644
+--- a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/Buckets.kt
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/Buckets.kt
+@@ -17,11 +17,20 @@ object Buckets {
+ 
+     fun duration(ms: Long): String = seconds(ms / 1000)
+ 
+     fun words(n: Int): String = when {
+         n <= 0 -> "0"
+         n <= 5 -> "1-5"
+         n <= 20 -> "6-20"
+         n <= 50 -> "21-50"
+         else -> "51+"
+     }
++
++    /** Download size in decimal megabytes. */
++    fun megabytes(bytes: Long): String = when {
++        bytes < 50_000_000 -> "0-50"
++        bytes < 100_000_000 -> "50-100"
++        bytes < 250_000_000 -> "100-250"
++        bytes < 500_000_000 -> "250-500"
++        else -> "500+"
++    }
+ }
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt
+index ccc2bdf8..ba332e4f 100644
+--- a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt
+@@ -26,35 +26,39 @@ object EventCatalog {
+     const val IME_SELECTED = "ime_selected"
+     const val LANGUAGES_SET = "languages_set"
+     const val ONBOARDING_COMPLETE = "onboarding_complete"
+     const val IME_SESSION_START = "ime_session_start"
+     const val FIRST_DICTATION = "first_dictation"
+     const val VOICE_SESSION_START = "voice_session_start"
+     const val VOICE_SESSION_END = "voice_session_end"
+     const val VOICE_PERMISSION_RESULT = "voice_permission_result"
+     const val VOICE_UNAVAILABLE = "voice_unavailable"
+     const val PRIVACY_PRIVATE_APP_ADD = "privacy_private_app_add"
++    const val PACK_DOWNLOAD_START = "pack_download_start"
++    const val PACK_DOWNLOAD_DONE = "pack_download_done"
+ 
+     val paramRegistry: Map<String, Set<String>> = mapOf(
+         ONBOARDING_START to setOf("source"),
+         ONBOARDING_STEP_VIEW to setOf("step"),
+         IME_ENABLED to setOf("seconds_since_start_bucket"),
+         IME_SELECTED to setOf("seconds_since_start_bucket"),
+         LANGUAGES_SET to setOf("count", "has_rtl"),
+         ONBOARDING_COMPLETE to setOf("skipped"),
+         IME_SESSION_START to setOf("subtype", "is_sensitive"),
+         FIRST_DICTATION to setOf("lang"),
+         VOICE_SESSION_START to setOf("lang", "engine"),
+         VOICE_SESSION_END to setOf("duration_bucket", "words_bucket", "end_reason", "error_code"),
+         VOICE_PERMISSION_RESULT to setOf("granted"),
+         VOICE_UNAVAILABLE to setOf("reason"),
+         PRIVACY_PRIVATE_APP_ADD to emptySet(),
++        PACK_DOWNLOAD_START to setOf("lang", "kind", "size_bucket"),
++        PACK_DOWNLOAD_DONE to setOf("lang", "kind", "size_bucket", "result"),
+     )
+ 
+     val allNames: List<String> = paramRegistry.keys.toList()
+ 
+     private fun event(name: String, vararg params: Pair<String, Any>): AnalyticsEvent {
+         val allowed = paramRegistry.getValue(name)
+         val map = LinkedHashMap<String, Any>()
+         for ((k, v) in params) {
+             require(k in allowed && k.length <= MAX_KEY) { "param not registered for $name" }
+             map[k] = if (v is String) v.take(MAX_VALUE) else v
+@@ -94,11 +98,23 @@ object EventCatalog {
+         )
+         if (errorCode != null) params += "error_code" to errorCode
+         return event(VOICE_SESSION_END, *params.toTypedArray())
+     }
+ 
+     fun voicePermissionResult(granted: Boolean) = event(VOICE_PERMISSION_RESULT, "granted" to granted)
+ 
+     fun voiceUnavailable(reason: UnavailableReason) = event(VOICE_UNAVAILABLE, "reason" to reason.value)
+ 
+     fun privacyPrivateAppAdd() = event(PRIVACY_PRIVATE_APP_ADD)
++
++    /** [lang] is the pack's language tag ("mul" for multilingual packs); [bytes] is only reported as a bucket. */
++    fun packDownloadStart(lang: String, kind: PackKind, bytes: Long) =
++        event(PACK_DOWNLOAD_START, "lang" to tag(lang), "kind" to kind.value, "size_bucket" to Buckets.megabytes(bytes))
++
++    fun packDownloadDone(lang: String, kind: PackKind, bytes: Long, result: PackResult) = event(
++        PACK_DOWNLOAD_DONE,
++        "lang" to tag(lang),
++        "kind" to kind.value,
++        "size_bucket" to Buckets.megabytes(bytes),
++        "result" to result.value,
++    )
+ }
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BucketsTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BucketsTest.kt
+index 3db5e5c9..cb564e4c 100644
+--- a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BucketsTest.kt
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BucketsTest.kt
+@@ -22,11 +22,19 @@ class BucketsTest {
+         assertEquals("5-15", Buckets.duration(5_000))
+         assertEquals("300+", Buckets.duration(300_000))
+     }
+ 
+     @Test fun words() {
+         val cases = mapOf(
+             0 to "0", 1 to "1-5", 5 to "1-5", 6 to "6-20", 20 to "6-20", 21 to "21-50", 50 to "21-50", 51 to "51+",
+         )
+         cases.forEach { (n, b) -> assertEquals(b, Buckets.words(n), "words($n)") }
+     }
++
++    @Test fun megabytes() {
++        val cases = mapOf(
++            -1L to "0-50", 0L to "0-50", 49_999_999L to "0-50", 50_000_000L to "50-100", 99_999_999L to "50-100",
++            100_000_000L to "100-250", 250_000_000L to "250-500", 499_999_999L to "250-500", 500_000_000L to "500+",
++        )
++        cases.forEach { (b, bucket) -> assertEquals(bucket, Buckets.megabytes(b), "megabytes($b)") }
++    }
+ }
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt
+index 5082ba4d..79ed8d9f 100644
+--- a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt
+@@ -22,34 +22,37 @@ class EventCatalogLimitsTest {
+         EventCatalog.onboardingComplete(false),
+         EventCatalog.imeSessionStart(big, false),
+         EventCatalog.imeSessionStart("en-US", true),
+         EventCatalog.firstDictation(big),
+         EventCatalog.voiceSessionStart(big, VoiceEngine.WHISPER),
+         EventCatalog.voiceSessionEnd(Long.MAX_VALUE, Int.MAX_VALUE, EndReason.FIELD_CHANGE, Int.MAX_VALUE),
+         EventCatalog.voiceSessionEnd(0, 0, EndReason.USER, null),
+         EventCatalog.voicePermissionResult(true),
+         EventCatalog.voiceUnavailable(UnavailableReason.OFFLINE_NO_MODEL),
+         EventCatalog.privacyPrivateAppAdd(),
++        EventCatalog.packDownloadStart(big, PackKind.WHISPER, Long.MAX_VALUE),
++        EventCatalog.packDownloadDone("mul", PackKind.WHISPER, -1, PackResult.HASH_MISMATCH),
+     )
+ 
+     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
+         for ((name, keys) in EventCatalog.paramRegistry) {
+             val produced = all.filter { it.name == name }.flatMap { it.params.keys }.toSet()
+             assertEquals(keys, produced, name)
+         }
+     }
+ 
+     @Test fun nonLanguageStringsBecomeOther() {
+         for (bad in listOf("com.bank.app", "hello world", "", big, "QWERTY layout", "en-US; DROP")) {
+             assertEquals("other", EventCatalog.imeSessionStart(bad, false).params["subtype"], bad)
+             assertEquals("other", EventCatalog.firstDictation(bad).params["lang"], bad)
+             assertEquals("other", EventCatalog.voiceSessionStart(bad, VoiceEngine.WHISPER).params["lang"], bad)
++            assertEquals("other", EventCatalog.packDownloadStart(bad, PackKind.WHISPER, 0).params["lang"], bad)
+         }
+         assertEquals("ur", EventCatalog.firstDictation("ur").params["lang"])
+         assertEquals("en-US", EventCatalog.imeSessionStart("en-US", false).params["subtype"])
+         assertEquals("zh_Hans_CN", EventCatalog.firstDictation("zh_Hans_CN").params["lang"])
+     }
+ 
+     @Test fun limitsHold() {
+         val nameRe = Regex("^[a-z][a-z0-9_]{0,39}$")
+         for (e in all) {
+             assertTrue(nameRe.matches(e.name), e.name)
+@@ -60,20 +63,29 @@ class EventCatalogLimitsTest {
+                 assertTrue(k in registry, "${e.name}.$k")
+                 if (v is String) assertTrue(v.length <= 100)
+             }
+         }
+     }
+ 
+     @Test fun nullErrorCodeIsOmitted() {
+         assertFalse("error_code" in EventCatalog.voiceSessionEnd(0, 0, EndReason.USER, null).params)
+     }
+ 
++    @Test fun packDownloadsCarryOnlyClosedValues() {
++        val done = EventCatalog.packDownloadDone("mul", PackKind.WHISPER, 57_000_000, PackResult.OK)
++        assertEquals(
++            mapOf("lang" to "mul", "kind" to "whisper", "size_bucket" to "50-100", "result" to "ok"),
++            done.params,
++        )
++    }
++
+     @Test fun namesMatchPrd() {
+         val expected = setOf(
+             "onboarding_start", "onboarding_step_view", "ime_enabled", "ime_selected", "languages_set",
+             "onboarding_complete", "ime_session_start", "first_dictation", "voice_session_start",
+             "voice_session_end", "voice_permission_result", "voice_unavailable", "privacy_private_app_add",
++            "pack_download_start", "pack_download_done",
+         )
+         assertEquals(expected, EventCatalog.allNames.toSet())
+         assertFalse("first_keystroke" in EventCatalog.allNames)
+     }
+ }
+diff --git a/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt b/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt
+index 3c322e1a..29d2a629 100644
+--- a/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt
++++ b/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt
+@@ -24,11 +24,13 @@ data class FeatureSettings(
+     val voiceSilenceMs: Int = 2000,
+     val spokenPunctuation: Boolean = true,
+     val onboardingStep: Int = 0,
+     val onboardingDone: Boolean = false,
+     val firstOpenAt: Long = 0L,
+     val translatePair: LanguagePair? = null,
+     val consentVoiceNoticeAt: Long = 0L,
+     val analyticsOptOut: Boolean = false,
+     /** When the first dictation with words was logged (first_dictation is sent once per install); 0 = never. */
+     val firstDictationAt: Long = 0L,
++    /** Whisper model downloads wait for an unmetered network (Wi-Fi). */
++    val whisperWifiOnly: Boolean = true,
+ )
+diff --git a/core/voice/build.gradle.kts b/core/voice/build.gradle.kts
+index 4f6c1cba..94a88827 100644
+--- a/core/voice/build.gradle.kts
++++ b/core/voice/build.gradle.kts
+@@ -1,31 +1,37 @@
+ /*
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ // :core:voice: speech session state machine, error policy and spoken punctuation. Engines (platform, Whisper)
+-// plug in through SpeechEngine. No transcript text is ever logged.
++// plug in through SpeechEngine. The Whisper engine, its model manager and the model download worker live in
++// the whisper package. No transcript text is ever logged.
+ 
+ plugins {
+     alias(libs.plugins.aikeyboard.android.library)
+ }
+ 
+ apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
+ 
+ android {
+     namespace = "com.manjul.aikeyboard.core.voice"
+ 
+     testOptions {
+         unitTests.isIncludeAndroidResources = true
+     }
+ }
+ 
+ dependencies {
+     api(libs.kotlinx.coroutines)
++    api(projects.lib.whisper)
++    api(libs.androidx.work.runtime)
++    implementation(projects.core.analytics)
+ 
+     testImplementation(libs.kotlinx.coroutines.test)
+     testImplementation(libs.junit4)
+     testImplementation(libs.turbine)
+     testImplementation(libs.robolectric)
++    testImplementation(libs.androidx.work.testing)
++    testImplementation(libs.mockwebserver)
+     testRuntimeOnly(libs.junit.vintage.engine)
+ }
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt
+index 2b3a10d7..4a62a4ac 100644
+--- a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt
+@@ -30,24 +30,29 @@ interface RecognizerCapabilities {
+ 
+ /** True when [installed] has [lang] by exact tag or by language subtag alone (case-insensitive). */
+ internal fun languageInstalled(lang: String, installed: Collection<String>): Boolean {
+     val tag = lang.lowercase()
+     val language = tag.substringBefore('-')
+     return installed.any { val t = it.lowercase(); t == tag || t.substringBefore('-') == language }
+ }
+ 
+ private const val SUPPORT_CHECK_TIMEOUT_MS = 1_500L
+ 
+-/** Platform-backed capabilities. The whisper* answers are false until the Whisper engine is wired in. */
++/**
++ * Platform-backed capabilities. The whisper* answers come from the app (the model manager and the Whisper
++ * language gate) and are false when not supplied.
++ */
+ class PlatformRecognizerCapabilities(
+     private val context: Context,
+     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
++    private val whisperReady: (lang: String) -> Boolean = { false },
++    private val whisperEnabled: (lang: String) -> Boolean = { false },
+ ) : RecognizerCapabilities {
+     override val sdkInt: Int get() = Build.VERSION.SDK_INT
+ 
+     override fun isRecognitionAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
+ 
+     override fun isOnDeviceAvailable(): Boolean =
+         sdkInt >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+ 
+     override suspend fun onDeviceSupports(lang: String): Boolean? {
+         if (sdkInt < Build.VERSION_CODES.TIRAMISU) return null
+@@ -81,14 +86,14 @@ class PlatformRecognizerCapabilities(
+                         )
+                     }.onFailure {
+                         runCatching { recognizer?.destroy() }
+                         if (cont.isActive) cont.resume(null)
+                     }
+                 }
+             }
+         }
+     }
+ 
+-    override fun whisperModelReady(lang: String): Boolean = false
++    override fun whisperModelReady(lang: String): Boolean = whisperReady(lang)
+ 
+-    override fun whisperLangEnabled(lang: String): Boolean = false
++    override fun whisperLangEnabled(lang: String): Boolean = whisperEnabled(lang)
+ }
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/ModelDownloadWorker.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/ModelDownloadWorker.kt
+new file mode 100644
+index 00000000..07cacb67
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/ModelDownloadWorker.kt
+@@ -0,0 +1,45 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import android.content.Context
++import androidx.work.ListenableWorker
++import androidx.work.Worker
++import androidx.work.WorkerFactory
++import androidx.work.WorkerParameters
++
++/**
++ * Downloads one Whisper model (see [WhisperModelManager.download]). The input names the model enum only;
++ * the URL and paths come from the manager, and nothing is logged.
++ */
++class ModelDownloadWorker(
++    context: Context,
++    params: WorkerParameters,
++    private val manager: WhisperModelManager,
++) : Worker(context, params) {
++    override fun doWork(): Result {
++        val name = inputData.getString(KEY_SPEC)
++        val spec = WhisperModelSpec.entries.firstOrNull { it.name == name } ?: return Result.failure()
++        return manager.runDownload(spec, id, runAttemptCount) { isStopped }
++    }
++
++    companion object {
++        const val KEY_SPEC = "spec"
++    }
++}
++
++/** Builds [ModelDownloadWorker]s with the app's [WhisperModelManager]; other workers fall back to the default. */
++class ModelDownloadWorkerFactory(private val manager: () -> WhisperModelManager) : WorkerFactory() {
++    override fun createWorker(
++        appContext: Context,
++        workerClassName: String,
++        workerParameters: WorkerParameters,
++    ): ListenableWorker? = if (workerClassName == ModelDownloadWorker::class.java.name) {
++        ModelDownloadWorker(appContext, workerParameters, manager())
++    } else {
++        null
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/PcmRecorder.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/PcmRecorder.kt
+new file mode 100644
+index 00000000..762d96af
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/PcmRecorder.kt
+@@ -0,0 +1,97 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import android.annotation.SuppressLint
++import android.media.AudioFormat
++import android.media.AudioRecord
++import android.media.MediaRecorder
++
++/** 16 kHz mono microphone capture for the Whisper engine. Audio stays in memory and never leaves the phone. */
++interface PcmRecorder {
++    /**
++     * Starts capturing. [onSamples] runs on a capture thread with samples in [-1, 1] and the number of valid
++     * samples; the array is reused between calls. Returns false if the microphone cannot be opened.
++     *
++     * @throws SecurityException if RECORD_AUDIO is not granted.
++     */
++    fun start(onSamples: (FloatArray, Int) -> Unit): Boolean
++
++    /** Stops capturing; no [onSamples] call happens after it returns. Safe to call when not started. */
++    fun stop()
++}
++
++/** [PcmRecorder] over [AudioRecord] (VOICE_RECOGNITION source, so the platform's voice processing applies). */
++class AudioRecordPcmRecorder : PcmRecorder {
++    @Volatile private var running = false
++    private var record: AudioRecord? = null
++    private var thread: Thread? = null
++
++    // Callers hold RECORD_AUDIO before starting a voice session; a revoked grant surfaces as SecurityException.
++    @SuppressLint("MissingPermission")
++    override fun start(onSamples: (FloatArray, Int) -> Unit): Boolean {
++        stop()
++        val minBytes = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL, ENCODING)
++        if (minBytes <= 0) return false
++        val r = try {
++            val source = MediaRecorder.AudioSource.VOICE_RECOGNITION
++            AudioRecord(source, SAMPLE_RATE, CHANNEL, ENCODING, maxOf(minBytes, CHUNK * 4))
++        } catch (e: IllegalArgumentException) {
++            return false
++        }
++        if (r.state != AudioRecord.STATE_INITIALIZED) {
++            r.release()
++            return false
++        }
++        try {
++            r.startRecording()
++        } catch (e: IllegalStateException) {
++            r.release()
++            return false
++        }
++        if (r.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
++            r.release()
++            return false
++        }
++        running = true
++        record = r
++        thread = Thread({ capture(r, onSamples) }, "aikb-whisper-mic").apply { start() }
++        return true
++    }
++
++    private fun capture(r: AudioRecord, onSamples: (FloatArray, Int) -> Unit) {
++        val shorts = ShortArray(CHUNK)
++        val floats = FloatArray(CHUNK)
++        while (running) {
++            val n = r.read(shorts, 0, CHUNK)
++            if (n < 0) break
++            if (n == 0) continue
++            for (i in 0 until n) floats[i] = shorts[i] / 32768f
++            if (running) onSamples(floats, n)
++        }
++        shorts.fill(0)
++        floats.fill(0f)
++    }
++
++    override fun stop() {
++        running = false
++        val r = record ?: return
++        record = null
++        runCatching { r.stop() }
++        // A read returns within one chunk (100 ms) once recording stops.
++        thread?.join(JOIN_TIMEOUT_MS)
++        thread = null
++        r.release()
++    }
++
++    private companion object {
++        const val SAMPLE_RATE = 16_000
++        const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
++        const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
++        const val CHUNK = 1_600
++        const val JOIN_TIMEOUT_MS = 500L
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperContexts.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperContexts.kt
+new file mode 100644
+index 00000000..9806dd62
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperContexts.kt
+@@ -0,0 +1,102 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import com.manjul.aikeyboard.lib.whisper.WhisperApi
++import com.manjul.aikeyboard.lib.whisper.WhisperException
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/**
++ * The process-wide loaded Whisper model, shared by every [WhisperSpeechEngine]. Loads and transcriptions are
++ * serialised (one context runs one transcription at a time) and must run off the main thread. [abort] and
++ * [release] never block, so they are safe from the main thread.
++ */
++class WhisperContexts(
++    private val api: WhisperApi,
++    private val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(1, MAX_THREADS),
++) {
++    private val mutex = Mutex()
++    private val lock = Any()
++    private var ctx = 0L
++    private var loadedPath: String? = null
++    private var owner: Any? = null
++    private var releaseWhenDone = false
++    private var aborts = 0
++
++    /** Loads [modelPath] ahead of [transcribe]. Load failures are left for [transcribe] to report. */
++    suspend fun preload(modelPath: String) = mutex.withLock {
++        runCatching { acquire(modelPath, owner = null) }
++        synchronized(lock) { finishUse() }
++    }
++
++    /**
++     * Transcribes on the calling thread. [owner] identifies the caller for [abort].
++     *
++     * @throws WhisperException if the model cannot be loaded or whisper.cpp fails or was aborted.
++     * @throws IllegalArgumentException if the context was freed under the call.
++     * @throws IllegalStateException if the context is busy.
++     */
++    suspend fun transcribe(owner: Any, modelPath: String, pcm: FloatArray, lang: String): String = mutex.withLock {
++        try {
++            api.transcribe(acquire(modelPath, owner), pcm, lang)
++        } finally {
++            synchronized(lock) { finishUse() }
++        }
++    }
++
++    /** Aborts [owner]'s running transcription by freeing the context; it then throws. No-op for other callers. */
++    fun abort(owner: Any) = synchronized(lock) {
++        if (this.owner === owner) {
++            aborts++
++            freeLocked()
++        }
++    }
++
++    /** Frees the model now, or after the running transcription when one is in flight. */
++    fun release() = synchronized(lock) {
++        if (owner != null) releaseWhenDone = true else freeLocked()
++    }
++
++    private fun acquire(modelPath: String, owner: Any?): Long {
++        val seen = synchronized(lock) {
++            this.owner = owner
++            if (ctx != 0L && loadedPath == modelPath) return ctx
++            freeLocked()
++            aborts
++        }
++        val handle = api.load(modelPath, threads)
++        synchronized(lock) {
++            if (handle == 0L) throw WhisperException("model could not be loaded")
++            if (aborts != seen) {
++                api.free(handle)
++                throw WhisperException("aborted while loading")
++            }
++            ctx = handle
++            loadedPath = modelPath
++            return handle
++        }
++    }
++
++    private fun finishUse() {
++        owner = null
++        if (releaseWhenDone) {
++            releaseWhenDone = false
++            freeLocked()
++        }
++    }
++
++    private fun freeLocked() {
++        val handle = ctx
++        ctx = 0L
++        loadedPath = null
++        if (handle != 0L) api.free(handle)
++    }
++
++    private companion object {
++        const val MAX_THREADS = 4
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloader.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloader.kt
+new file mode 100644
+index 00000000..147df5ea
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloader.kt
+@@ -0,0 +1,58 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import android.content.ComponentCallbacks2
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.launch
++
++/**
++ * Frees the loaded Whisper model [IDLE_MS] after the last [touch], or at once when the system reports
++ * memory pressure ([onTrimMemory] with a level of at least TRIM_MEMORY_RUNNING_LOW). [free] must not block:
++ * it runs on the main thread from onTrimMemory. The model is loaded again on next use.
++ */
++class WhisperIdleUnloader(
++    private val clock: () -> Long,
++    private val scope: CoroutineScope,
++    private val free: () -> Unit,
++) {
++    private val lock = Any()
++    private var lastUse = 0L
++    private var job: Job? = null
++
++    fun touch() {
++        synchronized(lock) {
++            lastUse = clock()
++            if (job?.isActive != true) job = scope.launch { freeWhenIdle() }
++        }
++    }
++
++    @Suppress("DEPRECATION") // TRIM_MEMORY_RUNNING_LOW is still delivered below API 34.
++    fun onTrimMemory(level: Int) {
++        if (level < ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) return
++        synchronized(lock) {
++            job?.cancel()
++            job = null
++        }
++        free()
++    }
++
++    private suspend fun freeWhenIdle() {
++        while (true) {
++            val wait = synchronized(lock) { lastUse + IDLE_MS - clock() }
++            if (wait <= 0) break
++            delay(wait)
++        }
++        synchronized(lock) { job = null }
++        free()
++    }
++
++    companion object {
++        const val IDLE_MS = 60_000L
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperLanguageGate.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperLanguageGate.kt
+new file mode 100644
+index 00000000..defe741d
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperLanguageGate.kt
+@@ -0,0 +1,25 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++/**
++ * Subtype languages that may dictate with Whisper. Built from a build config list: "*" enables every
++ * language (debug and beta), "" none (release until accuracy is checked per language), otherwise
++ * comma-separated language subtags such as "en,hi".
++ */
++class WhisperLanguageGate private constructor(private val languages: Set<String>?) {
++    val anyEnabled: Boolean get() = languages == null || languages.isNotEmpty()
++
++    fun enabled(lang: String): Boolean =
++        languages == null || WhisperSpeechEngine.whisperLanguage(lang) in languages
++
++    companion object {
++        fun parse(list: String): WhisperLanguageGate {
++            if (list.trim() == "*") return WhisperLanguageGate(null)
++            return WhisperLanguageGate(list.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet())
++        }
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelManager.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelManager.kt
+new file mode 100644
+index 00000000..78d789ab
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelManager.kt
+@@ -0,0 +1,284 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import androidx.work.BackoffPolicy
++import androidx.work.Constraints
++import androidx.work.ExistingWorkPolicy
++import androidx.work.ListenableWorker
++import androidx.work.NetworkType
++import androidx.work.OneTimeWorkRequestBuilder
++import androidx.work.WorkManager
++import androidx.work.workDataOf
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.analytics.EventCatalog
++import com.manjul.aikeyboard.core.analytics.PackKind
++import com.manjul.aikeyboard.core.analytics.PackResult
++import java.io.File
++import java.io.FileInputStream
++import java.io.FileOutputStream
++import java.io.IOException
++import java.net.HttpURLConnection
++import java.net.URL
++import java.security.MessageDigest
++import java.util.UUID
++import java.util.concurrent.TimeUnit
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.coroutines.launch
++
++enum class ModelState { ABSENT, DOWNLOADING, READY, FAILED }
++
++/**
++ * Whisper model files in `<noBackupDir>/models/` (never backed up). A download is unique WorkManager work
++ * per model ([ModelDownloadWorker]): the file is written to `<name>.part`, SHA-256 verified against the
++ * pinned hash and only then renamed. A model whose pinned hash is empty is never downloaded (fails closed).
++ *
++ * [baseUrl] ends with "/" and the file name is appended. [scope] runs blocking WorkManager queries (an IO
++ * scope in the app). Nothing here logs; [analytics] only gets closed values.
++ */
++class WhisperModelManager(
++    noBackupDir: File,
++    private val workManager: WorkManager,
++    private val ramBytes: Long,
++    private val baseUrl: String,
++    private val pinnedSha256: (WhisperModelSpec) -> String = { it.sha256 },
++    private val analytics: (AnalyticsEvent) -> Unit = {},
++    scope: CoroutineScope,
++) : WhisperModelSource {
++    val modelsDir = File(noBackupDir, MODELS_DIR)
++
++    private val _states = MutableStateFlow(
++        WhisperModelSpec.entries.associateWith { if (file(it).isFile) ModelState.READY else ModelState.ABSENT },
++    )
++    val states: StateFlow<Map<WhisperModelSpec, ModelState>> = _states.asStateFlow()
++
++    /** The request id of each model's current download; results of older (cancelled) requests are ignored. */
++    private val requests = HashMap<WhisperModelSpec, UUID>()
++
++    init {
++        scope.launch { restoreDownloads() }
++    }
++
++    /** Models this device can run: [WhisperModelSpec.SMALL] needs 6 GiB of RAM. */
++    fun offered(): List<WhisperModelSpec> = WhisperModelSpec.entries.filter { ramBytes >= it.minRamBytes }
++
++    /** The largest downloaded model this device can run, or null. */
++    fun readyModel(): WhisperModelSpec? =
++        offered().filter { _states.value[it] == ModelState.READY }.maxByOrNull { it.bytes }
++
++    override fun readyModelPath(): String? = readyModel()?.let { file(it).path }
++
++    fun download(spec: WhisperModelSpec, wifiOnly: Boolean) {
++        if (spec !in offered()) return
++        val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
++            .setConstraints(
++                Constraints.Builder()
++                    .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
++                    .setRequiresStorageNotLow(true)
++                    .build(),
++            )
++            .setInputData(workDataOf(ModelDownloadWorker.KEY_SPEC to spec.name))
++            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
++            .build()
++        synchronized(requests) {
++            val state = _states.value[spec]
++            if (state == ModelState.READY || state == ModelState.DOWNLOADING) return
++            requests[spec] = request.id
++            setState(spec, ModelState.DOWNLOADING)
++        }
++        analytics(EventCatalog.packDownloadStart(LANG, PackKind.WHISPER, spec.bytes))
++        workManager.enqueueUniqueWork(workName(spec), ExistingWorkPolicy.KEEP, request)
++    }
++
++    /** Cancels a running download and deletes the model and any partial file. */
++    fun delete(spec: WhisperModelSpec) {
++        synchronized(requests) {
++            requests.remove(spec)
++            setState(spec, ModelState.ABSENT)
++        }
++        workManager.cancelUniqueWork(workName(spec))
++        file(spec).delete()
++        partFile(spec).delete()
++    }
++
++    internal fun workName(spec: WhisperModelSpec) = "whisper_model_" + spec.name.lowercase()
++
++    private fun file(spec: WhisperModelSpec) = File(modelsDir, spec.fileName)
++
++    private fun partFile(spec: WhisperModelSpec) = File(modelsDir, spec.fileName + PART_SUFFIX)
++
++    private fun setState(spec: WhisperModelSpec, state: ModelState) = _states.update { it + (spec to state) }
++
++    /** Marks downloads WorkManager still holds after a restart; drops partial files nobody will finish. */
++    private fun restoreDownloads() {
++        for (spec in WhisperModelSpec.entries) {
++            val pending = runCatching { workManager.getWorkInfosForUniqueWork(workName(spec)).get() }
++                .getOrDefault(emptyList())
++                .firstOrNull { !it.state.isFinished }
++            synchronized(requests) {
++                if (pending != null && _states.value[spec] == ModelState.ABSENT) {
++                    requests[spec] = pending.id
++                    setState(spec, ModelState.DOWNLOADING)
++                } else if (pending == null && _states.value[spec] != ModelState.DOWNLOADING) {
++                    partFile(spec).delete()
++                }
++            }
++        }
++    }
++
++    /**
++     * Runs one download attempt for the worker with [requestId]. Blocking; [isStopped] is polled while
++     * streaming. A system stop (constraints lost, time limit) keeps the partial file so the retry resumes it.
++     */
++    internal fun runDownload(
++        spec: WhisperModelSpec,
++        requestId: UUID,
++        runAttempt: Int,
++        isStopped: () -> Boolean,
++    ): ListenableWorker.Result {
++        adopt(spec, requestId)
++        val expected = pinnedSha256(spec).lowercase()
++        if (!SHA256_HEX.matches(expected)) return finish(spec, requestId, PackResult.HASH_MISMATCH)
++        val part = partFile(spec)
++        val outcome = try {
++            modelsDir.mkdirs()
++            if (modelsDir.usableSpace < spec.bytes + FREE_SPACE_MARGIN) {
++                Outcome.Done(PackResult.FAILED)
++            } else {
++                fetch(spec, part, expected, isStopped)
++            }
++        } catch (e: IOException) {
++            Outcome.Retry
++        }
++        return when (outcome) {
++            Outcome.Stopped -> {
++                if (isCurrent(spec, requestId)) return ListenableWorker.Result.retry()
++                part.delete()
++                finish(spec, requestId, PackResult.CANCELLED)
++            }
++            Outcome.Retry -> {
++                if (runAttempt + 1 < MAX_ATTEMPTS && isCurrent(spec, requestId)) return ListenableWorker.Result.retry()
++                part.delete()
++                finish(spec, requestId, PackResult.FAILED)
++            }
++            is Outcome.Done -> {
++                if (outcome.result != PackResult.OK) part.delete()
++                finish(spec, requestId, outcome.result)
++            }
++        }
++    }
++
++    private sealed interface Outcome {
++        data object Stopped : Outcome
++        data object Retry : Outcome
++        data class Done(val result: PackResult) : Outcome
++    }
++
++    private fun fetch(spec: WhisperModelSpec, part: File, expected: String, isStopped: () -> Boolean): Outcome {
++        val digest = MessageDigest.getInstance("SHA-256")
++        var have = if (part.isFile) part.length() else 0L
++        val limit = spec.bytes * SIZE_CAP_FACTOR
++        if (have > limit) {
++            part.delete()
++            have = 0L
++        }
++        val connection = URL(baseUrl + spec.fileName).openConnection() as HttpURLConnection
++        try {
++            connection.connectTimeout = TIMEOUT_MS
++            connection.readTimeout = TIMEOUT_MS
++            connection.instanceFollowRedirects = true
++            if (have > 0) connection.setRequestProperty("Range", "bytes=$have-")
++            val append = when (connection.responseCode) {
++                HttpURLConnection.HTTP_PARTIAL -> have > 0
++                HttpURLConnection.HTTP_OK -> false
++                in SERVER_ERRORS -> throw IOException("server error")
++                else -> return Outcome.Done(PackResult.FAILED)
++            }
++            if (append) {
++                FileInputStream(part).use { input ->
++                    val buffer = ByteArray(BUFFER_BYTES)
++                    while (true) {
++                        val n = input.read(buffer)
++                        if (n < 0) break
++                        digest.update(buffer, 0, n)
++                    }
++                }
++            } else {
++                have = 0L
++            }
++            FileOutputStream(part, append).use { out ->
++                connection.inputStream.use { input ->
++                    val buffer = ByteArray(BUFFER_BYTES)
++                    while (true) {
++                        if (isStopped()) return Outcome.Stopped
++                        val n = input.read(buffer)
++                        if (n < 0) break
++                        have += n
++                        if (have > limit) return Outcome.Done(PackResult.FAILED)
++                        digest.update(buffer, 0, n)
++                        out.write(buffer, 0, n)
++                    }
++                }
++                out.fd.sync()
++            }
++        } finally {
++            connection.disconnect()
++        }
++        val actual = digest.digest().joinToString("") { "%02x".format(it) }
++        if (actual != expected) return Outcome.Done(PackResult.HASH_MISMATCH)
++        val dest = file(spec)
++        dest.delete()
++        if (!part.renameTo(dest)) return Outcome.Done(PackResult.FAILED)
++        return Outcome.Done(PackResult.OK)
++    }
++
++    private fun isCurrent(spec: WhisperModelSpec, requestId: UUID) =
++        synchronized(requests) { requests[spec] == requestId }
++
++    /** A download WorkManager resumed after a restart, before [restoreDownloads] saw it. */
++    private fun adopt(spec: WhisperModelSpec, requestId: UUID) = synchronized(requests) {
++        if (requests[spec] == null && _states.value[spec] != ModelState.READY) {
++            requests[spec] = requestId
++            setState(spec, ModelState.DOWNLOADING)
++        }
++    }
++
++    private fun finish(spec: WhisperModelSpec, requestId: UUID, result: PackResult): ListenableWorker.Result {
++        val current = synchronized(requests) {
++            val current = requests[spec] == requestId
++            if (current) {
++                requests.remove(spec)
++                val ready = result == PackResult.OK && file(spec).isFile
++                setState(spec, if (ready) ModelState.READY else ModelState.FAILED)
++            }
++            current
++        }
++        if (current || result == PackResult.CANCELLED) {
++            analytics(EventCatalog.packDownloadDone(LANG, PackKind.WHISPER, spec.bytes, result))
++        }
++        return if (result == PackResult.OK) ListenableWorker.Result.success() else ListenableWorker.Result.failure()
++    }
++
++    companion object {
++        const val MODELS_DIR = "models"
++        private const val PART_SUFFIX = ".part"
++
++        /** Whisper models are multilingual. */
++        private const val LANG = "mul"
++        private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
++        private const val MAX_ATTEMPTS = 3
++        private const val BACKOFF_SECONDS = 30L
++        private const val TIMEOUT_MS = 30_000
++        private const val BUFFER_BYTES = 64 * 1024
++        private const val SIZE_CAP_FACTOR = 2
++        private const val FREE_SPACE_MARGIN = 50_000_000L
++        private val SERVER_ERRORS = 500..599
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelSpec.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelSpec.kt
+new file mode 100644
+index 00000000..bbb90741
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelSpec.kt
+@@ -0,0 +1,28 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++/**
++ * Downloadable Whisper models: multilingual whisper.cpp ggml files, Q5_1 quantised.
++ *
++ * Sources (ggml-org/whisper.cpp, master, checked 2026-10-19):
++ * - file names: `models/download-ggml-model.sh` (`base-q5_1`, `small-q5_1`).
++ * - [bytes]: `examples/whisper.wasm/index-tmpl.html` ("base (Q5_1, 57 MB)", "small (Q5_1, 182 MB)"). These are
++ *   rounded, so they are used for display, the free-space check and the download size cap only, never to
++ *   verify a file.
++ * - [sha256]: whisper.cpp publishes no SHA-256 for these files (`models/README.md` lists SHA-1 for the
++ *   unquantised models only). Each is empty until the hosted file is pinned, and an empty hash fails every
++ *   download closed (see [WhisperModelManager]).
++ *
++ * [minRamBytes] is the total device RAM needed before the model is offered.
++ */
++enum class WhisperModelSpec(val fileName: String, val bytes: Long, val sha256: String, val minRamBytes: Long) {
++    // TODO(OD-01): pin the SHA-256 of the file served from WHISPER_MODEL_BASE_URL.
++    BASE("ggml-base-q5_1.bin", 57_000_000L, "", 0L),
++
++    // TODO(OD-01): pin the SHA-256 of the file served from WHISPER_MODEL_BASE_URL.
++    SMALL("ggml-small-q5_1.bin", 182_000_000L, "", 6L shl 30),
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperSpeechEngine.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperSpeechEngine.kt
+new file mode 100644
+index 00000000..0d9dc48c
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperSpeechEngine.kt
+@@ -0,0 +1,226 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++import kotlin.math.log10
++import kotlin.math.sqrt
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineDispatcher
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++
++/** Path of the Whisper model to use, or null when none is downloaded. */
++fun interface WhisperModelSource {
++    fun readyModelPath(): String?
++}
++
++/**
++ * Batch on-device dictation with whisper.cpp: [start] records 16 kHz mono PCM into memory (at most
++ * [MAX_SAMPLES], 60 s, after which recording stops as if [stop] was called), [stop] transcribes the whole
++ * utterance on [transcribeDispatcher] and delivers one onFinal. There are no partials.
++ *
++ * Methods and listener callbacks run on [scope]'s thread (the main thread in the IME). Every failure becomes
++ * onError and never a crash. The audio buffer is zeroed after transcription or cancel, and neither audio nor
++ * text is ever logged. [cancel] and [destroy] abort a running transcription and drop its late result.
++ */
++class WhisperSpeechEngine(
++    private val contexts: WhisperContexts,
++    private val models: WhisperModelSource,
++    private val recorder: PcmRecorder,
++    private val scope: CoroutineScope,
++    private val idle: WhisperIdleUnloader,
++    private val transcribeDispatcher: CoroutineDispatcher = Dispatchers.Default,
++) : SpeechEngine {
++    override val kind: EngineKind = EngineKind.WHISPER
++    override val supportsPartials: Boolean = false
++
++    private enum class Phase { IDLE, RECORDING, TRANSCRIBING }
++
++    private var phase = Phase.IDLE
++    private var destroyed = false
++    private var listener: SpeechEngine.Listener? = null
++    private var lang = ""
++    private var modelPath = ""
++    private var transcribeJob: Job? = null
++
++    /** Bumped on every start and cancel; callbacks from an older run are dropped. */
++    @Volatile private var generation = 0
++
++    private val bufferLock = Any()
++    private var pcm = EMPTY
++    private var count = 0
++    private var capped = false
++
++    override fun start(lang: String, listener: SpeechEngine.Listener) {
++        if (destroyed) return
++        if (phase != Phase.IDLE) cancel()
++        val path = models.readyModelPath()
++        if (path == null) {
++            listener.onError(ERROR_LANGUAGE_UNAVAILABLE)
++            return
++        }
++        val gen = ++generation
++        this.listener = listener
++        this.lang = lang
++        modelPath = path
++        clearBuffer()
++        val started = try {
++            recorder.start { samples, n -> onSamples(gen, samples, n) }
++        } catch (e: SecurityException) {
++            listener.onError(ERROR_INSUFFICIENT_PERMISSIONS)
++            return
++        }
++        if (!started) {
++            listener.onError(ERROR_AUDIO)
++            return
++        }
++        phase = Phase.RECORDING
++        idle.touch()
++        listener.onReady()
++        scope.launch(transcribeDispatcher) { contexts.preload(path) }
++    }
++
++    override fun stop() {
++        if (phase == Phase.RECORDING) transcribe()
++    }
++
++    override fun cancel() {
++        when (phase) {
++            Phase.RECORDING -> recorder.stop()
++            Phase.TRANSCRIBING -> {
++                transcribeJob?.cancel()
++                contexts.abort(this)
++            }
++            Phase.IDLE -> Unit
++        }
++        generation++
++        phase = Phase.IDLE
++        transcribeJob = null
++        clearBuffer()
++    }
++
++    override fun destroy() {
++        cancel()
++        destroyed = true
++        listener = null
++    }
++
++    /** Capture thread. */
++    private fun onSamples(gen: Int, samples: FloatArray, n: Int) {
++        val reachedCap: Boolean
++        synchronized(bufferLock) {
++            if (gen != generation || capped) return
++            val take = minOf(n, MAX_SAMPLES - count)
++            ensureCapacity(count + take)
++            samples.copyInto(pcm, destinationOffset = count, startIndex = 0, endIndex = take)
++            count += take
++            reachedCap = count >= MAX_SAMPLES
++            capped = reachedCap
++        }
++        val db = rmsDb(samples, n)
++        idle.touch()
++        scope.launch {
++            if (gen != generation || phase != Phase.RECORDING) return@launch
++            listener?.onRms(db)
++            if (reachedCap) transcribe()
++        }
++    }
++
++    private fun transcribe() {
++        phase = Phase.TRANSCRIBING
++        recorder.stop()
++        val l = listener ?: return
++        l.onEndOfSpeech()
++        val audio = synchronized(bufferLock) { pcm.copyOf(count).also { clearBufferLocked() } }
++        val gen = generation
++        val path = modelPath
++        val whisperLang = whisperLanguage(lang)
++        transcribeJob = scope.launch {
++            val result = try {
++                Result.success(
++                    withContext(transcribeDispatcher) {
++                        try {
++                            contexts.transcribe(this@WhisperSpeechEngine, path, audio, whisperLang)
++                        } finally {
++                            audio.fill(0f)
++                        }
++                    },
++                )
++            } catch (e: CancellationException) {
++                throw e
++            } catch (e: RuntimeException) {
++                // WhisperException, IllegalArgumentException, IllegalStateException; the message is not kept.
++                Result.failure(e)
++            }
++            idle.touch()
++            if (gen != generation) return@launch
++            phase = Phase.IDLE
++            transcribeJob = null
++            result.fold(
++                onSuccess = { l.onFinal(cleanTranscript(it)) },
++                onFailure = { l.onError(ERROR_CLIENT) },
++            )
++        }
++    }
++
++    private fun ensureCapacity(needed: Int) {
++        if (needed <= pcm.size) return
++        val grown = pcm.copyOf(maxOf(needed, minOf(MAX_SAMPLES, maxOf(INITIAL_SAMPLES, pcm.size * 2))))
++        pcm.fill(0f)
++        pcm = grown
++    }
++
++    private fun clearBuffer() = synchronized(bufferLock) { clearBufferLocked() }
++
++    private fun clearBufferLocked() {
++        pcm.fill(0f)
++        pcm = EMPTY
++        count = 0
++        capped = false
++    }
++
++    internal companion object {
++        const val SAMPLE_RATE = 16_000
++        const val MAX_SAMPLES = 60 * SAMPLE_RATE
++        private const val INITIAL_SAMPLES = 10 * SAMPLE_RATE
++        private val EMPTY = FloatArray(0)
++
++        // android.speech.SpeechRecognizer.ERROR_* values, as SpeechSession maps them.
++        const val ERROR_AUDIO = 3
++        const val ERROR_CLIENT = 5
++        const val ERROR_INSUFFICIENT_PERMISSIONS = 9
++        const val ERROR_LANGUAGE_UNAVAILABLE = 13
++
++        private val NON_SPEECH = Regex("""\[[^\]]*]""")
++        private val SPACES = Regex("""\s+""")
++
++        /** whisper.cpp tags non-speech as "[BLANK_AUDIO]", "[MUSIC]" and so on; those never reach the field. */
++        fun cleanTranscript(text: String): String = text.replace(NON_SPEECH, " ").replace(SPACES, " ").trim()
++
++        /** Whisper takes ISO 639-1 codes; "en-US" becomes "en", and Java's legacy codes are mapped. */
++        fun whisperLanguage(tag: String): String {
++            val language = tag.substringBefore('-').substringBefore('_').lowercase()
++            return LEGACY_CODES[language] ?: language
++        }
++
++        private val LEGACY_CODES = mapOf("in" to "id", "iw" to "he", "ji" to "yi")
++
++        /** SpeechRecognizer's onRmsChanged scale (about -2..10), so SpeechSession's speech threshold holds. */
++        fun rmsDb(samples: FloatArray, n: Int): Float {
++            if (n <= 0) return -2f
++            var sum = 0.0
++            for (i in 0 until n) sum += samples[i] * samples[i]
++            val rms = sqrt(sum / n)
++            if (rms <= 0.0) return -2f
++            return ((20 * log10(rms) + 60) / 6).toFloat().coerceIn(-2f, 10f)
++        }
++    }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloaderTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloaderTest.kt
+new file mode 100644
+index 00000000..5fa54904
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloaderTest.kt
+@@ -0,0 +1,77 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import android.content.ComponentCallbacks2
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.currentTime
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class WhisperIdleUnloaderTest {
++    private var frees = 0
++
++    private fun TestScope.unloader() =
++        WhisperIdleUnloader(clock = { currentTime }, scope = backgroundScope, free = { frees++ })
++
++    @Test fun freesAfterSixtySecondsIdleNotBefore() = runTest {
++        val u = unloader()
++        u.touch()
++        advanceTimeBy(59_000)
++        runCurrent()
++        assertEquals(0, frees)
++        advanceTimeBy(1_000)
++        runCurrent()
++        assertEquals(1, frees)
++        advanceTimeBy(120_000)
++        assertEquals(1, frees)
++    }
++
++    @Test fun touchResetsTheIdleWindow() = runTest {
++        val u = unloader()
++        u.touch()
++        advanceTimeBy(30_000)
++        u.touch()
++        advanceTimeBy(59_000)
++        runCurrent()
++        assertEquals(0, frees)
++        advanceTimeBy(1_000)
++        runCurrent()
++        assertEquals(1, frees)
++    }
++
++    @Suppress("DEPRECATION")
++    @Test fun trimMemoryRunningLowFreesImmediately() = runTest {
++        val u = unloader()
++        u.touch()
++        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
++        assertEquals(1, frees)
++        // The pending idle free was cancelled: nothing is loaded any more.
++        advanceTimeBy(120_000)
++        assertEquals(1, frees)
++    }
++
++    @Test fun onlyRunningLowAndAboveFree() = runTest {
++        val u = unloader()
++        u.touch()
++        @Suppress("DEPRECATION")
++        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE)
++        assertEquals(0, frees)
++        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
++        assertEquals(1, frees)
++    }
++
++    @Test fun noFreeWithoutATouch() = runTest {
++        unloader()
++        advanceTimeBy(120_000)
++        assertEquals(0, frees)
++    }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelManagerTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelManagerTest.kt
+new file mode 100644
+index 00000000..2abed71a
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperModelManagerTest.kt
+@@ -0,0 +1,171 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import android.content.Context
++import androidx.work.Configuration
++import androidx.work.NetworkType
++import androidx.work.WorkManager
++import androidx.work.testing.SynchronousExecutor
++import androidx.work.testing.WorkManagerTestInitHelper
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import java.io.File
++import java.security.MessageDigest
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import okio.Buffer
++import org.junit.After
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class WhisperModelManagerTest {
++    private val context: Context = RuntimeEnvironment.getApplication()
++    private val server = MockWebServer()
++    private val fakeModel = ByteArray(1024) { (it * 31 + 7).toByte() }
++    private val fakeSha = MessageDigest.getInstance("SHA-256").digest(fakeModel).joinToString("") { "%02x".format(it) }
++    private val events = mutableListOf<AnalyticsEvent>()
++    private lateinit var workManager: WorkManager
++    private var current: WhisperModelManager? = null
++
++    @Before fun setUp() {
++        server.start()
++        WorkManagerTestInitHelper.initializeTestWorkManager(
++            context,
++            Configuration.Builder()
++                .setExecutor(SynchronousExecutor())
++                .setTaskExecutor(SynchronousExecutor())
++                .setWorkerFactory(ModelDownloadWorkerFactory { current!! })
++                .build(),
++        )
++        workManager = WorkManager.getInstance(context)
++    }
++
++    @After fun tearDown() {
++        server.shutdown()
++        File(context.noBackupFilesDir, "models").deleteRecursively()
++    }
++
++    private fun manager(ramBytes: Long = 8L shl 30, sha: String = fakeSha) = WhisperModelManager(
++        noBackupDir = context.noBackupFilesDir,
++        workManager = workManager,
++        ramBytes = ramBytes,
++        baseUrl = server.url("/models/").toString(),
++        pinnedSha256 = { sha },
++        analytics = { events += it },
++        scope = CoroutineScope(Dispatchers.Unconfined),
++    ).also { current = it }
++
++    private fun serveModel() = server.enqueue(MockResponse().setBody(Buffer().write(fakeModel)))
++
++    /** Runs the enqueued download now (the test driver stands in for the network constraint). */
++    private fun runDownload(m: WhisperModelManager, spec: WhisperModelSpec) {
++        val info = workManager.getWorkInfosForUniqueWork(m.workName(spec)).get().single()
++        WorkManagerTestInitHelper.getTestDriver(context)!!.setAllConstraintsMet(info.id)
++    }
++
++    private fun modelFile(spec: WhisperModelSpec) = File(File(context.noBackupFilesDir, "models"), spec.fileName)
++
++    @Test fun downloadWithTheRightHashBecomesReadyUnderNoBackupModels() {
++        val m = manager()
++        serveModel()
++        m.download(WhisperModelSpec.BASE, wifiOnly = false)
++        assertEquals(ModelState.DOWNLOADING, m.states.value[WhisperModelSpec.BASE])
++        runDownload(m, WhisperModelSpec.BASE)
++
++        assertEquals(ModelState.READY, m.states.value[WhisperModelSpec.BASE])
++        val file = modelFile(WhisperModelSpec.BASE)
++        assertTrue(file.isFile)
++        assertTrue(fakeModel.contentEquals(file.readBytes()))
++        assertEquals(File(context.noBackupFilesDir, "models").canonicalPath, file.parentFile!!.canonicalPath)
++        assertFalse(File(file.path + ".part").exists())
++        assertEquals("/models/ggml-base-q5_1.bin", server.takeRequest().requestUrl!!.encodedPath)
++        assertEquals(WhisperModelSpec.BASE, m.readyModel())
++        assertEquals(file.path, m.readyModelPath())
++    }
++
++    @Test fun wrongHashFailsAndLeavesNoFile() {
++        val m = manager(sha = "0".repeat(64))
++        serveModel()
++        m.download(WhisperModelSpec.BASE, wifiOnly = false)
++        runDownload(m, WhisperModelSpec.BASE)
++
++        assertEquals(ModelState.FAILED, m.states.value[WhisperModelSpec.BASE])
++        assertFalse(modelFile(WhisperModelSpec.BASE).exists())
++        assertFalse(File(modelFile(WhisperModelSpec.BASE).path + ".part").exists())
++        assertNull(m.readyModel())
++    }
++
++    @Test fun anUnpinnedHashFailsClosedWithoutDownloading() {
++        val m = manager(sha = "")
++        serveModel()
++        m.download(WhisperModelSpec.BASE, wifiOnly = false)
++        runDownload(m, WhisperModelSpec.BASE)
++
++        assertEquals(ModelState.FAILED, m.states.value[WhisperModelSpec.BASE])
++        assertFalse(modelFile(WhisperModelSpec.BASE).exists())
++        assertEquals(0, server.requestCount)
++    }
++
++    @Test fun wifiOnlyRequiresAnUnmeteredNetwork() {
++        val m = manager()
++        m.download(WhisperModelSpec.BASE, wifiOnly = true)
++        val info = workManager.getWorkInfosForUniqueWork(m.workName(WhisperModelSpec.BASE)).get().single()
++        assertEquals(NetworkType.UNMETERED, info.constraints.requiredNetworkType)
++        m.delete(WhisperModelSpec.BASE)
++        m.download(WhisperModelSpec.BASE, wifiOnly = false)
++        val any = workManager.getWorkInfosForUniqueWork(m.workName(WhisperModelSpec.BASE)).get().last()
++        assertEquals(NetworkType.CONNECTED, any.constraints.requiredNetworkType)
++    }
++
++    @Test fun smallIsOfferedOnlyWithSixGibOfRam() {
++        assertEquals(listOf(WhisperModelSpec.BASE), manager(ramBytes = 4L shl 30).offered())
++        assertEquals(listOf(WhisperModelSpec.BASE, WhisperModelSpec.SMALL), manager(ramBytes = 8L shl 30).offered())
++    }
++
++    @Test fun deleteMakesTheModelAbsent() {
++        val m = manager()
++        serveModel()
++        m.download(WhisperModelSpec.BASE, wifiOnly = false)
++        runDownload(m, WhisperModelSpec.BASE)
++        assertEquals(ModelState.READY, m.states.value[WhisperModelSpec.BASE])
++
++        m.delete(WhisperModelSpec.BASE)
++        assertEquals(ModelState.ABSENT, m.states.value[WhisperModelSpec.BASE])
++        assertFalse(modelFile(WhisperModelSpec.BASE).exists())
++        assertNull(m.readyModelPath())
++    }
++
++    @Test fun aModelOnDiskIsReadyAfterARestart() {
++        modelFile(WhisperModelSpec.BASE).apply { parentFile!!.mkdirs(); writeBytes(fakeModel) }
++        assertEquals(ModelState.READY, manager().states.value[WhisperModelSpec.BASE])
++        assertEquals(ModelState.ABSENT, manager().states.value[WhisperModelSpec.SMALL])
++    }
++
++    @Test fun downloadsReportStartAndDoneWithClosedValues() {
++        val m = manager()
++        serveModel()
++        m.download(WhisperModelSpec.BASE, wifiOnly = false)
++        runDownload(m, WhisperModelSpec.BASE)
++
++        assertEquals(listOf("pack_download_start", "pack_download_done"), events.map { it.name })
++        assertEquals(mapOf("lang" to "mul", "kind" to "whisper", "size_bucket" to "50-100"), events[0].params)
++        assertEquals("ok", events[1].params["result"])
++        val text = events.joinToString { it.params.values.joinToString() }
++        assertFalse("http" in text || "/" in text, "no URL or path in events: $text")
++    }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperSpeechEngineTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperSpeechEngineTest.kt
+new file mode 100644
+index 00000000..d9db8404
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperSpeechEngineTest.kt
+@@ -0,0 +1,267 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.whisper
++
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++import com.manjul.aikeyboard.lib.whisper.WhisperApi
++import com.manjul.aikeyboard.lib.whisper.WhisperException
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.advanceUntilIdle
++import kotlinx.coroutines.test.currentTime
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class WhisperSpeechEngineTest {
++    private class FakeApi : WhisperApi {
++        var loads = 0
++        val frees = mutableListOf<Long>()
++        var transcribes = 0
++        var lastPcm: FloatArray? = null
++        var lastLang: String? = null
++        var text = "hello world"
++        var failWith: RuntimeException? = null
++        var onTranscribe: () -> Unit = {}
++
++        override fun load(modelPath: String, threads: Int): Long {
++            loads++
++            return 7L
++        }
++
++        override fun transcribe(ctx: Long, pcm16kMono: FloatArray, lang: String, translate: Boolean): String {
++            transcribes++
++            lastPcm = pcm16kMono
++            lastLang = lang
++            onTranscribe()
++            failWith?.let { throw it }
++            return text
++        }
++
++        override fun free(ctx: Long) {
++            frees += ctx
++        }
++    }
++
++    private class FakeRecorder : PcmRecorder {
++        var sink: ((FloatArray, Int) -> Unit)? = null
++        var starts = 0
++        var stops = 0
++
++        override fun start(onSamples: (FloatArray, Int) -> Unit): Boolean {
++            starts++
++            sink = onSamples
++            return true
++        }
++
++        override fun stop() {
++            stops++
++            sink = null
++        }
++
++        /** Feeds [seconds] of a constant-amplitude signal in 100 ms chunks, as the recorder thread would. */
++        fun feed(seconds: Int, amplitude: Float = 0.3f) {
++            val chunk = FloatArray(1600) { if (it % 2 == 0) amplitude else -amplitude }
++            repeat(seconds * 10) { sink?.invoke(chunk, chunk.size) }
++        }
++    }
++
++    private class Events : SpeechEngine.Listener {
++        val all = mutableListOf<String>()
++        val rms = mutableListOf<Float>()
++        override fun onReady() { all += "ready" }
++        override fun onRms(db: Float) { rms += db }
++        override fun onPartial(text: String) { all += "partial:$text" }
++        override fun onSegment(text: String) { all += "segment:$text" }
++        override fun onFinal(text: String) { all += "final:$text" }
++        override fun onEndOfSpeech() { all += "end" }
++        override fun onError(code: Int) { all += "error:$code" }
++    }
++
++    private class Rig(scope: TestScope, modelPath: String? = "/models/ggml-base-q5_1.bin") {
++        val api = FakeApi()
++        val recorder = FakeRecorder()
++        val contexts = WhisperContexts(api, threads = 2)
++        var idleFrees = 0
++        val idle =
++            WhisperIdleUnloader(clock = { scope.currentTime }, scope = scope.backgroundScope, free = { idleFrees++ })
++        val events = Events()
++        val engine = WhisperSpeechEngine(
++            contexts = contexts,
++            models = WhisperModelSource { modelPath },
++            recorder = recorder,
++            scope = scope,
++            idle = idle,
++            transcribeDispatcher = StandardTestDispatcher(scope.testScheduler),
++        )
++    }
++
++    @Test fun recordsEmitsRmsAndDeliversTheFinalTranscriptAfterStop() = runTest {
++        val r = Rig(this)
++        assertEquals(EngineKind.WHISPER, r.engine.kind)
++        assertFalse(r.engine.supportsPartials)
++        r.engine.start("en-US", r.events)
++        runCurrent()
++        assertEquals(listOf("ready"), r.events.all)
++        r.recorder.feed(seconds = 1)
++        runCurrent()
++        assertTrue(r.events.rms.isNotEmpty())
++        assertTrue(r.events.rms.all { it > 3f }, "speech-level audio reads as speech: ${r.events.rms}")
++        r.engine.stop()
++        advanceUntilIdle()
++        assertEquals(listOf("ready", "end", "final:hello world"), r.events.all)
++        assertEquals(1, r.recorder.stops)
++        assertEquals("en", r.api.lastLang)
++        assertEquals(16_000, r.api.lastPcm!!.size)
++    }
++
++    @Test fun silenceReadsBelowTheSpeechThreshold() = runTest {
++        val r = Rig(this)
++        r.engine.start("en", r.events)
++        runCurrent()
++        r.recorder.feed(seconds = 1, amplitude = 0.0005f)
++        runCurrent()
++        assertTrue(r.events.rms.all { it < 3f }, "${r.events.rms}")
++    }
++
++    @Test fun sixtySecondCapStopsRecordingAndTranscribes() = runTest {
++        val r = Rig(this)
++        r.engine.start("en", r.events)
++        runCurrent()
++        r.recorder.feed(seconds = 61)
++        advanceUntilIdle()
++        assertEquals(1, r.recorder.stops)
++        assertEquals(60 * 16_000, r.api.lastPcm!!.size)
++        assertEquals(listOf("ready", "end", "final:hello world"), r.events.all)
++        // The session's own stop after the cap is a no-op.
++        r.engine.stop()
++        advanceUntilIdle()
++        assertEquals(1, r.api.transcribes)
++        assertEquals(1, r.recorder.stops)
++    }
++
++    @Test fun noModelReportsLanguageUnavailableAndNeverOpensTheMic() = runTest {
++        val r = Rig(this, modelPath = null)
++        r.engine.start("en", r.events)
++        advanceUntilIdle()
++        assertEquals(listOf("error:13"), r.events.all)
++        assertEquals(0, r.recorder.starts)
++    }
++
++    @Test fun pcmBufferIsClearedAfterTranscription() = runTest {
++        val r = Rig(this)
++        r.engine.start("en", r.events)
++        runCurrent()
++        r.recorder.feed(seconds = 2)
++        r.engine.stop()
++        advanceUntilIdle()
++        val pcm = r.api.lastPcm!!
++        assertTrue(pcm.isNotEmpty())
++        assertTrue(pcm.all { it == 0f }, "audio must not outlive the transcription")
++    }
++
++    @Test fun whisperFailuresBecomeOnErrorNeverACrash() = runTest {
++        for (failure in listOf(
++            WhisperException("aborted"),
++            IllegalStateException("busy"),
++            IllegalArgumentException("stale handle"),
++        )) {
++            val r = Rig(this)
++            r.api.failWith = failure
++            r.engine.start("en", r.events)
++            runCurrent()
++            r.recorder.feed(seconds = 1)
++            r.engine.stop()
++            advanceUntilIdle()
++            assertEquals("error:5", r.events.all.last(), failure.toString())
++            assertTrue(r.events.all.none { it.startsWith("final") })
++            assertTrue(r.api.lastPcm!!.all { it == 0f })
++        }
++    }
++
++    @Test fun cancelDuringTranscribeFreesTheContextAndDropsTheLateResult() = runTest {
++        val r = Rig(this)
++        r.api.onTranscribe = { r.engine.cancel() }
++        r.engine.start("en", r.events)
++        runCurrent()
++        r.recorder.feed(seconds = 1)
++        r.engine.stop()
++        advanceUntilIdle()
++        assertEquals(listOf(7L), r.api.frees)
++        assertEquals(listOf("ready", "end"), r.events.all)
++    }
++
++    @Test fun destroyDuringTranscribeAbortsAndSwallowsTheAbortError() = runTest {
++        val r = Rig(this)
++        r.api.onTranscribe = {
++            r.engine.destroy()
++            r.api.failWith = WhisperException("Transcription aborted: context freed")
++        }
++        r.engine.start("en", r.events)
++        runCurrent()
++        r.recorder.feed(seconds = 1)
++        r.engine.stop()
++        advanceUntilIdle()
++        assertEquals(listOf(7L), r.api.frees)
++        assertEquals(listOf("ready", "end"), r.events.all)
++    }
++
++    @Test fun cancelWhileRecordingStopsTheMicAndDropsTheAudio() = runTest {
++        val r = Rig(this)
++        r.engine.start("en", r.events)
++        runCurrent()
++        r.recorder.feed(seconds = 1)
++        r.engine.cancel()
++        r.engine.stop()
++        advanceUntilIdle()
++        assertEquals(1, r.recorder.stops)
++        assertEquals(0, r.api.transcribes)
++        assertEquals(listOf("ready"), r.events.all)
++    }
++
++    @Test fun theModelIsLoadedOnceAndSharedByLaterEngines() = runTest {
++        val r = Rig(this)
++        r.engine.start("en", r.events)
++        runCurrent()
++        r.recorder.feed(seconds = 1)
++        r.engine.stop()
++        advanceUntilIdle()
++        val second = WhisperSpeechEngine(
++            contexts = r.contexts,
++            models = WhisperModelSource { "/models/ggml-base-q5_1.bin" },
++            recorder = r.recorder,
++            scope = this,
++            idle = r.idle,
++            transcribeDispatcher = StandardTestDispatcher(testScheduler),
++        )
++        val events = Events()
++        second.start("en", events)
++        runCurrent()
++        r.recorder.feed(seconds = 1)
++        second.stop()
++        advanceUntilIdle()
++        assertEquals(listOf("ready", "end", "final:hello world"), events.all)
++        assertEquals(1, r.api.loads)
++        assertEquals(2, r.api.transcribes)
++    }
++
++    @Test fun nonSpeechMarkersAreDropped() = runTest {
++        val r = Rig(this)
++        r.api.text = "[BLANK_AUDIO]"
++        r.engine.start("en", r.events)
++        runCurrent()
++        r.recorder.feed(seconds = 1)
++        r.engine.stop()
++        advanceUntilIdle()
++        assertEquals("final:", r.events.all.last())
++    }
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index 058c0bd6..92a5e843 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -79,20 +79,25 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/build.gradle.kts`, `gradle/libs.versions.toml` | S1-onboarding | Turbine and Compose UI test (`ui-test-junit4`, `ui-test-manifest` as `debugImplementation`, versions from the BOM) for the onboarding tests; the commented `testImplementation(composeBom)` line is kept |
+ | `app/src/main/AndroidManifest.xml` | S1-voice | `<queries>` entry for `android.speech.RecognitionService` so `SpeechRecognizer.isRecognitionAvailable` sees recognition services on API 30+ |
+ | `settings.gradle.kts`, `app/build.gradle.kts` | S1-voice | `include(":ime:voice-ui")`; `implementation(projects.core.voice)`, `implementation(projects.ime.voiceUi)` |
+ | `app/src/main/AndroidManifest.xml` | S1-voice | `ACCESS_NETWORK_STATE` permission (the engine choice needs to know whether a network is up); `fork.voice.MicPermissionActivity` (translucent, `excludeFromRecents`, `noHistory`, `taskAffinity=""`, not exported) |
+ | `app/src/main/res/values/strings_fork.xml` | S1-voice | Permission-denied rationale strings for the mic trampoline |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-voice | Creates a `fork.voice.VoiceImeSession` in `onCreate` (after the policy controller); forwards `onUpdateSelection`, `onFinishInputView` (hiding the keyboard ends dictation) and `onDestroy`; companion `voiceSessionOrNull()` accessor |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-voice | `VOICE_INPUT` toggles in-keyboard voice typing instead of switching to another voice IME; the S1-smartbar policy gate is kept |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt` | S1-voice | `voiceOwnsComposing` flag: while voice owns the composing region, `handleSelectionUpdate` does not treat the region as a word the editor must re-sync |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-voice | After `PrivateLockIndicator`, `smartbarVoicePanel()` replaces the rest of the main row while the voice panel is open |
+ | `settings.gradle.kts`, `app/build.gradle.kts` | S1-whisper | `include(":lib:whisper")` (vendored whisper.cpp v1.9.5 + JNI bridge `libaikb_whisper.so`); `implementation(projects.lib.whisper)` |
++| `gradle/libs.versions.toml` | S1-whisper | `androidx-work` 2.12.0 (`work-runtime`, `work-testing`) and `mockwebserver` 4.12.0 (5.x pulls `okhttp-android`, which needs compileSdk 37) inside the `# --- AI Keyboard ---` blocks |
++| `app/build.gradle.kts` | S1-whisper | `WHISPER_MODEL_BASE_URL` build config field (placeholder `https://example.com/models/`, TODO(OD-01); every file is SHA-256 pinned in `WhisperModelSpec`) and `WHISPER_ENABLED_LANGS` (`"*"` = all languages in debug and beta, `""` = none in release); `implementation(libs.androidx.work.runtime)` |
++| `app/src/main/AndroidManifest.xml` | S1-whisper | `INTERNET` permission, used only by the Whisper model download worker (the app had no network access before); `androidx.work.WorkManagerInitializer` removed from the startup provider, so WorkManager initialises on demand through `FlorisApplication`'s `Configuration.Provider` and never on the IME cold start. WorkManager's exported `SystemJobService` (`BIND_JOB_SERVICE`) and `DiagnosticsReceiver` (`DUMP`) are on the `ExportedComponentRules` allow-list |
++| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-whisper | Lazy `whisperVoice` (`fork.voice.WhisperVoice`: shared whisper.cpp context, idle unloader, model manager) and `Context.whisperVoice()` accessor; `Configuration.Provider` with `ModelDownloadWorkerFactory`; `onTrimMemory` frees the loaded model (non-blocking) when Whisper was ever used |
++| `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-whisper | `Settings.Voice` route (`settings/voice`) rendering `fork/settings/VoiceSettingsScreen` and a home entry for it after Private apps |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised
+@@ -212,21 +217,24 @@ New files (no markers needed), TRD §2.2, §2.3, §4.11, §11.1:
+ - IME isolation, manifest level: `aikeyboard.ad-isolation` (build-logic, `AdIsolationPlugin`,
+   `AdAutoInitRules`) registers `verify<Variant>NoAdAutoInit` on `:app` and wires it into `check`. It fails if
+   the merged manifest contains `MobileAdsInitProvider` or any provider / `androidx.startup` initializer from
+   the GMA, GMA next-gen, UMP or `:core:ads` packages. UMP 4.0.0 merges no provider (only the
+   `com.google.android.gms.version` meta-data from `play-services-basement`).
+ - Exported components, merged manifest: the same plugin registers `verify<Variant>ExportedComponents`
+   (also wired into `check`). It applies `ExportedComponentRules.ALLOW_LIST` (build-logic) to the merged
+   manifest, so components merged in from libraries are reviewed as well; `ManifestHardeningTest` only sees
+   the source manifest. Library entries: `androidx.profileinstaller.ProfileInstallReceiver` (must require
+   `android.permission.DUMP`) and `androidx.compose.ui.tooling.PreviewActivity` (debuggable builds only;
+-  `ui-tooling` is a `debugImplementation`). Keep the `:app` entries in sync with `ManifestHardeningTest`.
++  `ui-tooling` is a `debugImplementation`), `androidx.activity.ComponentActivity` (debuggable builds only; the
++  Compose test host from `ui-test-manifest`, a `debugImplementation`), and WorkManager's
++  `androidx.work.impl.background.systemjob.SystemJobService` (must require `android.permission.BIND_JOB_SERVICE`)
++  and `androidx.work.impl.diagnostics.DiagnosticsReceiver` (must require `android.permission.DUMP`). Keep the `:app` entries in sync with `ManifestHardeningTest`.
+ - These are static checks. The runtime proof (IME-only cold start, no `com.google.android.gms.ads` class
+   loaded, TRD §11.1 1.1(c)) is an instrumented test for Sprint 4, when GMA is added.
+ 
+ ## CI (S0-ci)
+ 
+ New files (no markers needed), TRD §2.1, §7.2, §11.8:
+ 
+ - `.github/workflows/pr.yml` (pull requests and pushes to `main`, ubuntu-latest): fetches the upstream tag,
+   runs `scripts/check-fork-markers.sh`, installs JDK 17 (temurin), the Android SDK and the NDK / CMake /
+   build-tools pinned in `gradle/tools.versions.toml`, the pinned Rust toolchain with the four Android targets,
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 1b058b13..9203bb63 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -38,20 +38,24 @@ javax-inject = "1"
+ # Lint API for :lint-rules. Must stay at AGP version + 23 (AGP 8.12.0 -> lint 31.12.0).
+ android-lint = "31.12.0"
+ junit4 = "4.13.2"
+ # :core:ads consent (Google UMP). 4.0.0 is the latest release on Google Maven (checked 2026-10-18)
+ google-ump = "4.0.0"
+ # FORK(S1-policy): :core:datastore (latest stable on Google Maven / Maven Central, checked 2026-10-18)
+ androidx-datastore = "1.2.1"
+ # Moving this version means re-checking the android-all pin (14-robolectric-...) in gradle/robolectric-offline.gradle.kts
+ robolectric = "4.17"
+ turbine = "1.2.1"
++# FORK(S1-whisper): Whisper model download (WorkManager: latest stable, checked 2026-10-19) and its test server
++# (MockWebServer 4.12.0: 5.x pulls okhttp-android, which needs compileSdk 37)
++androidx-work = "2.12.0"
++mockwebserver = "4.12.0"
+ 
+ 
+ 
+ [libraries]
+ # Main
+ androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+ androidx-activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "androidx-activity" }
+ androidx-autofill = { module = "androidx.autofill:autofill", version.ref = "androidx-autofill" }
+ androidx-collection-ktx = { module = "androidx.collection:collection-ktx", version.ref = "androidx-collection" }
+ androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }
+@@ -112,20 +116,24 @@ junit4 = { module = "junit:junit", version.ref = "junit4" }
+ # :core:ads
+ google-ump = { module = "com.google.android.ump:user-messaging-platform", version.ref = "google-ump" }
+ # FORK(S1-policy): :core:datastore and Robolectric tests (junit-vintage runs JUnit4 tests on the JUnit 5 platform; version from the junit-bom)
+ androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "androidx-datastore" }
+ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+ junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine" }
+ # FORK(S1-onboarding): onboarding tests (Turbine, Compose UI test; versions from the Compose BOM)
+ turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+ androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+ androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
++# FORK(S1-whisper): WorkManager for the Whisper model download; MockWebServer serves fake models in tests
++androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "androidx-work" }
++androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "androidx-work" }
++mockwebserver = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "mockwebserver" }
+ 
+ 
+ 
+ [plugins]
+ # Main
+ agp-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
+ agp-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
+ agp-test = { id = "com.android.test", version.ref = "android-gradle-plugin" }
+ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt
+index 569aa4d6..ca9d333f 100644
+--- a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt
+@@ -23,21 +23,21 @@ import com.manjul.aikeyboard.ime.policy.PolicyDecision
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+ import kotlinx.coroutines.launch
+ 
+ /** Read when a dictation starts. [lang] is the BCP-47 tag of the active subtype. */
+ data class VoiceRequest(val lang: String, val preferWhisper: Boolean, val online: Boolean)
+ 
+-/** The engines this build can run. WHISPER is not supported until its engine exists. */
++/** The engines this build can run; an unsupported kind is reported as unavailable. */
+ interface VoiceEngines {
+     fun supports(kind: EngineKind): Boolean
+     fun create(kind: EngineKind, segmented: Boolean): SpeechEngine
+ }
+ 
+ /** Persisted "first_dictation was logged" flag. */
+ interface FirstDictationFlag {
+     val logged: Boolean
+     fun markLogged()
+ }

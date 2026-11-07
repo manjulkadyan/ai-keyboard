@@ -1,0 +1,564 @@
+# Review package: 727bf72b69b53cb336a4ad0f62d64eca0860f4bc..HEAD
+
+## Commits
+2fa541c2 feat(policy): SensitiveFieldPolicy with input matrix and card heuristic
+
+## Files changed
+ .../aikeyboard/ime/policy/CardFieldHeuristic.kt    |  20 ++++
+ .../aikeyboard/ime/policy/FieldDescriptor.kt       |  19 ++++
+ .../manjul/aikeyboard/ime/policy/InputTypeBits.kt  |  30 +++++
+ .../manjul/aikeyboard/ime/policy/PolicyContext.kt  |  14 +++
+ .../manjul/aikeyboard/ime/policy/PolicyDecision.kt |  59 ++++++++++
+ .../aikeyboard/ime/policy/SensitiveFieldPolicy.kt  |  80 +++++++++++---
+ .../ime/policy/CardFieldHeuristicTest.kt           |  74 +++++++++++++
+ .../ime/policy/PolicyDecisionOrderingTest.kt       |  35 ++++++
+ .../ime/policy/SensitiveFieldPolicyMatrixTest.kt   | 121 +++++++++++++++++++++
+ .../ime/policy/SensitiveFieldPolicyTest.kt         |  22 ----
+ 10 files changed, 436 insertions(+), 38 deletions(-)
+
+## Diff
+diff --git a/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/CardFieldHeuristic.kt b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/CardFieldHeuristic.kt
+new file mode 100644
+index 00000000..33bc46fe
+--- /dev/null
++++ b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/CardFieldHeuristic.kt
+@@ -0,0 +1,20 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.policy
++
++/** Soft signal for payment-like numeric fields, matched on the field's hint and label. */
++internal object CardFieldHeuristic {
++    /** English only for now. Add other UI locales by appending to this list. */
++    private val patterns = listOf("card", "cvv", "cvc", "iban", "pin", "otp", "one[- ]?time")
++
++    private val regex = Regex("\\b(${patterns.joinToString("|")})\\b", RegexOption.IGNORE_CASE)
++
++    fun matches(field: FieldDescriptor): Boolean {
++        if ((field.inputType and InputTypeBits.MASK_CLASS) != InputTypeBits.CLASS_NUMBER) return false
++        return field.hintText?.let(regex::containsMatchIn) == true ||
++            field.label?.let(regex::containsMatchIn) == true
++    }
++}
+diff --git a/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/FieldDescriptor.kt b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/FieldDescriptor.kt
+new file mode 100644
+index 00000000..71382364
+--- /dev/null
++++ b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/FieldDescriptor.kt
+@@ -0,0 +1,19 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.policy
++
++/**
++ * Android-free description of an input field. Holds the raw `EditorInfo` values so this module
++ * stays pure Kotlin. [hintText] and [label] are only inspected for the card heuristic and are
++ * never stored or logged.
++ */
++data class FieldDescriptor(
++    val packageName: String?,
++    val inputType: Int,
++    val imeOptions: Int,
++    val hintText: String?,
++    val label: String?,
++)
+diff --git a/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/InputTypeBits.kt b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/InputTypeBits.kt
+new file mode 100644
+index 00000000..89221b65
+--- /dev/null
++++ b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/InputTypeBits.kt
+@@ -0,0 +1,30 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.policy
++
++/** Constants from `android.text.InputType` and `android.view.inputmethod.EditorInfo`, copied so the module stays pure JVM. */
++object InputTypeBits {
++    const val MASK_CLASS = 0x0000000f
++    const val MASK_VARIATION = 0x00000ff0
++
++    const val CLASS_TEXT = 0x00000001
++    const val CLASS_NUMBER = 0x00000002
++    const val CLASS_PHONE = 0x00000003
++    const val CLASS_DATETIME = 0x00000004
++
++    const val TEXT_FLAG_NO_SUGGESTIONS = 0x00080000
++
++    const val TEXT_VARIATION_URI = 0x00000010
++    const val TEXT_VARIATION_EMAIL_ADDRESS = 0x00000020
++    const val TEXT_VARIATION_PASSWORD = 0x00000080
++    const val TEXT_VARIATION_VISIBLE_PASSWORD = 0x00000090
++    const val TEXT_VARIATION_WEB_EMAIL_ADDRESS = 0x000000d0
++    const val TEXT_VARIATION_WEB_PASSWORD = 0x000000e0
++
++    const val NUMBER_VARIATION_PASSWORD = 0x00000010
++
++    const val IME_FLAG_NO_PERSONALIZED_LEARNING = 0x01000000
++}
+diff --git a/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/PolicyContext.kt b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/PolicyContext.kt
+new file mode 100644
+index 00000000..d95d96ad
+--- /dev/null
++++ b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/PolicyContext.kt
+@@ -0,0 +1,14 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.policy
++
++/** Non-field inputs to the policy: device state, the user's incognito toggle and package lists. */
++data class PolicyContext(
++    val deviceLocked: Boolean,
++    val incognitoManual: Boolean,
++    val privatePackages: Set<String>,
++    val forceSensitivePackages: Set<String>,
++)
+diff --git a/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/PolicyDecision.kt b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/PolicyDecision.kt
+new file mode 100644
+index 00000000..ebbccad8
+--- /dev/null
++++ b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/PolicyDecision.kt
+@@ -0,0 +1,59 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.policy
++
++enum class SensitivityReason {
++    PASSWORD,
++    NUMBER_PASSWORD,
++    NO_PERSONALIZED_LEARNING,
++    INCOGNITO_MANUAL,
++    DEVICE_LOCKED,
++    PRIVATE_APP,
++    FORCED_PACKAGE,
++    CARD_HEURISTIC,
++}
++
++/** What the keyboard may do in the current field (TRD 4.1.2). Controllers re-check this before acting. */
++data class PolicyDecision(
++    val sensitive: Boolean,
++    val reasons: Set<SensitivityReason>,
++    val allowLearning: Boolean,
++    val allowSuggestionHistory: Boolean,
++    val allowSuggestionStrip: Boolean,
++    val allowClipboardHistory: Boolean,
++    val allowTranslate: Boolean,
++    val allowVoice: Boolean,
++    val allowAi: Boolean,
++    val allowCloud: Boolean,
++    val analyticsMinimal: Boolean,
++) {
++    /** True if any capability allowed in [other] is not allowed here. */
++    fun isMoreRestrictiveThan(other: PolicyDecision): Boolean =
++        (other.allowLearning && !allowLearning) ||
++            (other.allowSuggestionHistory && !allowSuggestionHistory) ||
++            (other.allowSuggestionStrip && !allowSuggestionStrip) ||
++            (other.allowClipboardHistory && !allowClipboardHistory) ||
++            (other.allowTranslate && !allowTranslate) ||
++            (other.allowVoice && !allowVoice) ||
++            (other.allowAi && !allowAi) ||
++            (other.allowCloud && !allowCloud)
++
++    companion object {
++        val Unrestricted = PolicyDecision(
++            sensitive = false, reasons = emptySet(),
++            allowLearning = true, allowSuggestionHistory = true, allowSuggestionStrip = true,
++            allowClipboardHistory = true, allowTranslate = true, allowVoice = true,
++            allowAi = true, allowCloud = true, analyticsMinimal = false,
++        )
++
++        val Locked = PolicyDecision(
++            sensitive = true, reasons = setOf(SensitivityReason.DEVICE_LOCKED),
++            allowLearning = false, allowSuggestionHistory = false, allowSuggestionStrip = false,
++            allowClipboardHistory = false, allowTranslate = false, allowVoice = false,
++            allowAi = false, allowCloud = false, analyticsMinimal = true,
++        )
++    }
++}
+diff --git a/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicy.kt b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicy.kt
+index d1a7f98d..1e7fc77b 100644
+--- a/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicy.kt
++++ b/ime/policy/src/main/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicy.kt
+@@ -1,28 +1,76 @@
+ /*
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.ime.policy
+ 
++import com.manjul.aikeyboard.ime.policy.InputTypeBits as Bits
++
+ /**
+  * The hard gate that decides which keyboard features may run in the current input field
+- * (TRD §4.1.2): learning, clipboard history, translate, voice, AI actions, cloud engines, analytics.
++ * (TRD 4.1.2). Pure function, no Android dependencies.
+  *
+- * Placeholder for Sprint 0. The real inputs (editor info, device lock, manual incognito, remote
+- * flags), the decision fields and the implementation arrive in Sprint 1.
++ * If any sensitive reason applies, every capability is off and analytics are minimal. Otherwise
++ * the soft rules (suggestion flag, field class, card heuristic) only turn capabilities off and
++ * combine with AND.
+  */
+-interface SensitiveFieldPolicy {
+-    /** Whether the field described by [field] must be treated as sensitive. */
+-    fun isSensitive(field: FieldDescriptor): Boolean
+-}
++object SensitiveFieldPolicy {
++    fun evaluate(field: FieldDescriptor, ctx: PolicyContext): PolicyDecision {
++        val cls = field.inputType and Bits.MASK_CLASS
++        val variation = field.inputType and Bits.MASK_VARIATION
++        val isText = cls == Bits.CLASS_TEXT
+ 
+-/**
+- * Minimal, Android-free description of an input field. Holds the raw `EditorInfo` values so this
+- * module stays pure Kotlin. It will grow in Sprint 1.
+- */
+-data class FieldDescriptor(
+-    val packageName: String?,
+-    val inputType: Int,
+-    val imeOptions: Int,
+-)
++        val reasons = buildSet {
++            if (isText && variation in textPasswordVariations) add(SensitivityReason.PASSWORD)
++            if (cls == Bits.CLASS_NUMBER && variation == Bits.NUMBER_VARIATION_PASSWORD) {
++                add(SensitivityReason.NUMBER_PASSWORD)
++            }
++            if (field.imeOptions and Bits.IME_FLAG_NO_PERSONALIZED_LEARNING != 0) {
++                add(SensitivityReason.NO_PERSONALIZED_LEARNING)
++            }
++            if (ctx.incognitoManual) add(SensitivityReason.INCOGNITO_MANUAL)
++            if (ctx.deviceLocked) add(SensitivityReason.DEVICE_LOCKED)
++            val pkg = field.packageName
++            if (pkg != null && pkg in ctx.privatePackages) add(SensitivityReason.PRIVATE_APP)
++            if (pkg != null && pkg in ctx.forceSensitivePackages) add(SensitivityReason.FORCED_PACKAGE)
++        }
++        val card = CardFieldHeuristic.matches(field)
++        val allReasons = if (card) reasons + SensitivityReason.CARD_HEURISTIC else reasons
++
++        if (reasons.isNotEmpty()) {
++            return PolicyDecision.Locked.copy(reasons = allReasons)
++        }
++
++        var d = PolicyDecision.Unrestricted.copy(reasons = allReasons)
++        if (isText && field.inputType and Bits.TEXT_FLAG_NO_SUGGESTIONS != 0) {
++            d = d.copy(allowSuggestionStrip = false)
++        }
++        if (cls == Bits.CLASS_PHONE || cls == Bits.CLASS_DATETIME ||
++            (isText && variation == Bits.TEXT_VARIATION_URI)
++        ) {
++            d = d.copy(allowTranslate = false, allowAi = false)
++        }
++        if (isText && variation in textEmailVariations) {
++            d = d.copy(allowTranslate = false, allowAi = false, allowLearning = false, allowSuggestionHistory = false)
++        }
++        if (card) {
++            d = d.copy(
++                allowLearning = false, allowTranslate = false, allowAi = false,
++                allowCloud = false, allowVoice = false, allowClipboardHistory = false,
++            )
++        }
++        return d
++    }
++
++    private val textPasswordVariations = setOf(
++        Bits.TEXT_VARIATION_PASSWORD,
++        Bits.TEXT_VARIATION_VISIBLE_PASSWORD,
++        Bits.TEXT_VARIATION_WEB_PASSWORD,
++    )
++
++    private val textEmailVariations = setOf(
++        Bits.TEXT_VARIATION_EMAIL_ADDRESS,
++        Bits.TEXT_VARIATION_WEB_EMAIL_ADDRESS,
++    )
++}
+diff --git a/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/CardFieldHeuristicTest.kt b/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/CardFieldHeuristicTest.kt
+new file mode 100644
+index 00000000..59d20648
+--- /dev/null
++++ b/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/CardFieldHeuristicTest.kt
+@@ -0,0 +1,74 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.policy
++
++import org.junit.jupiter.params.ParameterizedTest
++import org.junit.jupiter.params.provider.ValueSource
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++class CardFieldHeuristicTest {
++    private val plain = PolicyContext(false, false, emptySet(), emptySet())
++    private val numberType = 0x02
++    private val textType = 0x01
++
++    private fun number(hint: String? = null, label: String? = null) =
++        FieldDescriptor("com.example", numberType, 0, hint, label)
++
++    @ParameterizedTest
++    @ValueSource(strings = ["card", "Card Number", "CVV", "cvc", "IBAN", "PIN", "Enter OTP", "one-time code", "one time code", "onetime"])
++    fun `number field with matching hint is soft restricted`(text: String) {
++        val d = SensitiveFieldPolicy.evaluate(number(hint = text), plain)
++        assertEquals(setOf(SensitivityReason.CARD_HEURISTIC), d.reasons)
++        assertFalse(d.sensitive)
++        assertFalse(d.allowLearning)
++        assertFalse(d.allowTranslate)
++        assertFalse(d.allowAi)
++        assertFalse(d.allowCloud)
++        assertFalse(d.allowVoice)
++        assertFalse(d.allowClipboardHistory)
++        assertTrue(d.allowSuggestionHistory)
++        assertTrue(d.allowSuggestionStrip)
++        assertFalse(d.analyticsMinimal)
++    }
++
++    @Test
++    fun `label is checked as well as hint`() {
++        val d = SensitiveFieldPolicy.evaluate(number(label = "Security code (CVV)"), plain)
++        assertTrue(SensitivityReason.CARD_HEURISTIC in d.reasons)
++    }
++
++    @Test
++    fun `text class with card hint has no reason`() {
++        val d = SensitiveFieldPolicy.evaluate(FieldDescriptor("com.example", textType, 0, "card", "card"), plain)
++        assertEquals(PolicyDecision.Unrestricted, d)
++    }
++
++    @Test
++    fun `word boundary prevents partial matches`() {
++        for (text in listOf("spinner", "discard", "pinned", "hotel", "carded")) {
++            val d = SensitiveFieldPolicy.evaluate(number(hint = text), plain)
++            assertTrue(d.reasons.isEmpty(), text)
++        }
++    }
++
++    @Test
++    fun `null hint and label do not match`() {
++        assertTrue(SensitiveFieldPolicy.evaluate(number(), plain).reasons.isEmpty())
++    }
++
++    @Test
++    fun `card reason is collected alongside a sensitive reason`() {
++        val d = SensitiveFieldPolicy.evaluate(
++            FieldDescriptor("com.example", 0x12, 0, "PIN", null),
++            plain,
++        )
++        assertEquals(setOf(SensitivityReason.NUMBER_PASSWORD, SensitivityReason.CARD_HEURISTIC), d.reasons)
++        assertTrue(d.sensitive)
++    }
++}
+diff --git a/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/PolicyDecisionOrderingTest.kt b/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/PolicyDecisionOrderingTest.kt
+new file mode 100644
+index 00000000..b075abf8
+--- /dev/null
++++ b/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/PolicyDecisionOrderingTest.kt
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.policy
++
++import kotlin.test.Test
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++class PolicyDecisionOrderingTest {
++    @Test
++    fun `unrestricted is not more restrictive than locked`() {
++        assertFalse(PolicyDecision.Unrestricted.isMoreRestrictiveThan(PolicyDecision.Locked))
++    }
++
++    @Test
++    fun `locked is more restrictive than unrestricted`() {
++        assertTrue(PolicyDecision.Locked.isMoreRestrictiveThan(PolicyDecision.Unrestricted))
++    }
++
++    @Test
++    fun `equal decisions are not more restrictive`() {
++        assertFalse(PolicyDecision.Locked.isMoreRestrictiveThan(PolicyDecision.Locked.copy()))
++        assertFalse(PolicyDecision.Unrestricted.isMoreRestrictiveThan(PolicyDecision.Unrestricted.copy()))
++    }
++
++    @Test
++    fun `a single flag flipping to false counts`() {
++        val narrower = PolicyDecision.Unrestricted.copy(allowVoice = false)
++        assertTrue(narrower.isMoreRestrictiveThan(PolicyDecision.Unrestricted))
++        assertFalse(PolicyDecision.Unrestricted.isMoreRestrictiveThan(narrower))
++    }
++}
+diff --git a/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicyMatrixTest.kt b/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicyMatrixTest.kt
+new file mode 100644
+index 00000000..120bd799
+--- /dev/null
++++ b/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicyMatrixTest.kt
+@@ -0,0 +1,121 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.policy
++
++import org.junit.jupiter.params.ParameterizedTest
++import org.junit.jupiter.params.provider.MethodSource
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++
++/**
++ * Full input matrix for TRD 4.1.2. The expected values come from [expectedFor], an independent
++ * table written from the spec using literal android.text.InputType / EditorInfo values.
++ */
++class SensitiveFieldPolicyMatrixTest {
++    enum class Cls(val bits: Int) { TEXT(0x1), NUMBER(0x2), PHONE(0x3), DATETIME(0x4), NULL(0x0) }
++    enum class Ctx { PLAIN, LOCKED, INCOGNITO, PRIVATE_APP, FORCED_PACKAGE }
++
++    data class Case(
++        val cls: Cls,
++        val variation: Int,
++        val noSuggestions: Boolean,
++        val noLearningIme: Boolean,
++        val ctx: Ctx,
++    ) {
++        val inputType: Int get() = cls.bits or variation or (if (noSuggestions) 0x80000 else 0)
++        val imeOptions: Int get() = if (noLearningIme) 0x1000000 else 0
++        override fun toString() = "$cls/var=0x${variation.toString(16)}/noSug=$noSuggestions/noLearn=$noLearningIme/$ctx"
++    }
++
++    private fun Case.field() = FieldDescriptor("com.example.app", inputType, imeOptions, null, null)
++
++    private fun Case.context() = PolicyContext(
++        deviceLocked = ctx == Ctx.LOCKED,
++        incognitoManual = ctx == Ctx.INCOGNITO,
++        privatePackages = if (ctx == Ctx.PRIVATE_APP) setOf("com.example.app") else setOf("com.other"),
++        forceSensitivePackages = if (ctx == Ctx.FORCED_PACKAGE) setOf("com.example.app") else emptySet(),
++    )
++
++    private fun flags(
++        learning: Boolean = true,
++        history: Boolean = true,
++        strip: Boolean = true,
++        translate: Boolean = true,
++        ai: Boolean = true,
++    ) = PolicyDecision(
++        sensitive = false,
++        reasons = emptySet(),
++        allowLearning = learning,
++        allowSuggestionHistory = history,
++        allowSuggestionStrip = strip,
++        allowClipboardHistory = true,
++        allowTranslate = translate,
++        allowVoice = true,
++        allowAi = ai,
++        allowCloud = true,
++        analyticsMinimal = false,
++    )
++
++    private fun expectedFor(c: Case): PolicyDecision {
++        val reasons = buildSet {
++            if (c.cls == Cls.TEXT && c.variation in setOf(0x80, 0x90, 0xe0)) add(SensitivityReason.PASSWORD)
++            if (c.cls == Cls.NUMBER && c.variation == 0x10) add(SensitivityReason.NUMBER_PASSWORD)
++            if (c.noLearningIme) add(SensitivityReason.NO_PERSONALIZED_LEARNING)
++            when (c.ctx) {
++                Ctx.LOCKED -> add(SensitivityReason.DEVICE_LOCKED)
++                Ctx.INCOGNITO -> add(SensitivityReason.INCOGNITO_MANUAL)
++                Ctx.PRIVATE_APP -> add(SensitivityReason.PRIVATE_APP)
++                Ctx.FORCED_PACKAGE -> add(SensitivityReason.FORCED_PACKAGE)
++                Ctx.PLAIN -> Unit
++            }
++        }
++        if (reasons.isNotEmpty()) {
++            return PolicyDecision(
++                sensitive = true, reasons = reasons,
++                allowLearning = false, allowSuggestionHistory = false, allowSuggestionStrip = false,
++                allowClipboardHistory = false, allowTranslate = false, allowVoice = false,
++                allowAi = false, allowCloud = false, analyticsMinimal = true,
++            )
++        }
++        val strip = !(c.cls == Cls.TEXT && c.noSuggestions)
++        return when {
++            c.cls == Cls.PHONE || c.cls == Cls.DATETIME -> flags(translate = false, ai = false)
++            c.cls == Cls.TEXT && c.variation in setOf(0x10) -> flags(strip = strip, translate = false, ai = false)
++            c.cls == Cls.TEXT && c.variation in setOf(0x20, 0xd0) ->
++                flags(learning = false, history = false, strip = strip, translate = false, ai = false)
++            else -> flags(strip = strip)
++        }
++    }
++
++    @Test
++    fun `matrix has at least 400 cases`() {
++        assertTrue(cases().size >= 400, "cases=${cases().size}")
++    }
++
++    @ParameterizedTest(name = "{0}")
++    @MethodSource("cases")
++    fun `decision matches the TRD table`(c: Case) {
++        assertEquals(expectedFor(c), SensitiveFieldPolicy.evaluate(c.field(), c.context()))
++    }
++
++    companion object {
++        private val variations = mapOf(
++            Cls.TEXT to listOf(0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0),
++            Cls.NUMBER to listOf(0x00, 0x10),
++            Cls.PHONE to listOf(0x00),
++            Cls.DATETIME to listOf(0x00, 0x10, 0x20),
++            Cls.NULL to listOf(0x00),
++        )
++
++        @JvmStatic
++        fun cases(): List<Case> = buildList {
++            for ((cls, vars) in variations) for (v in vars)
++                for (noSug in listOf(false, true)) for (noLearn in listOf(false, true)) for (ctx in Ctx.values())
++                    add(Case(cls, v, noSug, noLearn, ctx))
++        }
++    }
++}
+diff --git a/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicyTest.kt b/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicyTest.kt
+deleted file mode 100644
+index 588ddeeb..00000000
+--- a/ime/policy/src/test/kotlin/com/manjul/aikeyboard/ime/policy/SensitiveFieldPolicyTest.kt
++++ /dev/null
+@@ -1,22 +0,0 @@
+-/*
+- * Copyright (C) 2026 AI Keyboard contributors
+- * Licensed under the Apache License, Version 2.0
+- */
+-
+-package com.manjul.aikeyboard.ime.policy
+-
+-import kotlin.test.Test
+-import kotlin.test.assertEquals
+-import kotlin.test.assertTrue
+-
+-class SensitiveFieldPolicyTest {
+-    @Test
+-    fun `policy contract can be implemented without Android`() {
+-        val field = FieldDescriptor(packageName = "com.example", inputType = 0x81, imeOptions = 0)
+-        val alwaysSensitive = object : SensitiveFieldPolicy {
+-            override fun isSensitive(field: FieldDescriptor) = true
+-        }
+-        assertTrue(alwaysSensitive.isSensitive(field))
+-        assertEquals(field, field.copy())
+-    }
+-}

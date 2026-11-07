@@ -1,0 +1,689 @@
+79f12c6e fix(whisper): address review for task 12
+ lib/whisper/src/main/cpp/CMakeLists.txt            |   3 +-
+ lib/whisper/src/main/cpp/whisper_jni.cpp           |  44 +++++-
+ .../manjul/aikeyboard/lib/whisper/WhisperBridge.kt |  75 ++++++++--
+ .../manjul/aikeyboard/lib/whisper/WhisperJni.kt    |  15 +-
+ .../manjul/aikeyboard/lib/whisper/WhisperNative.kt |  13 +-
+ .../lib/whisper/WhisperNativeContractTest.kt       | 151 ++++++++++++++++-----
+ 6 files changed, 238 insertions(+), 63 deletions(-)
+diff --git a/lib/whisper/src/main/cpp/CMakeLists.txt b/lib/whisper/src/main/cpp/CMakeLists.txt
+index 59dd67dc..7849b31c 100644
+--- a/lib/whisper/src/main/cpp/CMakeLists.txt
++++ b/lib/whisper/src/main/cpp/CMakeLists.txt
+@@ -21,21 +21,22 @@ set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)
+ set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+ set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+ # arm64 stays on the armv8-a baseline (+ the NEON every arm64 core has). armv8.2-a+fp16+dotprod would
+ # need runtime CPU dispatch, which ggml only offers as GGML_CPU_ALL_VARIANTS with dlopen'ed backend
+ # libraries (GGML_BACKEND_DL); a single .so compiled for v8.2 would SIGILL on Cortex-A53/A73 phones.
+ set(GGML_CPU_ARM_ARCH "" CACHE STRING "" FORCE)
+ 
+ add_subdirectory(${WHISPER_DIR} whisper.cpp EXCLUDE_FROM_ALL)
+ 
+ foreach(lib ggml ggml-base ggml-cpu whisper)
+-    target_compile_options(${lib} PRIVATE -O3 -ffunction-sections -fdata-sections)
++    # -Wno-format: upstream printf-format warnings in code we do not edit.
++    target_compile_options(${lib} PRIVATE -O3 -ffunction-sections -fdata-sections -Wno-format)
+ endforeach()
+ 
+ add_library(aikb_whisper SHARED whisper_jni.cpp)
+ target_compile_options(aikb_whisper PRIVATE -O3 -fvisibility=hidden -Wall -Wextra)
+ target_link_libraries(aikb_whisper PRIVATE whisper ggml)
+ target_link_options(aikb_whisper PRIVATE
+     # 16 KB page sizes (Android 15+, TRD §11.8): every LOAD segment aligned to 16 KB.
+     -Wl,-z,max-page-size=16384
+     -Wl,-z,common-page-size=16384
+     -Wl,--gc-sections
+diff --git a/lib/whisper/src/main/cpp/whisper_jni.cpp b/lib/whisper/src/main/cpp/whisper_jni.cpp
+index d3319cf6..8946f3d2 100644
+--- a/lib/whisper/src/main/cpp/whisper_jni.cpp
++++ b/lib/whisper/src/main/cpp/whisper_jni.cpp
+@@ -1,35 +1,44 @@
+ /*
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+-// JNI bridge for com.manjul.aikeyboard.lib.whisper.WhisperJni. Input guards (0 handles, empty PCM,
+-// double free, concurrent use) are in Kotlin (WhisperBridge); this file only marshals and calls whisper.cpp.
++// JNI bridge for com.manjul.aikeyboard.lib.whisper.WhisperJni. Input guards (handle ids, empty PCM,
++// double free, free during a decode) are in Kotlin (WhisperBridge); this file only marshals and calls
++// whisper.cpp. Text goes back as raw UTF-8 bytes: whisper output can be malformed or contain 4-byte
++// sequences, which are not modified UTF-8 and would abort the process in NewStringUTF under CheckJNI.
+ // Nothing here logs: whisper.cpp's log output is discarded so no transcript text reaches any log.
+ 
+ #include <jni.h>
+ 
++#include <atomic>
+ #include <cstdint>
+ #include <new>
+ #include <string>
+ 
+ #include "whisper.h"
+ 
+ namespace {
+ 
+ // What a Kotlin handle points to.
+ struct Session {
+     whisper_context *ctx;
+     int threads;
++    // Set by nativeAbort from another thread, polled by whisper_full. Never reset: an aborted session is freed.
++    std::atomic<bool> abort_requested{false};
+ };
+ 
++bool should_abort(void *user_data) {
++    return static_cast<Session *>(user_data)->abort_requested.load(std::memory_order_relaxed);
++}
++
+ void discard_log(enum ggml_log_level, const char *, void *) {}
+ 
+ Session *to_session(jlong handle) {
+     return reinterpret_cast<Session *>(static_cast<intptr_t>(handle));
+ }
+ 
+ }  // namespace
+ 
+ extern "C" JNIEXPORT jlong JNICALL
+ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeInit(
+@@ -38,64 +47,87 @@ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeInit(
+ 
+     const char *path = env->GetStringUTFChars(model_path, nullptr);
+     if (path == nullptr) return 0;  // OutOfMemoryError pending
+ 
+     whisper_context_params cparams = whisper_context_default_params();
+     cparams.use_gpu = false;
+     whisper_context *ctx = whisper_init_from_file_with_params(path, cparams);
+     env->ReleaseStringUTFChars(model_path, path);
+     if (ctx == nullptr) return 0;
+ 
+-    auto *session = new (std::nothrow) Session{ctx, threads};
++    auto *session = new (std::nothrow) Session;
++    if (session != nullptr) {
++        session->ctx = ctx;
++        session->threads = threads;
++    }
+     if (session == nullptr) {
+         whisper_free(ctx);
+         return 0;
+     }
+     return static_cast<jlong>(reinterpret_cast<intptr_t>(session));
+ }
+ 
+-extern "C" JNIEXPORT jstring JNICALL
++extern "C" JNIEXPORT jbyteArray JNICALL
+ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeTranscribe(
+         JNIEnv *env, jclass, jlong handle, jfloatArray pcm, jstring lang, jboolean translate) {
+     Session *session = to_session(handle);
++    if (session == nullptr) {
++        jclass ise = env->FindClass("java/lang/IllegalStateException");
++        if (ise != nullptr) env->ThrowNew(ise, "null whisper session");
++        return nullptr;
++    }
+ 
+     const char *lang_chars = env->GetStringUTFChars(lang, nullptr);
+     if (lang_chars == nullptr) return nullptr;
+     const std::string language(lang_chars);
+     env->ReleaseStringUTFChars(lang, lang_chars);
+     if (language != "auto" && whisper_lang_id(language.c_str()) < 0) return nullptr;
+ 
+     whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+     params.n_threads = session->threads;
+     params.language = language.c_str();
+     params.translate = translate == JNI_TRUE;
+     params.no_timestamps = true;
+     params.single_segment = false;
+     params.print_special = false;
+     params.print_progress = false;
+     params.print_realtime = false;
+     params.print_timestamps = false;
++    // suppress_blank stays at its default (true); also drop non-speech tokens ("[BLANK_AUDIO]", "(music)").
++    params.suppress_nst = true;
++    params.abort_callback = should_abort;
++    params.abort_callback_user_data = session;
+ 
+     // Not GetPrimitiveArrayCritical: whisper_full runs for seconds and must not block the GC.
+     const jsize n_samples = env->GetArrayLength(pcm);
+     jfloat *samples = env->GetFloatArrayElements(pcm, nullptr);
+     if (samples == nullptr) return nullptr;
+     const int rc = whisper_full(session->ctx, params, samples, n_samples);
+     env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
+-    if (rc != 0) return nullptr;
++    if (rc != 0 || session->abort_requested.load()) return nullptr;
+ 
+     std::string text;
+     const int n_segments = whisper_full_n_segments(session->ctx);
+     for (int i = 0; i < n_segments; ++i) {
+         const char *segment = whisper_full_get_segment_text(session->ctx, i);
+         if (segment != nullptr) text += segment;
+     }
+-    return env->NewStringUTF(text.c_str());
++    jbyteArray bytes = env->NewByteArray(static_cast<jsize>(text.size()));
++    if (bytes == nullptr) return nullptr;  // OutOfMemoryError pending
++    env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(text.size()),
++                            reinterpret_cast<const jbyte *>(text.data()));
++    return bytes;
++}
++
++extern "C" JNIEXPORT void JNICALL
++Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeAbort(JNIEnv *, jclass, jlong handle) {
++    Session *session = to_session(handle);
++    if (session != nullptr) session->abort_requested.store(true);
+ }
+ 
+ extern "C" JNIEXPORT void JNICALL
+ Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeFree(JNIEnv *, jclass, jlong handle) {
+     Session *session = to_session(handle);
+     if (session == nullptr) return;
+     whisper_free(session->ctx);
+     delete session;
+ }
+diff --git a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperBridge.kt b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperBridge.kt
+index 374d2483..2b5a9c1c 100644
+--- a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperBridge.kt
++++ b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperBridge.kt
+@@ -2,52 +2,97 @@
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.lib.whisper
+ 
+ /** The raw native calls, a seam so [WhisperBridge]'s guards are testable on the JVM. */
+ internal interface WhisperNativeCalls {
+     fun isAvailable(): Boolean
+ 
+-    /** Returns the context pointer, or 0 on failure. */
++    /** Returns the native session pointer, or 0 on failure. */
+     fun init(modelPath: String, threads: Int): Long
+ 
+-    /** Returns the concatenated segment text, or null if whisper_full failed. */
+-    fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String?
++    /**
++     * Returns the concatenated segment text as raw UTF-8 bytes (possibly malformed), or null if whisper_full
++     * failed or was aborted.
++     */
++    fun transcribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray?
+ 
+-    fun free(ctx: Long)
++    /** Asks a running [transcribe] on [ptr] to stop. Never blocks; safe while the decode runs. */
++    fun abort(ptr: Long)
++
++    fun free(ptr: Long)
+ }
+ 
++/** Upper bound for whisper threads: more only oversubscribes big.LITTLE cores in the IME process. */
++internal const val MAX_WHISPER_THREADS = 8
++
++/** whisper.cpp output is standard UTF-8 and can be cut mid-sequence; malformed bytes become U+FFFD. */
++internal fun decodeWhisperText(bytes: ByteArray): String = String(bytes, Charsets.UTF_8)
++
+ /**
+  * [WhisperApi] over [WhisperNativeCalls]: input guards and handle bookkeeping live here, in Kotlin, so a
+  * stale or double-freed handle never reaches native code.
++ *
++ * Handles are monotonic ids mapped to native pointers, so a freed id is never valid again. [free] never
++ * waits for a running decode: it closes the handle and aborts the decode, and whichever side finishes
++ * last releases the native session.
+  */
+-internal class WhisperBridge(private val calls: WhisperNativeCalls) : WhisperApi {
++internal class WhisperBridge(
++    private val calls: WhisperNativeCalls,
++    private val maxThreads: Int = minOf(Runtime.getRuntime().availableProcessors(), MAX_WHISPER_THREADS),
++) : WhisperApi {
++    private class Session(val ptr: Long) {
++        var busy = false
++        var closed = false
++    }
++
+     private val lock = Any()
+-    private val live = HashSet<Long>()
++    private val sessions = HashMap<Long, Session>()
++    private var nextId = 1L
+ 
+     override fun load(modelPath: String, threads: Int): Long {
+         if (modelPath.isBlank() || !calls.isAvailable()) return 0L
++        // Model loading takes seconds; it runs outside the lock so free() of another handle never waits on it.
++        val ptr = calls.init(modelPath, threads.coerceIn(1, maxThreads.coerceAtLeast(1)))
++        if (ptr == 0L) return 0L
+         synchronized(lock) {
+-            val ctx = calls.init(modelPath, threads.coerceAtLeast(1))
+-            if (ctx != 0L) live += ctx
+-            return ctx
++            val id = nextId++
++            sessions[id] = Session(ptr)
++            return id
+         }
+     }
+ 
+     override fun transcribe(ctx: Long, pcm16kMono: FloatArray, lang: String, translate: Boolean): String {
+-        synchronized(lock) {
+-            require(ctx in live) { "Not a live whisper context" }
++        val session = synchronized(lock) {
++            val session = requireNotNull(sessions[ctx]) { "Not a live whisper context" }
++            check(!session.busy) { "Whisper context is already transcribing" }
+             if (pcm16kMono.isEmpty()) return ""
+-            val text = calls.transcribe(ctx, pcm16kMono, lang, translate)
+-                ?: throw WhisperException("whisper_full failed")
+-            return text.trim()
++            session.busy = true
++            session
++        }
++        var aborted = false
++        val bytes = try {
++            calls.transcribe(session.ptr, pcm16kMono, lang, translate)
++        } finally {
++            synchronized(lock) {
++                session.busy = false
++                if (session.closed) {
++                    aborted = true
++                    calls.free(session.ptr)
++                }
++            }
+         }
++        if (aborted) throw WhisperException("Transcription aborted: context freed")
++        bytes ?: throw WhisperException("whisper_full failed")
++        return decodeWhisperText(bytes).trim()
+     }
+ 
+     override fun free(ctx: Long) {
+         synchronized(lock) {
+-            if (live.remove(ctx)) calls.free(ctx)
++            val session = sessions.remove(ctx) ?: return
++            session.closed = true
++            if (session.busy) calls.abort(session.ptr) else calls.free(session.ptr)
+         }
+     }
+ }
+diff --git a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperJni.kt b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperJni.kt
+index 84ad4650..50effe52 100644
+--- a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperJni.kt
++++ b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperJni.kt
+@@ -13,24 +13,29 @@ internal object WhisperJni : WhisperNativeCalls {
+             true
+         } catch (_: UnsatisfiedLinkError) {
+             false
+         }
+     }
+ 
+     override fun isAvailable(): Boolean = loaded
+ 
+     override fun init(modelPath: String, threads: Int): Long = nativeInit(modelPath, threads)
+ 
+-    override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String? =
+-        nativeTranscribe(ctx, pcm, lang, translate)
++    override fun transcribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray? =
++        nativeTranscribe(ptr, pcm, lang, translate)
+ 
+-    override fun free(ctx: Long) = nativeFree(ctx)
++    override fun abort(ptr: Long) = nativeAbort(ptr)
++
++    override fun free(ptr: Long) = nativeFree(ptr)
+ 
+     @JvmStatic
+     external fun nativeInit(modelPath: String, threads: Int): Long
+ 
+     @JvmStatic
+-    external fun nativeTranscribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String?
++    external fun nativeTranscribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray?
++
++    @JvmStatic
++    external fun nativeAbort(ptr: Long)
+ 
+     @JvmStatic
+-    external fun nativeFree(ctx: Long)
++    external fun nativeFree(ptr: Long)
+ }
+diff --git a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNative.kt b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNative.kt
+index 1fee03f6..218b0137 100644
+--- a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNative.kt
++++ b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNative.kt
+@@ -2,38 +2,43 @@
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.lib.whisper
+ 
+ /**
+  * On-device whisper.cpp speech-to-text. Batch only: the whole utterance goes in, the text comes out.
+  * Callers (WhisperSpeechEngine) depend on this interface so tests can inject a fake.
+  *
+- * Handles are opaque; 0 is never a valid context. A context must not be used from two threads at once;
+- * calls on one implementation are serialised, so [free] waits for a running [transcribe].
++ * Handles are opaque ids; 0 is never a valid context and a freed id never becomes valid again. One context
++ * runs one [transcribe] at a time. [free] never blocks on a running [transcribe]: it aborts it (that call then
++ * throws [WhisperException]), so it is safe from the main thread (onTrimMemory, idle unload).
+  */
+ interface WhisperApi {
+     /**
+      * Loads a ggml model file. Returns a context handle, or 0 if the model cannot be loaded (missing or
+      * corrupt file, out of memory, native library unavailable on this ABI).
+      */
+     fun load(modelPath: String, threads: Int): Long
+ 
+     /**
+      * Transcribes 16 kHz mono float PCM in [-1, 1]. [lang] is an ISO 639-1 code (or "auto");
+      * [translate] translates to English. Empty [pcm16kMono] returns "" without running the model.
+      *
+      * @throws IllegalArgumentException if [ctx] is not a live handle from [load].
+-     * @throws WhisperException if whisper.cpp fails (unknown language, decode error).
++     * @throws IllegalStateException if [ctx] is already transcribing on another thread.
++     * @throws WhisperException if whisper.cpp fails (unknown language, decode error) or [free] aborted the call.
+      */
+     fun transcribe(ctx: Long, pcm16kMono: FloatArray, lang: String, translate: Boolean = false): String
+ 
+-    /** Releases a context. Safe for 0, for a failed [load] and for a handle that is already freed. */
++    /**
++     * Releases a context without waiting; a running [transcribe] on it is aborted and releases it on exit.
++     * Safe for 0, for a failed [load] and for a handle that is already freed.
++     */
+     fun free(ctx: Long)
+ }
+ 
+ /** whisper.cpp failed. The message never contains audio or transcript content. */
+ class WhisperException(message: String) : RuntimeException(message)
+ 
+ /** The process-wide [WhisperApi] backed by libaikb_whisper.so (loaded on the first [load]). */
+ object WhisperNative : WhisperApi by WhisperBridge(WhisperJni)
+diff --git a/lib/whisper/src/test/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNativeContractTest.kt b/lib/whisper/src/test/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNativeContractTest.kt
+index 13f10a1d..84a14e6d 100644
+--- a/lib/whisper/src/test/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNativeContractTest.kt
++++ b/lib/whisper/src/test/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNativeContractTest.kt
+@@ -1,64 +1,90 @@
+ /*
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.lib.whisper
+ 
+ import org.junit.jupiter.api.Test
+ import org.junit.jupiter.api.assertThrows
++import java.util.concurrent.CountDownLatch
++import java.util.concurrent.TimeUnit
+ import kotlin.test.assertEquals
++import kotlin.test.assertIs
++import kotlin.test.assertNotEquals
+ import kotlin.test.assertTrue
+ 
+ /**
+  * The [WhisperApi] contract that [WhisperNative] provides, checked on [WhisperBridge] over a fake
+  * native seam (libaikb_whisper.so cannot load on the JVM; native behaviour is on the device checklist).
+  */
+ class WhisperNativeContractTest {
+ 
+     private class FakeCalls(
+         var available: Boolean = true,
+         var initResult: Long = 42L,
+-        var transcribeResult: String? = " hello world",
++        var transcribeResult: ByteArray? = " hello world".toByteArray(),
+     ) : WhisperNativeCalls {
+         val calls = mutableListOf<String>()
+         var lastThreads = -1
+         var lastLang = ""
+         var lastTranslate = false
+ 
+         override fun isAvailable(): Boolean = available
+ 
+         override fun init(modelPath: String, threads: Int): Long {
+             calls += "init"
+             lastThreads = threads
+             return initResult
+         }
+ 
+-        override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String? {
+-            calls += "transcribe"
++        override fun transcribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray? {
++            calls += "transcribe:$ptr"
+             lastLang = lang
+             lastTranslate = translate
+             return transcribeResult
+         }
+ 
+-        override fun free(ctx: Long) {
+-            calls += "free:$ctx"
++        override fun abort(ptr: Long) {
++            calls += "abort:$ptr"
++        }
++
++        override fun free(ptr: Long) {
++            calls += "free:$ptr"
++        }
++    }
++
++    /** A decode that runs until aborted (or released by the test), like whisper_full polling abort_callback. */
++    private class BlockingCalls : WhisperNativeCalls {
++        val inside = CountDownLatch(1)
++        val aborted = CountDownLatch(1)
++        val frees = mutableListOf<Long>()
++
++        override fun isAvailable() = true
++        override fun init(modelPath: String, threads: Int) = 7L
++        override fun transcribe(ptr: Long, pcm: FloatArray, lang: String, translate: Boolean): ByteArray? {
++            inside.countDown()
++            return if (aborted.await(5, TimeUnit.SECONDS)) null else "late".toByteArray()
++        }
++        override fun abort(ptr: Long) = aborted.countDown()
++        override fun free(ptr: Long) {
++            synchronized(frees) { frees += ptr }
+         }
+     }
+ 
+     private val pcm = FloatArray(16_000)
+ 
+     @Test
+-    fun `load returns the native handle`() {
++    fun `load returns a non-zero handle`() {
+         val bridge = WhisperBridge(FakeCalls())
+-        assertEquals(42L, bridge.load("/models/base.bin", threads = 4))
++        assertNotEquals(0L, bridge.load("/models/base.bin", threads = 4))
+     }
+ 
+     @Test
+     fun `load failure returns 0 and free of it is a safe no-op`() {
+         val calls = FakeCalls(initResult = 0L)
+         val bridge = WhisperBridge(calls)
+ 
+         val ctx = bridge.load("/models/missing.bin", threads = 4)
+         bridge.free(ctx)
+ 
+@@ -73,56 +99,95 @@ class WhisperNativeContractTest {
+         assertTrue(calls.calls.isEmpty())
+     }
+ 
+     @Test
+     fun `load returns 0 without calling native for a blank path`() {
+         val calls = FakeCalls()
+         assertEquals(0L, WhisperBridge(calls).load(" ", threads = 4))
+         assertTrue(calls.calls.isEmpty())
+     }
+ 
++    @Test
++    fun `WhisperNative rejects a blank path before loading the native library`() {
++        assertEquals(0L, WhisperNative.load("", threads = 1))
++    }
++
+     @Test
+     fun `load clamps the thread count to at least 1`() {
+         val calls = FakeCalls()
+-        WhisperBridge(calls).load("/models/base.bin", threads = 0)
++        WhisperBridge(calls, maxThreads = 4).load("/models/base.bin", threads = 0)
+         assertEquals(1, calls.lastThreads)
+     }
+ 
++    @Test
++    fun `load clamps the thread count to maxThreads`() {
++        val calls = FakeCalls()
++        WhisperBridge(calls, maxThreads = 4).load("/models/base.bin", threads = 64)
++        assertEquals(4, calls.lastThreads)
++    }
++
++    @Test
++    fun `default maxThreads is at most MAX_WHISPER_THREADS`() {
++        val calls = FakeCalls()
++        WhisperBridge(calls).load("/models/base.bin", threads = 1_000)
++        assertEquals(minOf(Runtime.getRuntime().availableProcessors(), MAX_WHISPER_THREADS), calls.lastThreads)
++    }
++
+     @Test
+     fun `empty PCM returns an empty string without calling native`() {
+         val calls = FakeCalls()
+         val bridge = WhisperBridge(calls)
+         val ctx = bridge.load("/models/base.bin", threads = 4)
+ 
+         assertEquals("", bridge.transcribe(ctx, FloatArray(0), "en"))
+         assertEquals(listOf("init"), calls.calls)
+     }
+ 
+     @Test
+-    fun `transcribe passes language and translate through and trims the result`() {
++    fun `transcribe passes the native pointer, language and translate through and trims the result`() {
+         val calls = FakeCalls()
+         val bridge = WhisperBridge(calls)
+         val ctx = bridge.load("/models/base.bin", threads = 4)
+ 
+         assertEquals("hello world", bridge.transcribe(ctx, pcm, "hi", translate = true))
++        assertEquals("transcribe:42", calls.calls.last())
+         assertEquals("hi", calls.lastLang)
+         assertTrue(calls.lastTranslate)
+     }
+ 
+     @Test
+     fun `translate defaults to false`() {
+         val calls = FakeCalls()
+         val bridge = WhisperBridge(calls)
+         bridge.transcribe(bridge.load("/models/base.bin", threads = 4), pcm, "en")
+         assertEquals(false, calls.lastTranslate)
+     }
+ 
++    @Test
++    fun `a 4-byte emoji and Devanagari decode intact`() {
++        val text = "नमस्ते 🎵"
++        val calls = FakeCalls(transcribeResult = text.toByteArray(Charsets.UTF_8))
++        val bridge = WhisperBridge(calls)
++
++        assertEquals(text, bridge.transcribe(bridge.load("/models/base.bin", threads = 4), pcm, "hi"))
++    }
++
++    @Test
++    fun `a truncated multi-byte sequence becomes U+FFFD instead of failing`() {
++        // "ab" followed by the first two bytes of the 3-byte UTF-8 encoding of U+0928.
++        val bytes = byteArrayOf('a'.code.toByte(), 'b'.code.toByte(), 0xE0.toByte(), 0xA4.toByte())
++        val calls = FakeCalls(transcribeResult = bytes)
++        val bridge = WhisperBridge(calls)
++
++        assertEquals("ab�", bridge.transcribe(bridge.load("/models/base.bin", threads = 4), pcm, "hi"))
++    }
++
+     @Test
+     fun `native transcription failure throws WhisperException`() {
+         val calls = FakeCalls(transcribeResult = null)
+         val bridge = WhisperBridge(calls)
+         val ctx = bridge.load("/models/base.bin", threads = 4)
+ 
+         assertThrows<WhisperException> { bridge.transcribe(ctx, pcm, "en") }
+     }
+ 
+     @Test
+@@ -130,56 +195,78 @@ class WhisperNativeContractTest {
+         val calls = FakeCalls()
+         val bridge = WhisperBridge(calls)
+         val ctx = bridge.load("/models/base.bin", threads = 4)
+         bridge.free(ctx)
+ 
+         assertThrows<IllegalArgumentException> { bridge.transcribe(ctx, pcm, "en") }
+         assertThrows<IllegalArgumentException> { bridge.transcribe(0L, pcm, "en") }
+         assertEquals(listOf("init", "free:42"), calls.calls)
+     }
+ 
++    @Test
++    fun `a freed handle stays invalid after the same native pointer is loaded again`() {
++        val calls = FakeCalls(initResult = 42L)
++        val bridge = WhisperBridge(calls)
++        val first = bridge.load("/models/base.bin", threads = 4)
++        bridge.free(first)
++
++        val second = bridge.load("/models/base.bin", threads = 4)
++
++        assertNotEquals(first, second)
++        assertThrows<IllegalArgumentException> { bridge.transcribe(first, pcm, "en") }
++        assertEquals("hello world", bridge.transcribe(second, pcm, "en"))
++    }
++
+     @Test
+     fun `free twice releases the native context once`() {
+         val calls = FakeCalls()
+         val bridge = WhisperBridge(calls)
+         val ctx = bridge.load("/models/base.bin", threads = 4)
+ 
+         bridge.free(ctx)
+         bridge.free(ctx)
+ 
+         assertEquals(listOf("init", "free:42"), calls.calls)
+     }
+ 
+     @Test
+-    fun `free waits for a running transcription on the same bridge`() {
+-        val order = mutableListOf<String>()
+-        val inside = java.util.concurrent.CountDownLatch(1)
+-        val calls = object : WhisperNativeCalls {
+-            override fun isAvailable() = true
+-            override fun init(modelPath: String, threads: Int) = 7L
+-            override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String {
+-                inside.countDown()
+-                Thread.sleep(200)
+-                synchronized(order) { order += "transcribe-end" }
+-                return "ok"
+-            }
+-            override fun free(ctx: Long) {
+-                synchronized(order) { order += "free" }
+-            }
+-        }
++    fun `free during a running decode returns promptly, aborts it and frees once`() {
++        val calls = BlockingCalls()
+         val bridge = WhisperBridge(calls)
+         val ctx = bridge.load("/models/base.bin", threads = 4)
++        var outcome: Throwable? = null
++        val worker = Thread {
++            try {
++                bridge.transcribe(ctx, pcm, "en")
++            } catch (t: Throwable) {
++                outcome = t
++            }
++        }.apply { start() }
++        calls.inside.await()
+ 
+-        val worker = Thread { bridge.transcribe(ctx, pcm, "en") }.apply { start() }
+-        inside.await()
++        val started = System.nanoTime()
+         bridge.free(ctx)
+-        worker.join()
++        val freeMillis = (System.nanoTime() - started) / 1_000_000
++        worker.join(5_000)
+ 
+-        assertEquals(listOf("transcribe-end", "free"), order)
++        assertTrue(freeMillis < 1_000, "free blocked for $freeMillis ms")
++        assertEquals(0L, calls.aborted.count, "decode was not aborted")
++        assertIs<WhisperException>(outcome)
++        assertEquals(listOf(7L), calls.frees)
++        assertThrows<IllegalArgumentException> { bridge.transcribe(ctx, pcm, "en") }
+     }
+ 
+     @Test
+-    fun `WhisperNative implements WhisperApi`() {
+-        val api: WhisperApi = WhisperNative
+-        assertTrue(api is WhisperNative)
++    fun `a second transcribe on a busy handle throws instead of waiting`() {
++        val calls = BlockingCalls()
++        val bridge = WhisperBridge(calls)
++        val ctx = bridge.load("/models/base.bin", threads = 4)
++        val worker = Thread { runCatching { bridge.transcribe(ctx, pcm, "en") } }.apply { start() }
++        calls.inside.await()
++
++        assertThrows<IllegalStateException> { bridge.transcribe(ctx, pcm, "en") }
++
++        bridge.free(ctx)
++        worker.join(5_000)
++        assertEquals(listOf(7L), calls.frees)
+     }
+ }

@@ -1,0 +1,780 @@
+582550c5 feat(whisper): vendor whisper.cpp v1.9.5 with a 16 KB-aligned JNI bridge
+
+## Vendored tree (excluded from diff): top-level dirs and file counts
+lib/whisper/third_party/whisper.cpp/cmake       13
+lib/whisper/third_party/whisper.cpp/CMakeLists.txt        1
+lib/whisper/third_party/whisper.cpp/ggml     1418
+lib/whisper/third_party/whisper.cpp/include        2
+lib/whisper/third_party/whisper.cpp/LICENSE        1
+lib/whisper/third_party/whisper.cpp/src       21
+
+ .github/workflows/pr.yml                           |   8 +-
+ NOTICE                                             |  32 ++++
+ app/build.gradle.kts                               |   2 +
+ docs/FORK_PATCHES.md                               |   1 +
+ lib/whisper/build.gradle.kts                       |  50 ++++++
+ lib/whisper/consumer-rules.pro                     |   5 +
+ lib/whisper/src/main/cpp/CMakeLists.txt            |  43 +++++
+ lib/whisper/src/main/cpp/whisper_jni.cpp           | 101 +++++++++++
+ .../manjul/aikeyboard/lib/whisper/WhisperBridge.kt |  53 ++++++
+ .../manjul/aikeyboard/lib/whisper/WhisperJni.kt    |  36 ++++
+ .../manjul/aikeyboard/lib/whisper/WhisperNative.kt |  39 +++++
+ .../lib/whisper/WhisperNativeContractTest.kt       | 185 +++++++++++++++++++++
+ lib/whisper/third_party/WHISPER_UPSTREAM.md        |  29 ++++
+ settings.gradle.kts                                |   2 +
+ 14 files changed, 584 insertions(+), 2 deletions(-)
+
+diff --git a/.github/workflows/pr.yml b/.github/workflows/pr.yml
+index f951c1a0..4938fc54 100644
+--- a/.github/workflows/pr.yml
++++ b/.github/workflows/pr.yml
+@@ -100,28 +100,32 @@ jobs:
+         run: >-
+           ./gradlew --console=plain
+           test testDebugUnitTest
+           :build-logic:convention:test
+ 
+       # `check` picks up every task wired into it, e.g. :app:verify<Variant>NoAdAutoInit and
+       # :app:verify<Variant>ExportedComponents (merged-manifest ad-isolation checks) and lint.
+       - name: Check (lint, merged-manifest verification)
+         run: ./gradlew --console=plain check :app:lintDebug
+ 
+-      # lib/native builds all four default ABIs (no abiFilters). Require libfl_native.so in each one,
+-      # because a count alone would be satisfied by other libraries (androidx ships its own .so files).
++      # lib/native builds all four default ABIs (no abiFilters), lib/whisper three. Require libfl_native.so
++      # and libaikb_whisper.so in each of their ABIs, because a count alone would be satisfied by other
++      # libraries (androidx ships its own .so files).
+       - name: 16 KB alignment of native libraries
+         run: |
+           apk=app/build/outputs/apk/debug/app-debug.apk
+           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+             unzip -l "$apk" "lib/$abi/libfl_native.so" > /dev/null || { echo "missing lib/$abi/libfl_native.so"; exit 1; }
+           done
++          for abi in arm64-v8a armeabi-v7a x86_64; do
++            unzip -l "$apk" "lib/$abi/libaikb_whisper.so" > /dev/null || { echo "missing lib/$abi/libaikb_whisper.so"; exit 1; }
++          done
+           scripts/check-16kb-alignment.sh --min-libs 4 "$apk"
+ 
+       - name: Upload reports
+         if: failure()
+         uses: actions/upload-artifact@v4
+         with:
+           name: reports
+           path: |
+             **/build/reports/
+             **/build/test-results/
+diff --git a/NOTICE b/NOTICE
+index e7bd0c3d..94708638 100644
+--- a/NOTICE
++++ b/NOTICE
+@@ -14,10 +14,42 @@ com.manjul.aikeyboard, which changed the package declarations, imports and
+ directory locations of the FlorisBoard source files. Files with changes beyond
+ that rename carry a "Modified by AI Keyboard contributors" line in their
+ header. The full list of modified upstream files is kept in
+ docs/FORK_PATCHES.md in the source repository.
+ 
+ "FlorisBoard" is the name of the upstream project. This product is not
+ affiliated with or endorsed by The FlorisBoard Contributors, and the Apache
+ License grants no rights to use their names or trademarks.
+ 
+ The full text of the Apache License, Version 2.0 is in the LICENSE file.
++
++This product includes whisper.cpp and ggml (lib/whisper/third_party/whisper.cpp,
++v1.9.5), licensed under the MIT License:
++
++  whisper.cpp
++  https://github.com/ggml-org/whisper.cpp
++
++  MIT License
++
++  Copyright (c) 2023-2026 The ggml authors
++
++  Permission is hereby granted, free of charge, to any person obtaining a copy
++  of this software and associated documentation files (the "Software"), to deal
++  in the Software without restriction, including without limitation the rights
++  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++  copies of the Software, and to permit persons to whom the Software is
++  furnished to do so, subject to the following conditions:
++
++  The above copyright notice and this permission notice shall be included in all
++  copies or substantial portions of the Software.
++
++  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++  SOFTWARE.
++
++  ggml includes the YaRN rotary-embedding routine, MIT licensed,
++  Copyright (c) 2023 Jeffrey Quesnelle and Bowen Peng (same licence terms as
++  above).
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index fa4edd9e..837cd73c 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -270,20 +270,22 @@ dependencies {
+ 
+     // FORK(S1-policy): fork settings store and the sensitive-field policy that FlorisImeService evaluates
+     implementation(projects.core.datastore)
+     implementation(projects.ime.policy)
+     // FORK(S1-clipboard): clipboard sensitivity classifier used by the capture gate
+     implementation(projects.core.privacy)
+     implementation(projects.core.analytics) // FORK(S1-analytics): event catalog and relay
+     // FORK(S1-voice): speech session, platform engines and the in-keyboard voice UI
+     implementation(projects.core.voice)
+     implementation(projects.ime.voiceUi)
++    // FORK(S1-whisper): on-device whisper.cpp (libaikb_whisper.so); WhisperSpeechEngine builds on it
++    implementation(projects.lib.whisper)
+ 
+     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
+     lintChecks(projects.lintRules)
+ 
+     testImplementation(libs.kotlin.test.junit5)
+     // FORK(S1-policy): Robolectric (JUnit 4) tests run on the JUnit 5 platform through the vintage engine
+     testImplementation(platform(libs.junit.bom))
+     testImplementation(libs.junit4)
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index 866dfcdc..058c0bd6 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -78,20 +78,21 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/AndroidManifest.xml` | S1-onboarding | `RECORD_AUDIO` permission (requested only after the voice notice) |
+ | `app/build.gradle.kts`, `gradle/libs.versions.toml` | S1-onboarding | Turbine and Compose UI test (`ui-test-junit4`, `ui-test-manifest` as `debugImplementation`, versions from the BOM) for the onboarding tests; the commented `testImplementation(composeBom)` line is kept |
+ | `app/src/main/AndroidManifest.xml` | S1-voice | `<queries>` entry for `android.speech.RecognitionService` so `SpeechRecognizer.isRecognitionAvailable` sees recognition services on API 30+ |
+ | `settings.gradle.kts`, `app/build.gradle.kts` | S1-voice | `include(":ime:voice-ui")`; `implementation(projects.core.voice)`, `implementation(projects.ime.voiceUi)` |
+ | `app/src/main/AndroidManifest.xml` | S1-voice | `ACCESS_NETWORK_STATE` permission (the engine choice needs to know whether a network is up); `fork.voice.MicPermissionActivity` (translucent, `excludeFromRecents`, `noHistory`, `taskAffinity=""`, not exported) |
+ | `app/src/main/res/values/strings_fork.xml` | S1-voice | Permission-denied rationale strings for the mic trampoline |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-voice | Creates a `fork.voice.VoiceImeSession` in `onCreate` (after the policy controller); forwards `onUpdateSelection`, `onFinishInputView` (hiding the keyboard ends dictation) and `onDestroy`; companion `voiceSessionOrNull()` accessor |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-voice | `VOICE_INPUT` toggles in-keyboard voice typing instead of switching to another voice IME; the S1-smartbar policy gate is kept |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt` | S1-voice | `voiceOwnsComposing` flag: while voice owns the composing region, `handleSelectionUpdate` does not treat the region as a word the editor must re-sync |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-voice | After `PrivateLockIndicator`, `smartbarVoicePanel()` replaces the rest of the main row while the voice panel is open |
++| `settings.gradle.kts`, `app/build.gradle.kts` | S1-whisper | `include(":lib:whisper")` (vendored whisper.cpp v1.9.5 + JNI bridge `libaikb_whisper.so`); `implementation(projects.lib.whisper)` |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised
+diff --git a/lib/whisper/build.gradle.kts b/lib/whisper/build.gradle.kts
+new file mode 100644
+index 00000000..aba10d9c
+--- /dev/null
++++ b/lib/whisper/build.gradle.kts
+@@ -0,0 +1,50 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++// :lib:whisper: vendored whisper.cpp (third_party/, see WHISPER_UPSTREAM.md) behind a small JNI bridge,
++// libaikb_whisper.so. On-device, batch-only speech-to-text; models are downloaded, never bundled.
++
++plugins {
++    alias(libs.plugins.aikeyboard.android.library)
++}
++
++android {
++    namespace = "com.manjul.aikeyboard.lib.whisper"
++    ndkVersion = tools.versions.ndk.get()
++
++    defaultConfig {
++        consumerProguardFiles("consumer-rules.pro")
++
++        externalNativeBuild {
++            cmake {
++                targets("aikb_whisper")
++                // 16 KB page alignment is set by the linker flags in CMakeLists.txt (NDK r26 does not default to it).
++                arguments("-DANDROID_STL=c++_static")
++            }
++        }
++
++        ndk {
++            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
++        }
++    }
++
++    buildTypes {
++        // whisper.cpp is unusably slow at -O0, so the native code is always built optimised.
++        debug {
++            externalNativeBuild {
++                cmake {
++                    arguments("-DCMAKE_BUILD_TYPE=Release")
++                }
++            }
++        }
++    }
++
++    externalNativeBuild {
++        cmake {
++            version = tools.versions.cmake.get()
++            path("src/main/cpp/CMakeLists.txt")
++        }
++    }
++}
+diff --git a/lib/whisper/consumer-rules.pro b/lib/whisper/consumer-rules.pro
+new file mode 100644
+index 00000000..875678e0
+--- /dev/null
++++ b/lib/whisper/consumer-rules.pro
+@@ -0,0 +1,5 @@
++# JNI entry points of libaikb_whisper.so are bound by name (Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_*):
++# keep the class and its native method names in R8-minified apps.
++-keep,includedescriptorclasses class com.manjul.aikeyboard.lib.whisper.WhisperJni {
++    native <methods>;
++}
+diff --git a/lib/whisper/src/main/cpp/CMakeLists.txt b/lib/whisper/src/main/cpp/CMakeLists.txt
+new file mode 100644
+index 00000000..59dd67dc
+--- /dev/null
++++ b/lib/whisper/src/main/cpp/CMakeLists.txt
+@@ -0,0 +1,43 @@
++# Copyright (C) 2026 AI Keyboard contributors
++# Licensed under the Apache License, Version 2.0
++#
++# libaikb_whisper.so: the JNI bridge with whisper.cpp and ggml (CPU backend) linked in statically.
++
++cmake_minimum_required(VERSION 3.22)
++project(aikb_whisper C CXX)
++
++set(WHISPER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/whisper.cpp)
++
++# whisper.cpp / ggml options: one static CPU-only build, no tests/examples/server.
++set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
++set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
++set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
++set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
++set(WHISPER_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
++set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
++set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
++set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)
++# ggml's own thread pool; OpenMP would need libomp.so packaged next to us.
++set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
++set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
++# arm64 stays on the armv8-a baseline (+ the NEON every arm64 core has). armv8.2-a+fp16+dotprod would
++# need runtime CPU dispatch, which ggml only offers as GGML_CPU_ALL_VARIANTS with dlopen'ed backend
++# libraries (GGML_BACKEND_DL); a single .so compiled for v8.2 would SIGILL on Cortex-A53/A73 phones.
++set(GGML_CPU_ARM_ARCH "" CACHE STRING "" FORCE)
++
++add_subdirectory(${WHISPER_DIR} whisper.cpp EXCLUDE_FROM_ALL)
++
++foreach(lib ggml ggml-base ggml-cpu whisper)
++    target_compile_options(${lib} PRIVATE -O3 -ffunction-sections -fdata-sections)
++endforeach()
++
++add_library(aikb_whisper SHARED whisper_jni.cpp)
++target_compile_options(aikb_whisper PRIVATE -O3 -fvisibility=hidden -Wall -Wextra)
++target_link_libraries(aikb_whisper PRIVATE whisper ggml)
++target_link_options(aikb_whisper PRIVATE
++    # 16 KB page sizes (Android 15+, TRD §11.8): every LOAD segment aligned to 16 KB.
++    -Wl,-z,max-page-size=16384
++    -Wl,-z,common-page-size=16384
++    -Wl,--gc-sections
++    -Wl,--exclude-libs,ALL
++)
+diff --git a/lib/whisper/src/main/cpp/whisper_jni.cpp b/lib/whisper/src/main/cpp/whisper_jni.cpp
+new file mode 100644
+index 00000000..d3319cf6
+--- /dev/null
++++ b/lib/whisper/src/main/cpp/whisper_jni.cpp
+@@ -0,0 +1,101 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++// JNI bridge for com.manjul.aikeyboard.lib.whisper.WhisperJni. Input guards (0 handles, empty PCM,
++// double free, concurrent use) are in Kotlin (WhisperBridge); this file only marshals and calls whisper.cpp.
++// Nothing here logs: whisper.cpp's log output is discarded so no transcript text reaches any log.
++
++#include <jni.h>
++
++#include <cstdint>
++#include <new>
++#include <string>
++
++#include "whisper.h"
++
++namespace {
++
++// What a Kotlin handle points to.
++struct Session {
++    whisper_context *ctx;
++    int threads;
++};
++
++void discard_log(enum ggml_log_level, const char *, void *) {}
++
++Session *to_session(jlong handle) {
++    return reinterpret_cast<Session *>(static_cast<intptr_t>(handle));
++}
++
++}  // namespace
++
++extern "C" JNIEXPORT jlong JNICALL
++Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeInit(
++        JNIEnv *env, jclass, jstring model_path, jint threads) {
++    whisper_log_set(discard_log, nullptr);
++
++    const char *path = env->GetStringUTFChars(model_path, nullptr);
++    if (path == nullptr) return 0;  // OutOfMemoryError pending
++
++    whisper_context_params cparams = whisper_context_default_params();
++    cparams.use_gpu = false;
++    whisper_context *ctx = whisper_init_from_file_with_params(path, cparams);
++    env->ReleaseStringUTFChars(model_path, path);
++    if (ctx == nullptr) return 0;
++
++    auto *session = new (std::nothrow) Session{ctx, threads};
++    if (session == nullptr) {
++        whisper_free(ctx);
++        return 0;
++    }
++    return static_cast<jlong>(reinterpret_cast<intptr_t>(session));
++}
++
++extern "C" JNIEXPORT jstring JNICALL
++Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeTranscribe(
++        JNIEnv *env, jclass, jlong handle, jfloatArray pcm, jstring lang, jboolean translate) {
++    Session *session = to_session(handle);
++
++    const char *lang_chars = env->GetStringUTFChars(lang, nullptr);
++    if (lang_chars == nullptr) return nullptr;
++    const std::string language(lang_chars);
++    env->ReleaseStringUTFChars(lang, lang_chars);
++    if (language != "auto" && whisper_lang_id(language.c_str()) < 0) return nullptr;
++
++    whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
++    params.n_threads = session->threads;
++    params.language = language.c_str();
++    params.translate = translate == JNI_TRUE;
++    params.no_timestamps = true;
++    params.single_segment = false;
++    params.print_special = false;
++    params.print_progress = false;
++    params.print_realtime = false;
++    params.print_timestamps = false;
++
++    // Not GetPrimitiveArrayCritical: whisper_full runs for seconds and must not block the GC.
++    const jsize n_samples = env->GetArrayLength(pcm);
++    jfloat *samples = env->GetFloatArrayElements(pcm, nullptr);
++    if (samples == nullptr) return nullptr;
++    const int rc = whisper_full(session->ctx, params, samples, n_samples);
++    env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
++    if (rc != 0) return nullptr;
++
++    std::string text;
++    const int n_segments = whisper_full_n_segments(session->ctx);
++    for (int i = 0; i < n_segments; ++i) {
++        const char *segment = whisper_full_get_segment_text(session->ctx, i);
++        if (segment != nullptr) text += segment;
++    }
++    return env->NewStringUTF(text.c_str());
++}
++
++extern "C" JNIEXPORT void JNICALL
++Java_com_manjul_aikeyboard_lib_whisper_WhisperJni_nativeFree(JNIEnv *, jclass, jlong handle) {
++    Session *session = to_session(handle);
++    if (session == nullptr) return;
++    whisper_free(session->ctx);
++    delete session;
++}
+diff --git a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperBridge.kt b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperBridge.kt
+new file mode 100644
+index 00000000..374d2483
+--- /dev/null
++++ b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperBridge.kt
+@@ -0,0 +1,53 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.lib.whisper
++
++/** The raw native calls, a seam so [WhisperBridge]'s guards are testable on the JVM. */
++internal interface WhisperNativeCalls {
++    fun isAvailable(): Boolean
++
++    /** Returns the context pointer, or 0 on failure. */
++    fun init(modelPath: String, threads: Int): Long
++
++    /** Returns the concatenated segment text, or null if whisper_full failed. */
++    fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String?
++
++    fun free(ctx: Long)
++}
++
++/**
++ * [WhisperApi] over [WhisperNativeCalls]: input guards and handle bookkeeping live here, in Kotlin, so a
++ * stale or double-freed handle never reaches native code.
++ */
++internal class WhisperBridge(private val calls: WhisperNativeCalls) : WhisperApi {
++    private val lock = Any()
++    private val live = HashSet<Long>()
++
++    override fun load(modelPath: String, threads: Int): Long {
++        if (modelPath.isBlank() || !calls.isAvailable()) return 0L
++        synchronized(lock) {
++            val ctx = calls.init(modelPath, threads.coerceAtLeast(1))
++            if (ctx != 0L) live += ctx
++            return ctx
++        }
++    }
++
++    override fun transcribe(ctx: Long, pcm16kMono: FloatArray, lang: String, translate: Boolean): String {
++        synchronized(lock) {
++            require(ctx in live) { "Not a live whisper context" }
++            if (pcm16kMono.isEmpty()) return ""
++            val text = calls.transcribe(ctx, pcm16kMono, lang, translate)
++                ?: throw WhisperException("whisper_full failed")
++            return text.trim()
++        }
++    }
++
++    override fun free(ctx: Long) {
++        synchronized(lock) {
++            if (live.remove(ctx)) calls.free(ctx)
++        }
++    }
++}
+diff --git a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperJni.kt b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperJni.kt
+new file mode 100644
+index 00000000..84ad4650
+--- /dev/null
++++ b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperJni.kt
+@@ -0,0 +1,36 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.lib.whisper
++
++/** JNI entry points of libaikb_whisper.so (src/main/cpp/whisper_jni.cpp). Kept by consumer-rules.pro. */
++internal object WhisperJni : WhisperNativeCalls {
++    private val loaded: Boolean by lazy {
++        try {
++            System.loadLibrary("aikb_whisper")
++            true
++        } catch (_: UnsatisfiedLinkError) {
++            false
++        }
++    }
++
++    override fun isAvailable(): Boolean = loaded
++
++    override fun init(modelPath: String, threads: Int): Long = nativeInit(modelPath, threads)
++
++    override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String? =
++        nativeTranscribe(ctx, pcm, lang, translate)
++
++    override fun free(ctx: Long) = nativeFree(ctx)
++
++    @JvmStatic
++    external fun nativeInit(modelPath: String, threads: Int): Long
++
++    @JvmStatic
++    external fun nativeTranscribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String?
++
++    @JvmStatic
++    external fun nativeFree(ctx: Long)
++}
+diff --git a/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNative.kt b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNative.kt
+new file mode 100644
+index 00000000..1fee03f6
+--- /dev/null
++++ b/lib/whisper/src/main/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNative.kt
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.lib.whisper
++
++/**
++ * On-device whisper.cpp speech-to-text. Batch only: the whole utterance goes in, the text comes out.
++ * Callers (WhisperSpeechEngine) depend on this interface so tests can inject a fake.
++ *
++ * Handles are opaque; 0 is never a valid context. A context must not be used from two threads at once;
++ * calls on one implementation are serialised, so [free] waits for a running [transcribe].
++ */
++interface WhisperApi {
++    /**
++     * Loads a ggml model file. Returns a context handle, or 0 if the model cannot be loaded (missing or
++     * corrupt file, out of memory, native library unavailable on this ABI).
++     */
++    fun load(modelPath: String, threads: Int): Long
++
++    /**
++     * Transcribes 16 kHz mono float PCM in [-1, 1]. [lang] is an ISO 639-1 code (or "auto");
++     * [translate] translates to English. Empty [pcm16kMono] returns "" without running the model.
++     *
++     * @throws IllegalArgumentException if [ctx] is not a live handle from [load].
++     * @throws WhisperException if whisper.cpp fails (unknown language, decode error).
++     */
++    fun transcribe(ctx: Long, pcm16kMono: FloatArray, lang: String, translate: Boolean = false): String
++
++    /** Releases a context. Safe for 0, for a failed [load] and for a handle that is already freed. */
++    fun free(ctx: Long)
++}
++
++/** whisper.cpp failed. The message never contains audio or transcript content. */
++class WhisperException(message: String) : RuntimeException(message)
++
++/** The process-wide [WhisperApi] backed by libaikb_whisper.so (loaded on the first [load]). */
++object WhisperNative : WhisperApi by WhisperBridge(WhisperJni)
+diff --git a/lib/whisper/src/test/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNativeContractTest.kt b/lib/whisper/src/test/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNativeContractTest.kt
+new file mode 100644
+index 00000000..13f10a1d
+--- /dev/null
++++ b/lib/whisper/src/test/kotlin/com/manjul/aikeyboard/lib/whisper/WhisperNativeContractTest.kt
+@@ -0,0 +1,185 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.lib.whisper
++
++import org.junit.jupiter.api.Test
++import org.junit.jupiter.api.assertThrows
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++
++/**
++ * The [WhisperApi] contract that [WhisperNative] provides, checked on [WhisperBridge] over a fake
++ * native seam (libaikb_whisper.so cannot load on the JVM; native behaviour is on the device checklist).
++ */
++class WhisperNativeContractTest {
++
++    private class FakeCalls(
++        var available: Boolean = true,
++        var initResult: Long = 42L,
++        var transcribeResult: String? = " hello world",
++    ) : WhisperNativeCalls {
++        val calls = mutableListOf<String>()
++        var lastThreads = -1
++        var lastLang = ""
++        var lastTranslate = false
++
++        override fun isAvailable(): Boolean = available
++
++        override fun init(modelPath: String, threads: Int): Long {
++            calls += "init"
++            lastThreads = threads
++            return initResult
++        }
++
++        override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String? {
++            calls += "transcribe"
++            lastLang = lang
++            lastTranslate = translate
++            return transcribeResult
++        }
++
++        override fun free(ctx: Long) {
++            calls += "free:$ctx"
++        }
++    }
++
++    private val pcm = FloatArray(16_000)
++
++    @Test
++    fun `load returns the native handle`() {
++        val bridge = WhisperBridge(FakeCalls())
++        assertEquals(42L, bridge.load("/models/base.bin", threads = 4))
++    }
++
++    @Test
++    fun `load failure returns 0 and free of it is a safe no-op`() {
++        val calls = FakeCalls(initResult = 0L)
++        val bridge = WhisperBridge(calls)
++
++        val ctx = bridge.load("/models/missing.bin", threads = 4)
++        bridge.free(ctx)
++
++        assertEquals(0L, ctx)
++        assertEquals(listOf("init"), calls.calls)
++    }
++
++    @Test
++    fun `load returns 0 without calling native when the library is unavailable`() {
++        val calls = FakeCalls(available = false)
++        assertEquals(0L, WhisperBridge(calls).load("/models/base.bin", threads = 4))
++        assertTrue(calls.calls.isEmpty())
++    }
++
++    @Test
++    fun `load returns 0 without calling native for a blank path`() {
++        val calls = FakeCalls()
++        assertEquals(0L, WhisperBridge(calls).load(" ", threads = 4))
++        assertTrue(calls.calls.isEmpty())
++    }
++
++    @Test
++    fun `load clamps the thread count to at least 1`() {
++        val calls = FakeCalls()
++        WhisperBridge(calls).load("/models/base.bin", threads = 0)
++        assertEquals(1, calls.lastThreads)
++    }
++
++    @Test
++    fun `empty PCM returns an empty string without calling native`() {
++        val calls = FakeCalls()
++        val bridge = WhisperBridge(calls)
++        val ctx = bridge.load("/models/base.bin", threads = 4)
++
++        assertEquals("", bridge.transcribe(ctx, FloatArray(0), "en"))
++        assertEquals(listOf("init"), calls.calls)
++    }
++
++    @Test
++    fun `transcribe passes language and translate through and trims the result`() {
++        val calls = FakeCalls()
++        val bridge = WhisperBridge(calls)
++        val ctx = bridge.load("/models/base.bin", threads = 4)
++
++        assertEquals("hello world", bridge.transcribe(ctx, pcm, "hi", translate = true))
++        assertEquals("hi", calls.lastLang)
++        assertTrue(calls.lastTranslate)
++    }
++
++    @Test
++    fun `translate defaults to false`() {
++        val calls = FakeCalls()
++        val bridge = WhisperBridge(calls)
++        bridge.transcribe(bridge.load("/models/base.bin", threads = 4), pcm, "en")
++        assertEquals(false, calls.lastTranslate)
++    }
++
++    @Test
++    fun `native transcription failure throws WhisperException`() {
++        val calls = FakeCalls(transcribeResult = null)
++        val bridge = WhisperBridge(calls)
++        val ctx = bridge.load("/models/base.bin", threads = 4)
++
++        assertThrows<WhisperException> { bridge.transcribe(ctx, pcm, "en") }
++    }
++
++    @Test
++    fun `transcribe with a handle that is not live throws without calling native`() {
++        val calls = FakeCalls()
++        val bridge = WhisperBridge(calls)
++        val ctx = bridge.load("/models/base.bin", threads = 4)
++        bridge.free(ctx)
++
++        assertThrows<IllegalArgumentException> { bridge.transcribe(ctx, pcm, "en") }
++        assertThrows<IllegalArgumentException> { bridge.transcribe(0L, pcm, "en") }
++        assertEquals(listOf("init", "free:42"), calls.calls)
++    }
++
++    @Test
++    fun `free twice releases the native context once`() {
++        val calls = FakeCalls()
++        val bridge = WhisperBridge(calls)
++        val ctx = bridge.load("/models/base.bin", threads = 4)
++
++        bridge.free(ctx)
++        bridge.free(ctx)
++
++        assertEquals(listOf("init", "free:42"), calls.calls)
++    }
++
++    @Test
++    fun `free waits for a running transcription on the same bridge`() {
++        val order = mutableListOf<String>()
++        val inside = java.util.concurrent.CountDownLatch(1)
++        val calls = object : WhisperNativeCalls {
++            override fun isAvailable() = true
++            override fun init(modelPath: String, threads: Int) = 7L
++            override fun transcribe(ctx: Long, pcm: FloatArray, lang: String, translate: Boolean): String {
++                inside.countDown()
++                Thread.sleep(200)
++                synchronized(order) { order += "transcribe-end" }
++                return "ok"
++            }
++            override fun free(ctx: Long) {
++                synchronized(order) { order += "free" }
++            }
++        }
++        val bridge = WhisperBridge(calls)
++        val ctx = bridge.load("/models/base.bin", threads = 4)
++
++        val worker = Thread { bridge.transcribe(ctx, pcm, "en") }.apply { start() }
++        inside.await()
++        bridge.free(ctx)
++        worker.join()
++
++        assertEquals(listOf("transcribe-end", "free"), order)
++    }
++
++    @Test
++    fun `WhisperNative implements WhisperApi`() {
++        val api: WhisperApi = WhisperNative
++        assertTrue(api is WhisperNative)
++    }
++}
+diff --git a/lib/whisper/third_party/WHISPER_UPSTREAM.md b/lib/whisper/third_party/WHISPER_UPSTREAM.md
+new file mode 100644
+index 00000000..9a4473e1
+--- /dev/null
++++ b/lib/whisper/third_party/WHISPER_UPSTREAM.md
+@@ -0,0 +1,29 @@
++# whisper.cpp (vendored)
++
++| | |
++|---|---|
++| Upstream | https://github.com/ggml-org/whisper.cpp |
++| Tag | `v1.9.5` |
++| Commit | `d1be6fde11ac6e0407606b4e42fe72d34add8037` (tag dereferenced, `git rev-parse HEAD` of a `--branch v1.9.5` clone) |
++| Commit date | 2026-10-06T16:10:35+02:00 |
++| Vendored on | 2026-10-18 |
++| Licence | MIT, `whisper.cpp/LICENSE` (Copyright (c) 2023-2026 The ggml authors) |
++
++Only `include/`, `src/`, `ggml/`, `cmake/`, `CMakeLists.txt` and `LICENSE` are copied, unmodified, from
++`git archive` of that commit. No models, examples, bindings, tests or scripts. Do not edit files under
++`whisper.cpp/`; build options live in `../src/main/cpp/CMakeLists.txt`.
++
++Third-party code inside the vendored tree that ends up in `libaikb_whisper.so`:
++`ggml/src/ggml-cpu/ops.cpp` `rope_yarn` (YaRN, MIT, Copyright (c) 2023 Jeffrey Quesnelle and Bowen Peng).
++llamafile sgemm and KleidiAI are present in the tree but switched off (`GGML_LLAMAFILE`, `GGML_CPU_KLEIDIAI`).
++
++## Updating
++
++```
++git clone --depth 1 --branch <tag> https://github.com/ggml-org/whisper.cpp /tmp/whisper-src
++rm -r lib/whisper/third_party/whisper.cpp && mkdir lib/whisper/third_party/whisper.cpp
++git -C /tmp/whisper-src archive HEAD include src ggml cmake CMakeLists.txt LICENSE \
++    | tar -x -C lib/whisper/third_party/whisper.cpp
++```
++
++then update this file and the NOTICE entry, rebuild, and run `scripts/check-16kb-alignment.sh`.
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+index af4b7c7a..89687a94 100644
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -63,13 +63,15 @@ include(":ime:policy")
+ // FORK(S1-policy): feature settings store (DataStore)
+ include(":core:datastore")
+ // FORK(S1-clipboard): clipboard sensitivity classifier
+ include(":core:privacy")
+ // FORK(S1-analytics): event catalog and batched consent-aware relay
+ include(":core:analytics")
+ // FORK(S1-voice): speech session state machine, error policy, spoken punctuation
+ include(":core:voice")
+ // FORK(S1-voice): voice typing inside the keyboard (controller, composing span, panel)
+ include(":ime:voice-ui")
++// FORK(S1-whisper): vendored whisper.cpp + JNI bridge for on-device speech-to-text
++include(":lib:whisper")
+ 
+ // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
+ include(":lint-rules")

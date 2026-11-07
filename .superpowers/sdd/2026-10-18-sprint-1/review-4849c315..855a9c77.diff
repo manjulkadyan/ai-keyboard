@@ -1,0 +1,645 @@
+# Review package: 4849c315..HEAD
+
+## Commits
+855a9c77 feat(clipboard): never store sensitive clips; 24 h TTL; policy gate
+
+## Files changed
+ app/build.gradle.kts                               |   2 +
+ .../kotlin/com/manjul/aikeyboard/app/AppPrefs.kt   |   4 +-
+ .../app/settings/clipboard/ClipboardScreen.kt      |   2 +-
+ .../fork/clipboard/ClipboardCaptureGate.kt         |  48 +++++++++
+ .../aikeyboard/ime/clipboard/ClipboardManager.kt   |  24 ++++-
+ .../ime/clipboard/provider/ClipboardDatabase.kt    |   8 +-
+ .../ime/clipboard/ClipboardCaptureGateTest.kt      | 110 +++++++++++++++++++++
+ core/privacy/build.gradle.kts                      |  10 ++
+ .../core/privacy/ClipSensitivityClassifier.kt      |  38 +++++++
+ .../core/privacy/ClipSensitivityClassifierTest.kt  |  49 +++++++++
+ docs/FORK_PATCHES.md                               |   6 ++
+ settings.gradle.kts                                |   2 +
+ 12 files changed, 294 insertions(+), 9 deletions(-)
+
+## Diff
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index b3d81f24..d2bfcd22 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -264,20 +264,22 @@ dependencies {
+     implementation(projects.lib.native)
+     implementation(projects.lib.snygg)
+ 
+     // FORK(S0-ads): ads stack for app Activities only. The IME code in this module must not use it
+     // (ImeAdIsolationTest; TRD §2.2, §11.1). Nothing calls it yet.
+     implementation(projects.core.ads)
+ 
+     // FORK(S1-policy): fork settings store and the sensitive-field policy that FlorisImeService evaluates
+     implementation(projects.core.datastore)
+     implementation(projects.ime.policy)
++    // FORK(S1-clipboard): clipboard sensitivity classifier used by the capture gate
++    implementation(projects.core.privacy)
+ 
+     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
+     lintChecks(projects.lintRules)
+ 
+     testImplementation(libs.kotlin.test.junit5)
+     // FORK(S1-policy): Robolectric (JUnit 4) tests run on the JUnit 5 platform through the vintage engine
+     testImplementation(platform(libs.junit.bom))
+     testImplementation(libs.junit4)
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt b/app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt
+index ab5cab45..b54838f5 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt
+@@ -118,25 +118,25 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
+         fun historyNumGridColumns(): PreferenceData<Int> {
+             val configuration = LocalConfiguration.current
+             return if (configuration.isOrientationPortrait()) {
+                 historyNumGridColumnsPortrait
+             } else {
+                 historyNumGridColumnsLandscape
+             }
+         }
+         val historyAutoCleanOldEnabled = boolean(
+             key = "clipboard__history_auto_clean_old_enabled",
+-            default = false,
++            default = true, // FORK(S1-clipboard): history expires by default
+         )
+         val historyAutoCleanOldAfter = int(
+             key = "clipboard__history_auto_clean_old_after",
+-            default = 20,
++            default = 1440, // FORK(S1-clipboard): minutes, 24 h
+         )
+         val historyAutoCleanSensitiveEnabled = boolean(
+             key = "clipboard__history_auto_clean_sensitive_enabled",
+             default = false,
+         )
+         val historyAutoCleanSensitiveAfter = int(
+             key = "clipboard__history_auto_clean_sensitive_after",
+             default = 20,
+         )
+         val historySizeLimitEnabled = boolean(
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt b/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt
+index 677027e7..3e51ec2b 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt
+@@ -100,21 +100,21 @@ fun ClipboardScreen() = FlorisScreen {
+             SwitchPreference(
+                 prefs.clipboard.historyAutoCleanOldEnabled,
+                 title = stringRes(R.string.pref__clipboard__clean_up_old__label),
+                 enabledIf = { prefs.clipboard.historyEnabled isEqualTo true },
+             )
+             DialogSliderPreference(
+                 prefs.clipboard.historyAutoCleanOldAfter,
+                 title = stringRes(R.string.pref__clipboard__clean_up_after__label),
+                 valueLabel = { pluralsRes(R.plurals.unit__minutes__written, it, "v" to it) },
+                 min = 0,
+-                max = 120,
++                max = 1440, // FORK(S1-clipboard): slider must reach the 24 h default
+                 stepIncrement = 5,
+                 enabledIf = { prefs.clipboard.historyEnabled isEqualTo true && prefs.clipboard.historyAutoCleanOldEnabled isEqualTo true },
+             )
+             SwitchPreference(
+                 prefs.clipboard.historyAutoCleanSensitiveEnabled,
+                 title = stringRes(R.string.pref__clipboard__auto_clean_sensitive__label),
+                 enabledIf = { prefs.clipboard.historyEnabled isEqualTo true },
+                 visibleIf = { AndroidVersion.ATLEAST_API33_T },
+             )
+             DialogSliderPreference(
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardCaptureGate.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardCaptureGate.kt
+new file mode 100644
+index 00000000..281220df
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardCaptureGate.kt
+@@ -0,0 +1,48 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.clipboard
++
++import android.content.ClipData
++import android.content.ClipDescription
++import com.manjul.aikeyboard.FlorisImeService
++import com.manjul.aikeyboard.core.privacy.ClipSensitivityClassifier
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import org.florisboard.lib.android.AndroidVersion
++
++/**
++ * Decides whether a clip may enter the clipboard history. Fails closed: with no [PolicyDecision] (no live IME
++ * service) nothing is captured, because the clipboard manager is app-scoped and can fire without an IME.
++ */
++class ClipboardCaptureGate(
++    private val decisionProvider: () -> PolicyDecision? = {
++        FlorisImeService.policyControllerOrNull()?.decision?.value
++    },
++) {
++    fun allowsHistory(): Boolean = decisionProvider()?.allowClipboardHistory == true
++
++    fun isSensitive(clip: ClipData): Boolean {
++        val text = clip.getItemAt(0)?.text?.toString()
++        return ClipSensitivityClassifier.isSensitive(text, isFlaggedSensitive(clip.description))
++    }
++
++    fun isSensitive(text: String?, flagged: Boolean): Boolean = ClipSensitivityClassifier.isSensitive(text, flagged)
++
++    /** True when history capture is allowed by policy and the clip is not sensitive. */
++    fun mayCapture(clip: ClipData): Boolean = allowsHistory() && !isSensitive(clip)
++
++    companion object {
++        /** Value of `ClipDescription.EXTRA_IS_SENSITIVE`, which exists from API 33. */
++        const val EXTRA_IS_SENSITIVE_KEY = "android.content.extra.IS_SENSITIVE"
++
++        fun isFlaggedSensitive(description: ClipDescription?): Boolean {
++            val extras = description?.extras ?: return false
++            if (AndroidVersion.ATLEAST_API33_T && extras.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE)) return true
++            return extras.getBoolean(EXTRA_IS_SENSITIVE_KEY)
++        }
++
++        fun expiryCutoffMs(nowMs: Long, afterMinutes: Int): Long = nowMs - afterMinutes * 60_000L
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt
+index 72c808a5..7c94c55e 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt
+@@ -14,20 +14,21 @@
+  * limitations under the License.
+  */
+ 
+ package com.manjul.aikeyboard.ime.clipboard
+ 
+ import android.content.ClipData
+ import android.content.Context
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
+ import com.manjul.aikeyboard.appContext
+ import com.manjul.aikeyboard.editorInstance
++import com.manjul.aikeyboard.fork.clipboard.ClipboardCaptureGate // FORK(S1-clipboard)
+ import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDao
+ import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
+ import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
+ import com.manjul.aikeyboard.ime.clipboard.provider.ItemType
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -49,20 +50,22 @@ import java.io.Closeable
+ /**
+  * [ClipboardManager] manages the clipboard and clipboard history.
+  *
+  * Also just going to document how all the classes here work.
+  *
+  * [ClipboardManager] handles storage and retrieval of clipboard items. All manipulation of the
+  * clipboard goes through here.
+  */
+ class ClipboardManager(
+     context: Context,
++    // FORK(S1-clipboard): fail-closed capture gate (policy + sensitivity); injectable for tests
++    private val captureGate: ClipboardCaptureGate = ClipboardCaptureGate(),
+ ) : AndroidClipboardManager_OnPrimaryClipChangedListener, Closeable {
+     companion object {
+         // 1 minute
+         private const val INTERVAL = 60 * 1000L
+ 
+         /**
+          * Taken from ClipboardDescription.java from the AOSP
+          *
+          * Helper to compare two MIME types, where one may be a pattern.
+          * @param concreteType A fully-specified MIME type.
+@@ -197,20 +200,22 @@ class ClipboardManager(
+                     }
+                     return@launch
+                 }
+ 
+                 if (!syncBehavior.shouldSyncSet) {
+                     return@launch
+                 }
+ 
+                 val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true
+                 if (!isEqual) {
++                    // FORK(S1-clipboard): sensitive or policy-blocked clips are neither stored nor cloned
++                    if (!captureGate.mayCapture(systemPrimaryClip)) return@launch
+                     val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
+                     primaryClip = item
+                     insertOrMoveBeginning(item)
+                 }
+             }
+         }
+     }
+ 
+     /**
+      * Change the current text on clipboard, update history (if enabled).
+@@ -225,21 +230,24 @@ class ClipboardManager(
+      */
+     fun addNewPlaintext(newText: String) {
+         val newData = ClipboardItem.text(newText)
+         addNewClip(newData)
+     }
+ 
+     /**
+      * Adds a new item to the clipboard history (if enabled).
+      */
+     private fun insertOrMoveBeginning(newItem: ClipboardItem) {
+-        if (prefs.clipboard.historyEnabled.get()) {
++        // FORK(S1-clipboard): fail-closed policy gate and sensitivity check
++        if (prefs.clipboard.historyEnabled.get() && captureGate.allowsHistory() &&
++            !captureGate.isSensitive(newItem.text, newItem.isSensitive)
++        ) {
+             val historyElement = currentHistory.all.firstOrNull { it.type == ItemType.TEXT && it.text == newItem.text }
+             if (historyElement != null) {
+                 moveToTheBeginning(
+                     oldItem = historyElement,
+                     newItem = if (historyElement.isPinned) {
+                         newItem.copy(isPinned = true)
+                     } else {
+                         newItem
+                     }
+                 )
+@@ -258,23 +266,31 @@ class ClipboardManager(
+                 ioScope.launch {
+                     clipHistoryDao?.delete(itemsToRemove)
+                 }
+             }
+         }
+     }
+ 
+     private fun enforceExpiryDate(clipHistory: ClipboardHistory) {
+         val itemsToRemove = mutableSetOf<ClipboardItem>()
+         if (prefs.clipboard.historyAutoCleanOldEnabled.get()) {
+-            val nonPinnedItems = clipHistory.recent + clipHistory.other
+-            val expiryTime = System.currentTimeMillis() - (prefs.clipboard.historyAutoCleanOldAfter.get() * 60 * 1000)
+-            itemsToRemove.addAll(nonPinnedItems.filter { it.creationTimestampMs < expiryTime })
++            // FORK(S1-clipboard): TTL delete in the DAO; unpinned items only
++            val cutoff = ClipboardCaptureGate.expiryCutoffMs(
++                System.currentTimeMillis(), prefs.clipboard.historyAutoCleanOldAfter.get(),
++            )
++            val expired = clipHistory.all.filter { !it.isPinned && it.creationTimestampMs < cutoff }
++            ioScope.launch {
++                for (item in expired) {
++                    item.close(appContext)
++                }
++                clipHistoryDao?.deleteUnpinnedOlderThan(cutoff)
++            }
+         }
+         if (prefs.clipboard.historyAutoCleanSensitiveEnabled.get()) {
+             val sensitiveData = clipHistory.all.filter { it.isSensitive }
+             val expiryTime = System.currentTimeMillis() - (prefs.clipboard.historyAutoCleanSensitiveAfter.get() * 1000)
+             itemsToRemove.addAll(sensitiveData.filter { it.creationTimestampMs < expiryTime })
+         }
+         if (itemsToRemove.isNotEmpty()) {
+             ioScope.launch {
+                 clipHistoryDao?.delete(itemsToRemove.toList())
+             }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt
+index aac460cc..532f69ad 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt
+@@ -303,20 +303,24 @@ interface ClipboardHistoryDao {
+     fun delete(items: List<ClipboardItem>)
+ 
+     @Query("DELETE FROM $CLIPBOARD_HISTORY_TABLE")
+     fun deleteAll()
+ 
+     @Query("DELETE FROM $CLIPBOARD_HISTORY_TABLE WHERE type = :type")
+     fun deleteAllFromType(type: ItemType)
+ 
+     @Query("DELETE FROM $CLIPBOARD_HISTORY_TABLE WHERE NOT isPinned")
+     fun deleteAllUnpinned()
++
++    // FORK(S1-clipboard): TTL expiry; pinned items are never removed
++    @Query("DELETE FROM $CLIPBOARD_HISTORY_TABLE WHERE isPinned = 0 AND creationTimestampMs < :cutoff")
++    fun deleteUnpinnedOlderThan(cutoff: Long)
+ }
+ 
+ @Database(
+     entities = [ClipboardItem::class],
+     version = 4,
+     autoMigrations = [
+         AutoMigration(from = 2, to = 4),
+         AutoMigration(from = 3, to = 4, spec = ClipboardHistoryDatabase.MIGRATE_3_TO_4::class),
+     ],
+ )
+@@ -335,21 +339,21 @@ abstract class ClipboardHistoryDatabase : RoomDatabase() {
+         toColumnName = "is_remote_device",
+     )
+     class MIGRATE_3_TO_4 : AutoMigrationSpec
+ 
+     companion object {
+         fun new(context: Context): ClipboardHistoryDatabase {
+             return Room
+                 .databaseBuilder(
+                     context, ClipboardHistoryDatabase::class.java, CLIPBOARD_HISTORY_TABLE,
+                 )
+-                .fallbackToDestructiveMigration()
++                // FORK(S1-clipboard): no destructive fallback; a missing migration must fail loudly, not wipe data
+                 .build()
+         }
+     }
+ }
+ 
+ @Serializable
+ @Entity(tableName = CLIPBOARD_FILES_TABLE)
+ data class ClipboardFileInfo(
+     @PrimaryKey @ColumnInfo(name=BaseColumns._ID, index=true) val id: Long,
+     @ColumnInfo(name=OpenableColumns.DISPLAY_NAME) val displayName: String,
+@@ -383,15 +387,15 @@ interface ClipboardFilesDao {
+ @TypeConverters(Converters::class)
+ abstract class ClipboardFilesDatabase : RoomDatabase() {
+     abstract fun clipboardFilesDao() : ClipboardFilesDao
+ 
+     companion object {
+         fun new(context: Context): ClipboardFilesDatabase {
+             return Room
+                 .databaseBuilder(
+                     context, ClipboardFilesDatabase::class.java, CLIPBOARD_FILES_TABLE,
+                 )
+-                .fallbackToDestructiveMigration()
++                // FORK(S1-clipboard): no destructive fallback; a missing migration must fail loudly, not wipe data
+                 .build()
+         }
+     }
+ }
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt
+new file mode 100644
+index 00000000..9a4233f1
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardCaptureGateTest.kt
+@@ -0,0 +1,110 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.ime.clipboard
++
++import android.content.ClipData
++import android.content.ClipDescription
++import android.os.PersistableBundle
++import androidx.room.Room
++import com.manjul.aikeyboard.fork.clipboard.ClipboardCaptureGate
++import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
++import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
++import com.manjul.aikeyboard.ime.clipboard.provider.ItemType
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import org.junit.After
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++/**
++ * `ClipboardManager` itself needs `FlorisApplication` (native library, managers), so the capture decision lives in
++ * [ClipboardCaptureGate], which the manager calls before `fromClipData` and before every insert. The 24 h expiry is
++ * tested on the DAO query the manager's `enforceExpiryDate` delegates to.
++ */
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class ClipboardCaptureGateTest {
++    private var decision: PolicyDecision? = PolicyDecision.Unrestricted
++    private val gate = ClipboardCaptureGate { decision }
++    private val db = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), ClipboardHistoryDatabase::class.java)
++        .allowMainThreadQueries().build()
++
++    @After
++    fun tearDown() {
++        db.close()
++    }
++
++    private fun clip(text: String, sensitiveExtra: String? = null): ClipData {
++        val data = ClipData.newPlainText("label", text)
++        if (sensitiveExtra != null) {
++            data.description.extras = PersistableBundle().apply { putBoolean(sensitiveExtra, true) }
++        }
++        return data
++    }
++
++    @Test
++    fun `normal clip is captured`() {
++        assertTrue(gate.mayCapture(clip("buy milk and eggs")))
++    }
++
++    @Test
++    fun `clip flagged with EXTRA_IS_SENSITIVE is not captured`() {
++        assertFalse(gate.mayCapture(clip("buy milk", ClipDescription.EXTRA_IS_SENSITIVE)))
++    }
++
++    @Test
++    fun `clip flagged with the literal legacy key is not captured`() {
++        assertFalse(gate.mayCapture(clip("buy milk", ClipboardCaptureGate.EXTRA_IS_SENSITIVE_KEY)))
++    }
++
++    @Test
++    fun `otp text is not captured`() {
++        assertFalse(gate.mayCapture(clip("Your code is 482913")))
++    }
++
++    @Test
++    fun `nothing is captured while the policy forbids clipboard history`() {
++        decision = PolicyDecision.Locked
++        assertFalse(gate.mayCapture(clip("buy milk and eggs")))
++        decision = PolicyDecision.Unrestricted.copy(allowClipboardHistory = false)
++        assertFalse(gate.mayCapture(clip("buy milk and eggs")))
++    }
++
++    @Test
++    fun `nothing is captured without a policy decision`() {
++        decision = null
++        assertFalse(gate.mayCapture(clip("buy milk and eggs")))
++        assertFalse(gate.allowsHistory())
++    }
++
++    private fun item(text: String, ageHours: Long, pinned: Boolean, now: Long) = ClipboardItem(
++        type = ItemType.TEXT, text = text, uri = null,
++        creationTimestampMs = now - ageHours * 3_600_000L, isPinned = pinned, mimeTypes = listOf("text/plain"),
++    )
++
++    @Test
++    fun `expiry deletes old unpinned items and keeps pinned and fresh ones`() {
++        val now = System.currentTimeMillis()
++        val dao = db.clipboardItemDao()
++        dao.insert(item("old", 25, pinned = false, now = now))
++        dao.insert(item("old pinned", 25, pinned = true, now = now))
++        dao.insert(item("fresh", 23, pinned = false, now = now))
++
++        dao.deleteUnpinnedOlderThan(ClipboardCaptureGate.expiryCutoffMs(now, 1440))
++
++        assertEquals(setOf("old pinned", "fresh"), dao.getAll().map { it.text }.toSet())
++    }
++
++    @Test
++    fun `expiry cutoff is minutes before now`() {
++        assertEquals(1_000_000L - 24 * 3_600_000L, ClipboardCaptureGate.expiryCutoffMs(1_000_000L, 1440))
++    }
++}
+diff --git a/core/privacy/build.gradle.kts b/core/privacy/build.gradle.kts
+new file mode 100644
+index 00000000..34eeb824
+--- /dev/null
++++ b/core/privacy/build.gradle.kts
+@@ -0,0 +1,10 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++// :core:privacy: pure-JVM privacy classifiers (clipboard sensitivity). No Android, no logging.
++
++plugins {
++    alias(libs.plugins.aikeyboard.jvm.library)
++}
+diff --git a/core/privacy/src/main/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifier.kt b/core/privacy/src/main/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifier.kt
+new file mode 100644
+index 00000000..583c673f
+--- /dev/null
++++ b/core/privacy/src/main/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifier.kt
+@@ -0,0 +1,38 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.privacy
++
++/**
++ * Heuristic for clips that must never be stored: one-time codes and password-like tokens, plus anything the
++ * source app flagged as sensitive. Never logs or retains the text.
++ */
++object ClipSensitivityClassifier {
++    private const val MAX_OTP_SENTENCE_LENGTH = 60
++    private const val MIN_PASSWORD_LENGTH = 10
++
++    /** Bare code, optionally with a short alphabetic prefix such as `G-482913`. */
++    private val bareOtp = Regex("""^(?:[A-Za-z]{1,4}[- ])?\d{4,8}$""")
++    private val digitRun = Regex("""(?<![\d.:/-])\d{4,8}(?![\d.:/-])""")
++    private val otpKeyword = Regex("""(?i)\b(code|otp|pin|passcode|password|verification|one-time|token)\b""")
++
++    fun isSensitive(text: String?, flaggedSensitive: Boolean): Boolean {
++        if (flaggedSensitive) return true
++        val trimmed = text?.trim()
++        if (trimmed.isNullOrEmpty()) return false
++        return looksLikeOtp(trimmed) || looksLikePassword(trimmed)
++    }
++
++    private fun looksLikeOtp(text: String): Boolean {
++        if (bareOtp.matches(text)) return true
++        return text.length <= MAX_OTP_SENTENCE_LENGTH && otpKeyword.containsMatchIn(text) && digitRun.containsMatchIn(text)
++    }
++
++    private fun looksLikePassword(text: String): Boolean {
++        if (text.length < MIN_PASSWORD_LENGTH || text.any { it.isWhitespace() } || "://" in text) return false
++        return text.any { it.isUpperCase() } && text.any { it.isLowerCase() } &&
++            text.any { it.isDigit() } && text.any { !it.isLetterOrDigit() }
++    }
++}
+diff --git a/core/privacy/src/test/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifierTest.kt b/core/privacy/src/test/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifierTest.kt
+new file mode 100644
+index 00000000..bc6bb169
+--- /dev/null
++++ b/core/privacy/src/test/kotlin/com/manjul/aikeyboard/core/privacy/ClipSensitivityClassifierTest.kt
+@@ -0,0 +1,49 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.privacy
++
++import org.junit.jupiter.params.ParameterizedTest
++import org.junit.jupiter.params.provider.ValueSource
++import kotlin.test.Test
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++class ClipSensitivityClassifierTest {
++    @Test
++    fun `flagged clips are sensitive whatever the text`() {
++        assertTrue(ClipSensitivityClassifier.isSensitive("hello world", flaggedSensitive = true))
++        assertTrue(ClipSensitivityClassifier.isSensitive(null, flaggedSensitive = true))
++    }
++
++    @ParameterizedTest
++    @ValueSource(strings = ["482913", "Your code is 482913", "G-482913", "1234", "12345678", "  482913\n"])
++    fun `otp-like text is sensitive`(text: String) {
++        assertTrue(ClipSensitivityClassifier.isSensitive(text, false), text)
++    }
++
++    @ParameterizedTest
++    @ValueSource(strings = ["Tr0ub4dor&3xK!", "aB3\$eFgH1jK"])
++    fun `password-like token is sensitive`(text: String) {
++        assertTrue(ClipSensitivityClassifier.isSensitive(text, false), text)
++    }
++
++    @ParameterizedTest
++    @ValueSource(
++        strings = [
++            "hello world", "call me at 5", "https://example.com", "2026-10-18", "123", "123456789",
++            "https://example.com/a?b=C3d&e=F!", "Hello, World 2026!", "meet at 10:30 on 18.10.2026",
++            "short1A!", "",
++        ],
++    )
++    fun `ordinary text is not sensitive`(text: String) {
++        assertFalse(ClipSensitivityClassifier.isSensitive(text, false), text)
++    }
++
++    @Test
++    fun `null is not sensitive`() {
++        assertFalse(ClipSensitivityClassifier.isSensitive(null, false))
++    }
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index 258bcbc2..a8c60144 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -45,20 +45,26 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-ci | Upstream v0.5.2 imports `org.florisboard.lib.color.schemes.yellow{Light,Dark}Scheme`, which does not exist in `:lib:color` at that tag, so the `:lib:snygg` unit tests did not compile. The two fixed schemes are now built with `:lib:color`'s `neutralDynamicColorScheme` (yellow 500 seed); all assertions are unchanged |
+ | Deleted: `fastlane/`, `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `crowdin.yml`, `ROADMAP.md`, `AI_POLICY.md`, `LANGUAGEPACKS*.md`, `.idea/icon.svg` | S0-branding | Upstream store listings, project-process docs, CI that uses FlorisBoard secrets, and the FlorisBoard logo. `README.md` was rewritten for the fork |
+ | `build.gradle.kts`, `settings.gradle.kts`, `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/res/xml/backup_rules.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/{app/ext/AddonBox,app/settings/about/AboutScreen,app/settings/about/ProjectLicenseScreen,app/settings/typing/TypingScreen,app/setup/SetupScreen,lib/crashutility/CrashDialogActivity,lib/crashutility/CrashUtility}.kt`, `lib/compose/src/main/kotlin/org/florisboard/lib/compose/Resources.kt`, `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-licences, S0-ci | Markers only, for the per-hunk marker check: the "Modified by AI Keyboard contributors, 2026" header line carries `FORK(S0-licences)`; removed imports and removed lines get a one-line `FORK(<ticket>)` comment at the deletion point; `AndroidManifest.xml` moves `android:name` onto the `<application` line and `networkSecurityConfig` next to `dataExtractionRules` so the marker sits within 3 lines of both edits. No behaviour change |
+ | `settings.gradle.kts` | S1-policy | `include(":core:datastore")` |
+ | `gradle/libs.versions.toml` | S1-policy | `androidx-datastore` 1.2.1 (latest stable on Google Maven, 2026-10-18), `robolectric` 4.17 (latest on Maven Central), `junit-vintage-engine` (version from the junit-bom), inside the `# --- AI Keyboard ---` blocks |
+ | `app/build.gradle.kts` | S1-policy | `implementation(projects.core.datastore)`, `implementation(projects.ime.policy)`; Robolectric, JUnit 4, junit-vintage and coroutines-test as test dependencies; applies `gradle/robolectric-offline.gradle.kts` (new file: resolves Robolectric's android-all jar through Gradle so tests need no download into the home directory) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-policy | Lazy `featureSettingsStore`, `Context.featureSettingsStore()` accessor; loading starts in `init()` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy | Creates an `ImePolicyController` in `onCreate` (restriction listener re-applies the decision to `EditorInstance`; keyguard read on every evaluation, no forced packages until S3); calls it from `onStartInput`, `onFinishInputView`, `onFinishInput`, `onDestroy`; companion `policyController()` accessor. `onStartInputView` needs no call: the decision is made in `onStartInput`, which always precedes it |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt` | S1-policy | `isIncognitoMode` is also true when the policy decision does not allow learning; composing is off when it does not allow the suggestion strip |
+ | `app/src/main/AndroidManifest.xml` | S1-policy | `android:directBootAware="false"` on the IME and spell-checker services (was `true` / absent): the policy and settings store live in credential-encrypted storage. Guarded by `ManifestHardeningTest`. The attributes share the `<service` line so the marker sits within 3 lines of each edit (per-hunk marker check); no behaviour change from that |
++| `settings.gradle.kts` | S1-clipboard | `include(":core:privacy")` |
++| `app/build.gradle.kts` | S1-clipboard | `implementation(projects.core.privacy)` |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt` | S1-clipboard | Takes a `ClipboardCaptureGate` (fail-closed policy gate plus sensitivity classifier): `onPrimaryClipChanged` returns before `fromClipData`/URI clone for blocked or sensitive clips, `insertOrMoveBeginning` re-checks; `enforceExpiryDate` deletes unpinned items older than the TTL through the DAO |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt` | S1-clipboard | `deleteUnpinnedOlderThan` DAO query; `fallbackToDestructiveMigration()` removed from both clipboard databases (schema versions unchanged, so no migration is needed) |
++| `app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt` | S1-clipboard | `historyAutoCleanOldEnabled` default true, `historyAutoCleanOldAfter` default 1440 (minutes, 24 h) |
++| `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt` | S1-clipboard | Auto-clean slider max 120 -> 1440 minutes so the 24 h default is reachable |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+index b6a5d072..8e579209 100644
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -55,13 +55,15 @@ include(":lib:kotlin")
+ include(":lib:native")
+ include(":lib:snygg")
+ 
+ // FORK(S0-modules): AI Keyboard modules (TRD §2.2). The upstream IME stays in :app for now.
+ include(":core:common")
+ // FORK(S0-ads): app-process-only ads module (consent, placement registry, caps); never used by the IME
+ include(":core:ads")
+ include(":ime:policy")
+ // FORK(S1-policy): feature settings store (DataStore)
+ include(":core:datastore")
++// FORK(S1-clipboard): clipboard sensitivity classifier
++include(":core:privacy")
+ 
+ // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
+ include(":lint-rules")

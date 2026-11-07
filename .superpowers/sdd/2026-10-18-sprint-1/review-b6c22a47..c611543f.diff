@@ -1,0 +1,676 @@
+# Review package: b6c22a47..c611543f
+
+## Commits
+c611543f feat(voice): platform recognizer engine, selection order and audio focus
+
+## Files changed
+ app/src/main/AndroidManifest.xml                   |   4 +
+ .../aikeyboard/manifest/ManifestHardeningTest.kt   |   6 ++
+ core/voice/build.gradle.kts                        |   7 ++
+ .../core/voice/platform/AudioFocusHolder.kt        |  39 +++++++
+ .../core/voice/platform/PlatformSpeechEngine.kt    | 102 ++++++++++++++++++
+ .../core/voice/platform/RecognizerCapabilities.kt  |  82 +++++++++++++++
+ .../core/voice/platform/SpeechEngineSelector.kt    |  46 +++++++++
+ .../core/voice/platform/AudioFocusHolderTest.kt    |  45 ++++++++
+ .../voice/platform/PlatformSpeechEngineTest.kt     | 115 +++++++++++++++++++++
+ .../voice/platform/SpeechEngineSelectorTest.kt     |  74 +++++++++++++
+ docs/FORK_PATCHES.md                               |   1 +
+ 11 files changed, 521 insertions(+)
+
+## Diff
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 4d939b8b..bab1aeab 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -20,20 +20,24 @@
+             <action android:name="android.view.InputMethod"/>
+         </intent>
+         <intent>
+             <action android:name="android.service.textservice.SpellCheckerService"/>
+         </intent>
+         <!-- FORK(S1-smartbar): launcher apps, listed in the Private apps settings screen -->
+         <intent>
+             <action android:name="android.intent.action.MAIN"/>
+             <category android:name="android.intent.category.LAUNCHER"/>
+         </intent>
++        <!-- FORK(S1-voice): recognition services, for SpeechRecognizer.isRecognitionAvailable on API 30+ -->
++        <intent>
++            <action android:name="android.speech.RecognitionService"/>
++        </intent>
+     </queries>
+ 
+     <!-- dataExtractionRules (API 31+) gets its own file in the <data-extraction-rules> format (upstream
+          pointed it at the API 26-30 full-backup file); networkSecurityConfig blocks cleartext and user
+          CAs in release (TRD §6.3).
+          FORK(S0-hardening): as above; android:name shares the <application line to keep this marker in reach -->
+     <application android:name="com.manjul.aikeyboard.FlorisApplication"
+         android:allowBackup="true"
+         android:dataExtractionRules="@xml/data_extraction_rules"
+         android:networkSecurityConfig="@xml/network_security_config"
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/manifest/ManifestHardeningTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/manifest/ManifestHardeningTest.kt
+index 4da3e57f..7ad21b1e 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/manifest/ManifestHardeningTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/manifest/ManifestHardeningTest.kt
+@@ -209,11 +209,17 @@ class ManifestHardeningTest {
+         assertTrue(manifest.elements("application").single().attr("usesCleartextTraffic") != "true")
+     }
+ 
+     @Test
+     fun `IME and spell checker services are not direct boot aware`() {
+         for (name in listOf(IME_SERVICE, SPELL_CHECKER_SERVICE)) {
+             val service = manifest.elements("service").single { qualify(it.attr("name")) == name }
+             assertNotEquals("true", service.attr("directBootAware"), "$name must not be directBootAware")
+         }
+     }
++
++    @Test
++    fun `manifest queries the speech recognition service`() {
++        val actions = manifest.elements("queries").single().children("action").map { it.attr("name") }
++        assertTrue("android.speech.RecognitionService" in actions)
++    }
+ }
+diff --git a/core/voice/build.gradle.kts b/core/voice/build.gradle.kts
+index c20e4df8..4f6c1cba 100644
+--- a/core/voice/build.gradle.kts
++++ b/core/voice/build.gradle.kts
+@@ -3,22 +3,29 @@
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ // :core:voice: speech session state machine, error policy and spoken punctuation. Engines (platform, Whisper)
+ // plug in through SpeechEngine. No transcript text is ever logged.
+ 
+ plugins {
+     alias(libs.plugins.aikeyboard.android.library)
+ }
+ 
++apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
++
+ android {
+     namespace = "com.manjul.aikeyboard.core.voice"
++
++    testOptions {
++        unitTests.isIncludeAndroidResources = true
++    }
+ }
+ 
+ dependencies {
+     api(libs.kotlinx.coroutines)
+ 
+     testImplementation(libs.kotlinx.coroutines.test)
+     testImplementation(libs.junit4)
+     testImplementation(libs.turbine)
++    testImplementation(libs.robolectric)
+     testRuntimeOnly(libs.junit.vintage.engine)
+ }
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolder.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolder.kt
+new file mode 100644
+index 00000000..45ff5866
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolder.kt
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.platform
++
++import android.media.AudioAttributes
++import android.media.AudioFocusRequest
++import android.media.AudioManager
++
++/** Holds transient, ducking audio focus while dictating. [release] is idempotent. */
++class AudioFocusHolder(private val audioManager: AudioManager) {
++    private var request: AudioFocusRequest? = null
++
++    val isHeld: Boolean get() = request != null
++
++    fun acquire(): Boolean {
++        if (request != null) return true
++        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
++            .setAudioAttributes(
++                AudioAttributes.Builder()
++                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
++                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
++                    .build(),
++            )
++            .setOnAudioFocusChangeListener { }
++            .build()
++        val granted = audioManager.requestAudioFocus(req) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
++        if (granted) request = req
++        return granted
++    }
++
++    fun release() {
++        val req = request ?: return
++        request = null
++        audioManager.abandonAudioFocusRequest(req)
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngine.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngine.kt
+new file mode 100644
+index 00000000..19e4dfa0
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngine.kt
+@@ -0,0 +1,102 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.platform
++
++import android.content.Context
++import android.content.Intent
++import android.os.Build
++import android.os.Bundle
++import android.os.Handler
++import android.os.Looper
++import android.speech.RecognitionListener
++import android.speech.RecognizerIntent
++import android.speech.SpeechRecognizer
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++
++/**
++ * Recognizer extras. [sdkInt] is a parameter so the API 30 / 33 differences are testable.
++ * Formatting and segmented sessions exist from API 33; [segmented] is decided by the caller
++ * (see SpeechSession.isSegmentedSupported).
++ */
++internal fun buildRecognizerIntent(lang: String, sdkInt: Int, segmented: Boolean): Intent =
++    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
++        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
++        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
++        putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
++        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
++        if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
++            putExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING, RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY)
++            if (segmented) putExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION, true)
++        }
++    }
++
++/**
++ * Engine over android.speech.SpeechRecognizer. All recognizer calls run on the main thread.
++ *
++ * Segmented mode (API 33+): onSegmentResults maps to onSegment; onEndOfSegmentedSession maps to onFinal("")
++ * (the text was already delivered through the segments, so nothing is committed twice, and the session still
++ * sees the end of the recognizer run and can restart). Transcript text is never logged.
++ */
++class PlatformSpeechEngine(
++    private val context: Context,
++    private val onDevice: Boolean,
++    private val segmented: Boolean = false,
++    private val mainHandler: Handler = Handler(Looper.getMainLooper()),
++) : SpeechEngine {
++    override val kind: EngineKind = if (onDevice) EngineKind.SYSTEM_ON_DEVICE else EngineKind.SYSTEM_DEFAULT
++    override val supportsPartials: Boolean = true
++
++    private var recognizer: SpeechRecognizer? = null
++    private var destroyed = false
++
++    override fun start(lang: String, listener: SpeechEngine.Listener) = onMain {
++        if (destroyed) return@onMain
++        recognizer?.destroy()
++        val r = if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
++            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
++        } else {
++            SpeechRecognizer.createSpeechRecognizer(context)
++        }
++        r.setRecognitionListener(Bridge(listener))
++        recognizer = r
++        r.startListening(buildRecognizerIntent(lang, Build.VERSION.SDK_INT, segmented))
++    }
++
++    override fun stop() = onMain { recognizer?.stopListening() }
++
++    override fun cancel() = onMain { recognizer?.cancel() }
++
++    override fun destroy() = onMain {
++        destroyed = true
++        recognizer?.destroy()
++        recognizer = null
++    }
++
++    private inline fun onMain(crossinline block: () -> Unit) {
++        if (Looper.myLooper() == mainHandler.looper) block() else mainHandler.post { block() }
++    }
++
++    private class Bridge(private val l: SpeechEngine.Listener) : RecognitionListener {
++        override fun onReadyForSpeech(params: Bundle?) = l.onReady()
++        override fun onBeginningOfSpeech() = Unit
++        override fun onRmsChanged(rmsdB: Float) = l.onRms(rmsdB)
++        override fun onBufferReceived(buffer: ByteArray?) = Unit
++        override fun onEndOfSpeech() = l.onEndOfSpeech()
++        override fun onError(error: Int) = l.onError(error)
++        override fun onResults(results: Bundle?) = l.onFinal(results.firstText())
++        override fun onPartialResults(partialResults: Bundle?) {
++            val text = partialResults.firstText()
++            if (text.isNotEmpty()) l.onPartial(text)
++        }
++        override fun onSegmentResults(segmentResults: Bundle) = l.onSegment(segmentResults.firstText())
++        override fun onEndOfSegmentedSession() = l.onFinal("")
++        override fun onEvent(eventType: Int, params: Bundle?) = Unit
++
++        private fun Bundle?.firstText(): String =
++            this?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt
+new file mode 100644
+index 00000000..09f345fd
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/RecognizerCapabilities.kt
+@@ -0,0 +1,82 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.platform
++
++import android.content.Context
++import android.os.Build
++import android.os.Handler
++import android.os.Looper
++import android.speech.RecognitionSupport
++import android.speech.RecognitionSupportCallback
++import android.speech.RecognizerIntent
++import android.speech.SpeechRecognizer
++import kotlinx.coroutines.suspendCancellableCoroutine
++import kotlinx.coroutines.withTimeoutOrNull
++import kotlin.coroutines.resume
++
++interface RecognizerCapabilities {
++    val sdkInt: Int
++    fun isRecognitionAvailable(): Boolean
++    fun isOnDeviceAvailable(): Boolean
++
++    /** Null when unknown (below API 33 or the check timed out). */
++    suspend fun onDeviceSupports(lang: String): Boolean?
++    fun whisperModelReady(lang: String): Boolean
++    fun whisperLangEnabled(lang: String): Boolean
++}
++
++private const val SUPPORT_CHECK_TIMEOUT_MS = 1_500L
++
++/** Platform-backed capabilities. The whisper* answers are false until the Whisper engine is wired in. */
++class PlatformRecognizerCapabilities(
++    private val context: Context,
++    private val mainHandler: Handler = Handler(Looper.getMainLooper()),
++) : RecognizerCapabilities {
++    override val sdkInt: Int get() = Build.VERSION.SDK_INT
++
++    override fun isRecognitionAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
++
++    override fun isOnDeviceAvailable(): Boolean =
++        sdkInt >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
++
++    override suspend fun onDeviceSupports(lang: String): Boolean? {
++        if (sdkInt < Build.VERSION_CODES.TIRAMISU) return null
++        return withTimeoutOrNull(SUPPORT_CHECK_TIMEOUT_MS) {
++            suspendCancellableCoroutine { cont ->
++                // The recognizer must be created and used on the main thread.
++                mainHandler.post {
++                    val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
++                    cont.invokeOnCancellation { mainHandler.post { recognizer.destroy() } }
++                    val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
++                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
++                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
++                    recognizer.checkRecognitionSupport(
++                        intent,
++                        context.mainExecutor,
++                        object : RecognitionSupportCallback {
++                            override fun onSupportResult(recognitionSupport: RecognitionSupport) {
++                                val installed = recognitionSupport.installedOnDeviceLanguages
++                                val tag = lang.lowercase()
++                                val ok = installed.any { it.lowercase() == tag || it.substringBefore('-').lowercase() == tag.substringBefore('-') }
++                                recognizer.destroy()
++                                if (cont.isActive) cont.resume(ok)
++                            }
++
++                            override fun onError(error: Int) {
++                                recognizer.destroy()
++                                if (cont.isActive) cont.resume(null)
++                            }
++                        },
++                    )
++                }
++            }
++        }
++    }
++
++    override fun whisperModelReady(lang: String): Boolean = false
++
++    override fun whisperLangEnabled(lang: String): Boolean = false
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelector.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelector.kt
+new file mode 100644
+index 00000000..9d017f43
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelector.kt
+@@ -0,0 +1,46 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.platform
++
++import android.os.Build
++import com.manjul.aikeyboard.core.voice.EngineKind
++
++sealed interface EngineChoice {
++    data class Use(val kind: EngineKind) : EngineChoice
++
++    /** [reason] is one of no_service, lang_unsupported, offline_no_model. */
++    data class Unavailable(
++        val reason: String,
++        val offerSystemDownload: Boolean,
++        val offerWhisperDownload: Boolean,
++    ) : EngineChoice
++}
++
++/** Picks the engine in the TRD §4.2.2 / §4.2.4 order. The caller maps its engine preference to [preferWhisper]. */
++class SpeechEngineSelector(private val caps: RecognizerCapabilities) {
++    suspend fun choose(lang: String, preferWhisper: Boolean, online: Boolean): EngineChoice {
++        val whisperReady = caps.whisperModelReady(lang)
++        if (preferWhisper && whisperReady) return EngineChoice.Use(EngineKind.WHISPER)
++
++        val service = caps.isRecognitionAvailable()
++        var onDeviceUnsupported = false
++        if (caps.sdkInt >= Build.VERSION_CODES.S && caps.isOnDeviceAvailable()) {
++            if (caps.onDeviceSupports(lang) != false) return EngineChoice.Use(EngineKind.SYSTEM_ON_DEVICE)
++            onDeviceUnsupported = true
++        }
++        if (service && online) return EngineChoice.Use(EngineKind.SYSTEM_DEFAULT)
++        if (caps.whisperLangEnabled(lang) && whisperReady) return EngineChoice.Use(EngineKind.WHISPER)
++
++        val offerWhisper = caps.whisperLangEnabled(lang)
++        val canDownloadSystem = caps.sdkInt >= Build.VERSION_CODES.TIRAMISU
++        val reason = when {
++            !service -> "no_service"
++            onDeviceUnsupported -> "lang_unsupported"
++            else -> "offline_no_model"
++        }
++        return EngineChoice.Unavailable(reason, offerSystemDownload = reason != "no_service" && canDownloadSystem, offerWhisperDownload = offerWhisper)
++    }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolderTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolderTest.kt
+new file mode 100644
+index 00000000..b5279608
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/AudioFocusHolderTest.kt
+@@ -0,0 +1,45 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.platform
++
++import android.content.Context
++import android.media.AudioManager
++import org.robolectric.RuntimeEnvironment
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.Shadows.shadowOf
++import org.robolectric.annotation.Config
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class AudioFocusHolderTest {
++    private val audioManager = RuntimeEnvironment.getApplication().getSystemService(Context.AUDIO_SERVICE) as AudioManager
++
++    @Test
++    fun acquireThenReleaseAbandonsFocus() {
++        val holder = AudioFocusHolder(audioManager)
++        assertTrue(holder.acquire())
++        val shadow = shadowOf(audioManager)
++        assertNotNull(shadow.lastAudioFocusRequest)
++        assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, shadow.lastAudioFocusRequest.audioFocusRequest.focusGain)
++        holder.release()
++        assertNotNull(shadow.lastAbandonedAudioFocusRequest)
++    }
++
++    @Test
++    fun doubleReleaseIsSafe() {
++        val holder = AudioFocusHolder(audioManager)
++        holder.acquire()
++        holder.release()
++        holder.release()
++        assertFalse(holder.isHeld)
++    }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngineTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngineTest.kt
+new file mode 100644
+index 00000000..a770dd40
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/PlatformSpeechEngineTest.kt
+@@ -0,0 +1,115 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.platform
++
++import android.os.Bundle
++import android.os.Handler
++import android.os.Looper
++import android.speech.RecognizerIntent
++import android.speech.SpeechRecognizer
++import org.robolectric.RuntimeEnvironment
++import com.manjul.aikeyboard.core.voice.EngineKind
++import com.manjul.aikeyboard.core.voice.SpeechEngine
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.Shadows.shadowOf
++import org.robolectric.annotation.Config
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class PlatformSpeechEngineTest {
++    private val context = RuntimeEnvironment.getApplication()
++
++    private class Recorder : SpeechEngine.Listener {
++        val events = mutableListOf<String>()
++        override fun onReady() { events += "ready" }
++        override fun onRms(db: Float) { events += "rms" }
++        override fun onPartial(text: String) { events += "partial:$text" }
++        override fun onSegment(text: String) { events += "segment:$text" }
++        override fun onFinal(text: String) { events += "final:$text" }
++        override fun onEndOfSpeech() { events += "eos" }
++        override fun onError(code: Int) { events += "error:$code" }
++    }
++
++    private fun results(text: String) = Bundle().apply {
++        putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, arrayListOf(text))
++    }
++
++    private fun engine(segmented: Boolean = false) = PlatformSpeechEngine(context, onDevice = false, segmented = segmented, mainHandler = Handler(Looper.getMainLooper()))
++
++    @Test
++    fun intentOnApi33HasFormattingAndSegmented() {
++        val intent = buildRecognizerIntent("en-US", sdkInt = 33, segmented = true)
++        assertEquals(RecognizerIntent.ACTION_RECOGNIZE_SPEECH, intent.action)
++        assertTrue(intent.getBooleanExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false))
++        assertTrue(intent.getBooleanExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false))
++        assertEquals("en-US", intent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE))
++        assertEquals(RecognizerIntent.LANGUAGE_MODEL_FREE_FORM, intent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL))
++        assertEquals(RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY, intent.getStringExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING))
++        assertTrue(intent.getBooleanExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION, false))
++    }
++
++    @Test
++    fun intentOnApi33WithoutSegmentedOmitsSegmented() {
++        val intent = buildRecognizerIntent("en-US", sdkInt = 33, segmented = false)
++        assertFalse(intent.hasExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION))
++        assertTrue(intent.hasExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING))
++    }
++
++    @Test
++    fun intentOnApi30OmitsFormattingAndSegmented() {
++        val intent = buildRecognizerIntent("en-US", sdkInt = 30, segmented = true)
++        assertFalse(intent.hasExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING))
++        assertFalse(intent.hasExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION))
++        assertTrue(intent.getBooleanExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false))
++    }
++
++    private fun latest() = shadowOf(org.robolectric.shadows.ShadowSpeechRecognizer.getLatestSpeechRecognizer())
++
++    @Test
++    fun startCreatesRecognizerAndMapsCallbacks() {
++        val engine = engine()
++        val rec = Recorder()
++        engine.start("en-US", rec)
++        val shadow = latest()
++        shadowOf(Looper.getMainLooper()).idle()
++        assertEquals("en-US", shadow.lastRecognizerIntent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE))
++        shadow.triggerOnReadyForSpeech(Bundle())
++        shadow.triggerOnPartialResults(results("hel"))
++        shadow.triggerOnResults(results("hello"))
++        shadow.triggerOnEndOfSpeech()
++        shadow.triggerOnError(SpeechRecognizer.ERROR_NO_MATCH)
++        assertEquals(listOf("ready", "partial:hel", "final:hello", "eos", "error:${SpeechRecognizer.ERROR_NO_MATCH}"), rec.events)
++        assertEquals(EngineKind.SYSTEM_DEFAULT, engine.kind)
++    }
++
++    @Test
++    fun segmentCallbacksMapToSegmentThenEmptyFinal() {
++        val engine = engine(segmented = true)
++        val rec = Recorder()
++        engine.start("en-US", rec)
++        val shadow = latest()
++        shadowOf(Looper.getMainLooper()).idle()
++        shadow.triggerOnSegmentResults(results("one"))
++        shadow.triggerOnEndOfSegmentedSession()
++        assertEquals(listOf("segment:one", "final:"), rec.events)
++    }
++
++    @Test
++    fun destroyIsIdempotentAndDestroysRecognizer() {
++        val engine = engine()
++        engine.start("en-US", Recorder())
++        val shadow = latest()
++        shadowOf(Looper.getMainLooper()).idle()
++        engine.destroy()
++        engine.destroy()
++        assertTrue(shadow.isDestroyed)
++    }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelectorTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelectorTest.kt
+new file mode 100644
+index 00000000..17f56e44
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/platform/SpeechEngineSelectorTest.kt
+@@ -0,0 +1,74 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice.platform
++
++import com.manjul.aikeyboard.core.voice.EngineKind
++import kotlinx.coroutines.test.runTest
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class SpeechEngineSelectorTest {
++    private class Caps(
++        override val sdkInt: Int = 34,
++        val service: Boolean = true,
++        val onDevice: Boolean = true,
++        val supports: Boolean? = true,
++        val modelReady: Boolean = false,
++        val whisperEnabled: Boolean = false,
++    ) : RecognizerCapabilities {
++        override fun isRecognitionAvailable() = service
++        override fun isOnDeviceAvailable() = onDevice
++        override suspend fun onDeviceSupports(lang: String) = supports
++        override fun whisperModelReady(lang: String) = modelReady
++        override fun whisperLangEnabled(lang: String) = whisperEnabled
++    }
++
++    private class Case(val name: String, val caps: Caps, val preferWhisper: Boolean, val online: Boolean, val expected: EngineChoice)
++
++    private fun use(kind: EngineKind) = EngineChoice.Use(kind)
++
++    @Test
++    fun table() = runTest {
++        val cases = listOf(
++            Case("prefer whisper, ready", Caps(modelReady = true), true, true, use(EngineKind.WHISPER)),
++            Case("prefer whisper, model missing falls to on-device", Caps(), true, true, use(EngineKind.SYSTEM_ON_DEVICE)),
++            Case("on-device supports", Caps(), false, false, use(EngineKind.SYSTEM_ON_DEVICE)),
++            Case("on-device support unknown", Caps(supports = null), false, false, use(EngineKind.SYSTEM_ON_DEVICE)),
++            Case("on-device lacks lang, online", Caps(supports = false), false, true, use(EngineKind.SYSTEM_DEFAULT)),
++            Case("sdk 30 uses default when online", Caps(sdkInt = 30, onDevice = true), false, true, use(EngineKind.SYSTEM_DEFAULT)),
++            Case("lacks lang offline, whisper ready", Caps(supports = false, modelReady = true, whisperEnabled = true), false, false, use(EngineKind.WHISPER)),
++            Case("no service, whisper ready", Caps(service = false, onDevice = false, modelReady = true, whisperEnabled = true), false, true, use(EngineKind.WHISPER)),
++            Case(
++                "no service, no model, whisper enabled",
++                Caps(service = false, onDevice = false, whisperEnabled = true), false, true,
++                EngineChoice.Unavailable("no_service", offerSystemDownload = false, offerWhisperDownload = true),
++            ),
++            Case(
++                "no service, no model, whisper disabled",
++                Caps(service = false, onDevice = false), false, true,
++                EngineChoice.Unavailable("no_service", offerSystemDownload = false, offerWhisperDownload = false),
++            ),
++            Case(
++                "offline, no on-device, no model, sdk 34",
++                Caps(onDevice = false, whisperEnabled = true), false, false,
++                EngineChoice.Unavailable("offline_no_model", offerSystemDownload = true, offerWhisperDownload = true),
++            ),
++            Case(
++                "offline, no on-device, no model, sdk 30",
++                Caps(sdkInt = 30, onDevice = false), false, false,
++                EngineChoice.Unavailable("offline_no_model", offerSystemDownload = false, offerWhisperDownload = false),
++            ),
++            Case(
++                "offline, on-device lacks lang",
++                Caps(supports = false), false, false,
++                EngineChoice.Unavailable("lang_unsupported", offerSystemDownload = true, offerWhisperDownload = false),
++            ),
++        )
++        for (c in cases) {
++            assertEquals(c.name, c.expected, SpeechEngineSelector(c.caps).choose("en-US", c.preferWhisper, c.online))
++        }
++    }
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index 341a1499..c84e0b06 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -70,20 +70,21 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-smartbar | Handles `TOGGLE_PRIVATE_APP` (adds the focused editor's package to the private apps; package read on the main thread, never logged); `VOICE_INPUT` is dispatched and enabled only when the policy decision allows voice, `IME_UI_MODE_CLIPBOARD` is enabled only when it allows clipboard history; fail closed (`PolicyDecision.Locked`) without a service |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/ComputingEvaluator.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickAction.kt` | S1-smartbar | Lock icon, name and tooltip for `TOGGLE_PRIVATE_APP` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-smartbar | Renders `PrivateLockIndicator` first in the main row (nothing unless the field is sensitive); the sticky action is removed when the policy disallows it |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/{QuickActionsRow,QuickActionsOverflowPanel}.kt` | S1-smartbar | Dynamic actions pass through `policyFiltered()` (disallowed chips are removed, not greyed out); the overflow panel uses the same filtered list so the visible-count arithmetic stays consistent |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionArrangement.kt` | S1-smartbar | `Default`: Mic sticky; Emoji, Clipboard, Settings and the private-app action dynamic; upstream's other actions moved to `hiddenActions` (still available in the actions editor). Translate and AI are not present. Users still on the default pref get the new default; only explicitly saved arrangements are unaffected |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-smartbar | `Settings.PrivateApps` route (`settings/privacy/private-apps`) and a home entry for it |
+ | `app/src/main/AndroidManifest.xml` | S1-smartbar | `<queries>` entry for MAIN/LAUNCHER intents so the Private apps screen can list launchable apps on API 30+ |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-onboarding | Start destination is onboarding unless `onboardingDone` and the keyboard is enabled and selected (read once before `setContent`, 1 s cap); splash held at most 1 s; `Setup.Screen` route renders `fork/onboarding/OnboardingScreen` (upstream `SetupScreen.kt` is kept, unused, untouched); Home card text "Select AI Keyboard as your keyboard" |
+ | `app/src/main/AndroidManifest.xml` | S1-onboarding | `RECORD_AUDIO` permission (requested only after the voice notice) |
+ | `app/build.gradle.kts`, `gradle/libs.versions.toml` | S1-onboarding | Turbine and Compose UI test (`ui-test-junit4`, `ui-test-manifest` as `debugImplementation`, versions from the BOM) for the onboarding tests; the commented `testImplementation(composeBom)` line is kept |
++| `app/src/main/AndroidManifest.xml` | S1-voice | `<queries>` entry for `android.speech.RecognitionService` so `SpeechRecognizer.isRecognitionAvailable` sees recognition services on API 30+ |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised

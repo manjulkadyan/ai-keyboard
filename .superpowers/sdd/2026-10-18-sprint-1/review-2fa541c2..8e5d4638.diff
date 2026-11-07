@@ -1,0 +1,1203 @@
+# Review package: 2fa541c2..HEAD
+
+## Commits
+8e5d4638 fix(ime): fail-safe settings load for policy
+f6b7ff6f feat(ime): evaluate SensitiveFieldPolicy on every onStartInput
+
+## Files changed
+ app/build.gradle.kts                               |  13 ++
+ app/src/main/AndroidManifest.xml                   |  12 +-
+ .../com/manjul/aikeyboard/FlorisApplication.kt     |   7 +
+ .../com/manjul/aikeyboard/FlorisImeService.kt      |  24 ++++
+ .../aikeyboard/fork/policy/EditorInfoMapping.kt    |  21 +++
+ .../aikeyboard/fork/policy/FieldGeneration.kt      |  24 ++++
+ .../aikeyboard/fork/policy/ImePolicyController.kt  | 105 +++++++++++++++
+ .../manjul/aikeyboard/ime/editor/EditorInstance.kt |   5 +-
+ .../fork/policy/EditorInfoMappingTest.kt           |  39 ++++++
+ .../fork/policy/ImePolicyControllerTest.kt         | 147 +++++++++++++++++++++
+ .../aikeyboard/manifest/ManifestHardeningTest.kt   |   9 ++
+ core/datastore/build.gradle.kts                    |  33 +++++
+ .../aikeyboard/core/datastore/FeatureSettings.kt   |  32 +++++
+ .../core/datastore/FeatureSettingsStore.kt         |  81 ++++++++++++
+ .../core/datastore/FeatureSettingsStoreTest.kt     |  75 +++++++++++
+ docs/FORK_PATCHES.md                               |  10 +-
+ gradle/libs.versions.toml                          |   7 +
+ gradle/robolectric-offline.gradle.kts              |  30 +++++
+ settings.gradle.kts                                |   2 +
+ 19 files changed, 667 insertions(+), 9 deletions(-)
+
+## Diff
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 9c1dbee5..b3d81f24 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -211,20 +211,23 @@ val copyLicenseAssets = tasks.register<CopyLicenseAssetsTask>("copyLicenseAssets
+ androidComponents {
+     onVariants { variant ->
+         variant.sources.assets?.addGeneratedSourceDirectory(copyLicenseAssets, CopyLicenseAssetsTask::outputDir)
+     }
+ }
+ 
+ tasks.withType<Test> {
+     useJUnitPlatform()
+ }
+ 
++// FORK(S1-policy): offline android-all jar for Robolectric (see the script header)
++apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
++
+ dependencies {
+     val composeBom = platform(libs.androidx.compose.bom)
+     implementation(composeBom)
+     // testImplementation(composeBom)
+     // androidTestImplementation(composeBom)
+ 
+     implementation(libs.androidx.activity.compose)
+     implementation(libs.androidx.activity.ktx)
+     implementation(libs.androidx.autofill)
+     implementation(libs.androidx.collection.ktx)
+@@ -258,24 +261,34 @@ dependencies {
+     implementation(projects.lib.color)
+     implementation(projects.lib.compose)
+     implementation(projects.lib.kotlin)
+     implementation(projects.lib.native)
+     implementation(projects.lib.snygg)
+ 
+     // FORK(S0-ads): ads stack for app Activities only. The IME code in this module must not use it
+     // (ImeAdIsolationTest; TRD §2.2, §11.1). Nothing calls it yet.
+     implementation(projects.core.ads)
+ 
++    // FORK(S1-policy): fork settings store and the sensitive-field policy that FlorisImeService evaluates
++    implementation(projects.core.datastore)
++    implementation(projects.ime.policy)
++
+     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
+     lintChecks(projects.lintRules)
+ 
+     testImplementation(libs.kotlin.test.junit5)
++    // FORK(S1-policy): Robolectric (JUnit 4) tests run on the JUnit 5 platform through the vintage engine
++    testImplementation(platform(libs.junit.bom))
++    testImplementation(libs.junit4)
++    testImplementation(libs.robolectric)
++    testImplementation(libs.kotlinx.coroutines.test)
++    testRuntimeOnly(libs.junit.vintage.engine)
+     androidTestImplementation(libs.androidx.test.ext)
+     androidTestImplementation(libs.androidx.test.espresso.core)
+ }
+ 
+ fun getGitCommitHash(short: Boolean = false): Provider<String> {
+     if (!File(".git").exists()) {
+         return providers.provider { "null" }
+     }
+ 
+     val execProvider = providers.exec {
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index bf6b61c5..7e688390 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -35,35 +35,33 @@
+         android:enableOnBackInvokedCallback="true"
+         android:roundIcon="@mipmap/floris_app_icon_round"
+         android:supportsRtl="true"
+         android:theme="@style/FlorisAppTheme"
+         tools:targetApi="tiramisu">
+ 
+         <!-- Allow app to be profiled for benchmarking and baseline profile generation -->
+         <profileable android:shell="true"/>
+ 
+         <!-- IME service -->
+-        <service
+-            android:name="com.manjul.aikeyboard.FlorisImeService"
+-            android:label="@string/floris_app_name"
+-            android:permission="android.permission.BIND_INPUT_METHOD"
+-            android:directBootAware="true"
++        <!-- FORK(S1-policy): directBootAware="false" on the IME and spell checker; the policy and settings store need credential-encrypted storage -->
++        <service android:name="com.manjul.aikeyboard.FlorisImeService" android:directBootAware="false"
++            android:label="@string/floris_app_name" android:permission="android.permission.BIND_INPUT_METHOD"
+             android:exported="true">
+             <intent-filter>
+                 <action android:name="android.view.InputMethod"/>
+             </intent-filter>
+             <meta-data android:name="android.view.im" android:resource="@xml/method"/>
+         </service>
+ 
+         <!-- Spellchecker service -->
+-        <service
+-            android:name="com.manjul.aikeyboard.FlorisSpellCheckerService"
++        <!-- FORK(S1-policy): directBootAware="false", see the IME service above -->
++        <service android:name="com.manjul.aikeyboard.FlorisSpellCheckerService" android:directBootAware="false"
+             android:label="@string/floris_app_name"
+             android:permission="android.permission.BIND_TEXT_SERVICE"
+             android:exported="true">
+             <intent-filter>
+                 <action android:name="android.service.textservice.SpellCheckerService"/>
+             </intent-filter>
+             <meta-data android:name="android.view.textservice.scs" android:resource="@xml/spellchecker"/>
+         </service>
+ 
+         <!-- Main App Activity -->
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+index a3c8c696..d444c5d2 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+@@ -43,20 +43,22 @@ import com.manjul.aikeyboard.lib.devtools.LogTopic
+ import com.manjul.aikeyboard.lib.devtools.flogError
+ import com.manjul.aikeyboard.lib.ext.ExtensionManager
+ import dev.patrickgold.jetpref.datastore.runtime.initAndroid
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.launch
+ import org.florisboard.lib.kotlin.io.deleteContentsRecursively
+ import org.florisboard.lib.kotlin.tryOrNull
+ import org.florisboard.libnative.dummyAdd
++// FORK(S1-policy): import for the fork settings store
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+ import java.lang.ref.WeakReference
+ 
+ /**
+  * Global weak reference for the [FlorisApplication] class. This is needed as in certain scenarios an application
+  * reference is needed, but the Android framework hasn't finished setting up
+  */
+ private var FlorisApplicationReference = WeakReference<FlorisApplication?>(null)
+ 
+ @Suppress("unused")
+ class FlorisApplication : Application() {
+@@ -75,20 +77,22 @@ class FlorisApplication : Application() {
+ 
+     val cacheManager = lazy { CacheManager(this) }
+     val clipboardManager = lazy { ClipboardManager(this) }
+     val editorInstance = lazy { EditorInstance(this) }
+     val extensionManager = lazy { ExtensionManager(this) }
+     val glideTypingManager = lazy { GlideTypingManager(this) }
+     val keyboardManager = lazy { KeyboardManager(this) }
+     val nlpManager = lazy { NlpManager(this) }
+     val subtypeManager = lazy { SubtypeManager(this) }
+     val themeManager = lazy { ThemeManager(this) }
++    // FORK(S1-policy): fork-owned settings (DataStore), read by the policy controller
++    val featureSettingsStore = lazy { FeatureSettingsStore(this) }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         FlorisApplicationReference = WeakReference(this)
+         try {
+             Flog.install(
+                 context = this,
+                 isFloggingEnabled = BuildConfig.DEBUG,
+                 flogTopics = LogTopic.ALL,
+                 flogLevels = Flog.LEVEL_ALL,
+@@ -165,10 +169,13 @@ fun Context.extensionManager() = this.florisApplication().extensionManager
+ 
+ fun Context.glideTypingManager() = this.florisApplication().glideTypingManager
+ 
+ fun Context.keyboardManager() = this.florisApplication().keyboardManager
+ 
+ fun Context.nlpManager() = this.florisApplication().nlpManager
+ 
+ fun Context.subtypeManager() = this.florisApplication().subtypeManager
+ 
+ fun Context.themeManager() = this.florisApplication().themeManager
++
++// FORK(S1-policy): accessor for the fork settings store
++fun Context.featureSettingsStore() = this.florisApplication().featureSettingsStore
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
+index 97682517..f01dad67 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
+@@ -105,20 +105,23 @@ import com.manjul.aikeyboard.ime.theme.WallpaperChangeReceiver
+ import com.manjul.aikeyboard.lib.compose.SystemUiIme
+ import com.manjul.aikeyboard.lib.devtools.LogTopic
+ import com.manjul.aikeyboard.lib.devtools.flogError
+ import com.manjul.aikeyboard.lib.devtools.flogInfo
+ import com.manjul.aikeyboard.lib.devtools.flogWarning
+ import com.manjul.aikeyboard.lib.observeAsTransformingState
+ import com.manjul.aikeyboard.lib.util.ViewUtils
+ import com.manjul.aikeyboard.lib.util.debugSummarize
+ import com.manjul.aikeyboard.lib.util.launchActivity
+ import dev.patrickgold.jetpref.datastore.model.observeAsState
++// FORK(S1-policy): imports for the policy controller
++import android.app.KeyguardManager
++import com.manjul.aikeyboard.fork.policy.ImePolicyController
+ import java.lang.ref.WeakReference
+ import kotlinx.coroutines.flow.update
+ import org.florisboard.lib.android.AndroidInternalR
+ import org.florisboard.lib.android.AndroidVersion
+ import org.florisboard.lib.android.isOrientationLandscape
+ import org.florisboard.lib.android.isOrientationPortrait
+ import org.florisboard.lib.android.showShortToastSync
+ import org.florisboard.lib.android.systemServiceOrNull
+ import org.florisboard.lib.compose.ProvideLocalizedResources
+ import org.florisboard.lib.kotlin.collectIn
+@@ -140,20 +143,25 @@ private var FlorisImeServiceReference = WeakReference<FlorisImeService?>(null)
+ 
+ /**
+  * Core class responsible for linking together all managers and UI compose-ables to provide an IME service. Sets
+  * up the window and context to be lifecycle-aware, so LiveData and Jetpack Compose can be used without issues.
+  */
+ class FlorisImeService : LifecycleInputMethodService() {
+     companion object {
+         private val InlineSuggestionUiSmallestSize = Size(0, 0)
+         private val InlineSuggestionUiBiggestSize = Size(Int.MAX_VALUE, Int.MAX_VALUE)
+ 
++        // FORK(S1-policy): policy controller accessor for features (voice, smartbar, ...)
++        fun policyController(): ImePolicyController {
++            return checkNotNull(FlorisImeServiceReference.get()) { "IME service is not running" }.policyController
++        }
++
+         fun currentInputConnection(): InputConnection? {
+             return FlorisImeServiceReference.get()?.currentInputConnection
+         }
+ 
+         fun inputFeedbackController(): InputFeedbackController? {
+             return FlorisImeServiceReference.get()?.inputFeedbackController
+         }
+ 
+         /**
+          * Hides the IME and launches [FlorisAppActivity].
+@@ -264,20 +272,32 @@ class FlorisImeService : LifecycleInputMethodService() {
+     private var inputWindowView by mutableStateOf<View?>(null)
+     private var inputViewSize by mutableStateOf(IntSize.Zero)
+     private val inputFeedbackController by lazy { InputFeedbackController.new(this) }
+     private var isWindowShown: Boolean = false
+     private var isFullscreenUiMode by mutableStateOf(false)
+     private var isExtractUiShown by mutableStateOf(false)
+     private var resourcesContext by mutableStateOf(this as Context)
+ 
+     private val wallpaperChangeReceiver = WallpaperChangeReceiver()
+ 
++    // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. The keyguard state is read
++    // on each evaluation, never cached. Remote-config forced packages arrive in S3.
++    private val policyController by lazy {
++        val keyguardManager = getSystemService(KeyguardManager::class.java)
++        ImePolicyController(
++            store = featureSettingsStore().value,
++            keyguard = { keyguardManager?.isDeviceLocked ?: true },
++            forcedPackages = { emptySet() },
++            scope = lifecycleScope,
++        )
++    }
++
+     init {
+         setTheme(R.style.FlorisImeTheme)
+     }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         FlorisImeServiceReference = WeakReference(this)
+         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
+         subtypeManager.activeSubtypeFlow.collectIn(lifecycleScope) { subtype ->
+             val config = Configuration(resources.configuration)
+@@ -335,27 +355,29 @@ class FlorisImeService : LifecycleInputMethodService() {
+     }
+ 
+     override fun onConfigurationChanged(newConfig: Configuration) {
+         super.onConfigurationChanged(newConfig)
+         themeManager.configurationChangeCounter.update { it + 1 }
+     }
+ 
+     override fun onDestroy() {
+         super.onDestroy()
+         unregisterReceiver(wallpaperChangeReceiver)
++        policyController.onFinishInput() // FORK(S1-policy): drop in-flight work for the closed field
+         FlorisImeServiceReference = WeakReference(null)
+         inputWindowView = null
+     }
+ 
+     override fun onStartInput(info: EditorInfo?, restarting: Boolean) {
+         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
+         super.onStartInput(info, restarting)
++        policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
+         if (info == null) return
+         val editorInfo = FlorisEditorInfo.wrap(info)
+         editorInstance.handleStartInput(editorInfo)
+     }
+ 
+     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
+         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
+         super.onStartInputView(info, restarting)
+         if (info == null) return
+         val editorInfo = FlorisEditorInfo.wrap(info)
+@@ -391,26 +413,28 @@ class FlorisImeService : LifecycleInputMethodService() {
+                 oldSelection = EditorRange.normalized(oldSelStart, oldSelEnd),
+                 newSelection = EditorRange.normalized(newSelStart, newSelEnd),
+                 composing = EditorRange.normalized(candidatesStart, candidatesEnd),
+             )
+         }
+     }
+ 
+     override fun onFinishInputView(finishingInput: Boolean) {
+         flogInfo { "finishing=$finishingInput" }
+         super.onFinishInputView(finishingInput)
++        policyController.onFinishInputView() // FORK(S1-policy)
+         editorInstance.handleFinishInputView()
+     }
+ 
+     override fun onFinishInput() {
+         flogInfo { "(no args)" }
+         super.onFinishInput()
++        policyController.onFinishInput() // FORK(S1-policy)
+         editorInstance.handleFinishInput()
+         NlpInlineAutofill.clearInlineSuggestions()
+     }
+ 
+     override fun onWindowShown() {
+         super.onWindowShown()
+         if (isWindowShown) {
+             flogWarning(LogTopic.IMS_EVENTS) { "Ignoring (is already shown)" }
+             return
+         } else {
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/EditorInfoMapping.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/EditorInfoMapping.kt
+new file mode 100644
+index 00000000..ee47cca2
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/EditorInfoMapping.kt
+@@ -0,0 +1,21 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.policy
++
++import android.view.inputmethod.EditorInfo
++import com.manjul.aikeyboard.ime.policy.FieldDescriptor
++
++/** Maps the framework [EditorInfo] to the Android-free descriptor the policy evaluates. */
++fun EditorInfo?.toFieldDescriptor(): FieldDescriptor {
++    if (this == null) return FieldDescriptor(null, 0, 0, null, null)
++    return FieldDescriptor(
++        packageName = packageName,
++        inputType = inputType,
++        imeOptions = imeOptions,
++        hintText = hintText?.toString(),
++        label = label?.toString(),
++    )
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/FieldGeneration.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/FieldGeneration.kt
+new file mode 100644
+index 00000000..c606ea6b
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/FieldGeneration.kt
+@@ -0,0 +1,24 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.policy
++
++import java.util.concurrent.atomic.AtomicInteger
++
++/**
++ * Counter that changes whenever the focused field changes or the keyboard must drop in-flight work
++ * (TRD §11.2 #2.5). Async work captures [value] when it starts and drops its result unless [isCurrent].
++ */
++class FieldGeneration {
++    private val counter = AtomicInteger(0)
++
++    val value: Int get() = counter.get()
++
++    fun bump() {
++        counter.incrementAndGet()
++    }
++
++    fun isCurrent(token: Int): Boolean = counter.get() == token
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyController.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyController.kt
+new file mode 100644
+index 00000000..6eeca53a
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyController.kt
+@@ -0,0 +1,105 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.policy
++
++import android.view.inputmethod.EditorInfo
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.core.datastore.FeatureSettings
++import com.manjul.aikeyboard.ime.policy.FieldDescriptor
++import com.manjul.aikeyboard.ime.policy.PolicyContext
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import com.manjul.aikeyboard.ime.policy.SensitiveFieldPolicy
++import java.util.concurrent.CopyOnWriteArrayList
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.launch
++
++/**
++ * Evaluates [SensitiveFieldPolicy] on every `onStartInput` and tells features to drop their state when a
++ * field becomes more restrictive. Main thread only. [keyguard] is read on every evaluation, never cached.
++ */
++class ImePolicyController(
++    private val store: FeatureSettingsStore,
++    private val keyguard: () -> Boolean,
++    private val forcedPackages: () -> Set<String>,
++    scope: CoroutineScope,
++) {
++    private val _decision = MutableStateFlow(NoField)
++    private val listeners = CopyOnWriteArrayList<(PolicyDecision) -> Unit>()
++
++    /** The field of the active input session; null between sessions. Re-evaluated when settings change. */
++    private var activeField: FieldDescriptor? = null
++
++    val decision: StateFlow<PolicyDecision> = _decision
++    val generation = FieldGeneration()
++
++    init {
++        // Settings load asynchronously: a private app or incognito value that arrives after the first field
++        // must still lock it, so every emission re-evaluates the active field.
++        scope.launch {
++            store.flow.collect { settings ->
++                val field = activeField ?: return@collect
++                val next = evaluate(field, settings)
++                val previous = _decision.value
++                _decision.value = next
++                if (next.isMoreRestrictiveThan(previous)) {
++                    generation.bump()
++                    notifyListeners(next)
++                }
++            }
++        }
++    }
++
++    /** Called when a field starts (not a restart) or a restart is more restrictive than the previous decision. */
++    fun addRestrictionListener(l: (PolicyDecision) -> Unit) {
++        listeners.add(l)
++    }
++
++    fun onStartInput(info: EditorInfo?, restarting: Boolean) {
++        val field = info.toFieldDescriptor()
++        activeField = field
++        val next = evaluate(field, store.current)
++        val previous = _decision.value
++        _decision.value = next
++        if (!restarting || next.isMoreRestrictiveThan(previous)) {
++            generation.bump()
++            notifyListeners(next)
++        }
++    }
++
++    fun onFinishInputView() {
++        generation.bump()
++    }
++
++    /** No field is focused: nothing may run until the next [onStartInput]. */
++    fun onFinishInput() {
++        activeField = null
++        generation.bump()
++        _decision.value = NoField
++        notifyListeners(NoField)
++    }
++
++    private fun evaluate(field: FieldDescriptor, settings: FeatureSettings): PolicyDecision =
++        SensitiveFieldPolicy.evaluate(
++            field,
++            PolicyContext(
++                deviceLocked = keyguard(),
++                incognitoManual = settings.incognitoManual,
++                privatePackages = settings.privatePackages,
++                forceSensitivePackages = forcedPackages(),
++            ),
++        )
++
++    private fun notifyListeners(decision: PolicyDecision) {
++        listeners.forEach { it(decision) }
++    }
++
++    private companion object {
++        /** Everything denied and no reasons: used before the first and after the last field. */
++        val NoField: PolicyDecision = PolicyDecision.Locked.copy(reasons = emptySet())
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt
+index f1d47f9a..42a34c5b 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt
+@@ -107,25 +107,28 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
+                 KeyboardMode.CHARACTERS
+             }
+         }
+         activeState.keyboardMode = keyboardMode
+         activeState.isComposingEnabled = when (keyboardMode) {
+             KeyboardMode.NUMERIC,
+             KeyboardMode.PHONE,
+             KeyboardMode.PHONE2,
+             -> false
+             else -> activeState.keyVariation != KeyVariation.PASSWORD &&
++                // FORK(S1-policy): no suggestions in sensitive fields
++                FlorisImeService.policyController().decision.value.allowSuggestionStrip &&
+                 prefs.suggestion.enabled.get()// &&
+             //!instance.inputAttributes.flagTextAutoComplete &&
+             //!instance.inputAttributes.flagTextNoSuggestions
+         }
+-        activeState.isIncognitoMode = when (prefs.suggestion.incognitoMode.get()) {
++        val policyIncognito = !FlorisImeService.policyController().decision.value.allowLearning // FORK(S1-policy): sensitive fields never learn
++        activeState.isIncognitoMode = policyIncognito || when (prefs.suggestion.incognitoMode.get()) {
+             IncognitoMode.FORCE_OFF -> false
+             IncognitoMode.FORCE_ON -> true
+             IncognitoMode.DYNAMIC_ON_OFF -> {
+                 editorInfo.imeOptions.flagNoPersonalizedLearning || prefs.suggestion.forceIncognitoModeFromDynamic.get()
+             }
+         }
+     }
+ 
+     override fun handleSelectionUpdate(oldSelection: EditorRange, newSelection: EditorRange, composing: EditorRange) {
+         autoSpace.setInactiveFromUpdate()
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/EditorInfoMappingTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/EditorInfoMappingTest.kt
+new file mode 100644
+index 00000000..f910a04d
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/EditorInfoMappingTest.kt
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.policy
++
++import android.text.InputType
++import android.view.inputmethod.EditorInfo
++import com.manjul.aikeyboard.ime.policy.FieldDescriptor
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class EditorInfoMappingTest {
++    @Test
++    fun `null maps to the empty descriptor`() {
++        assertEquals(FieldDescriptor(null, 0, 0, null, null), (null as EditorInfo?).toFieldDescriptor())
++    }
++
++    @Test
++    fun `fields are copied`() {
++        val info = EditorInfo().apply {
++            packageName = "p.q"
++            inputType = InputType.TYPE_CLASS_TEXT
++            imeOptions = EditorInfo.IME_ACTION_DONE
++            hintText = "hint"
++            label = "label"
++        }
++        assertEquals(
++            FieldDescriptor("p.q", InputType.TYPE_CLASS_TEXT, EditorInfo.IME_ACTION_DONE, "hint", "label"),
++            info.toFieldDescriptor(),
++        )
++    }
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyControllerTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyControllerTest.kt
+new file mode 100644
+index 00000000..22206b8a
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyControllerTest.kt
+@@ -0,0 +1,147 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.policy
++
++import android.text.InputType
++import android.view.inputmethod.EditorInfo
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import com.manjul.aikeyboard.ime.policy.SensitivityReason
++import kotlinx.coroutines.test.runTest
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import org.junit.After
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertNotEquals
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class ImePolicyControllerTest {
++    private var locked = false
++    private val dispatcher = UnconfinedTestDispatcher()
++    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
++    private val store = FeatureSettingsStore(RuntimeEnvironment.getApplication(), dispatcher)
++    private val controller = ImePolicyController(store, keyguard = { locked }, forcedPackages = { emptySet() }, scope = scope)
++
++    @After
++    fun tearDown() {
++        scope.cancel()
++    }
++
++    private fun text(pkg: String = "some.app") = EditorInfo().apply {
++        packageName = pkg
++        inputType = InputType.TYPE_CLASS_TEXT
++    }
++
++    private fun password() = EditorInfo().apply {
++        packageName = "some.app"
++        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
++    }
++
++    @Test
++    fun `text field allows voice`() {
++        controller.onStartInput(text(), false)
++        assertTrue(controller.decision.value.allowVoice)
++    }
++
++    @Test
++    fun `restart into a password field notifies once and bumps generation`() {
++        controller.onStartInput(text(), false)
++        val seen = mutableListOf<PolicyDecision>()
++        controller.addRestrictionListener { seen += it }
++        val before = controller.generation.value
++
++        controller.onStartInput(password(), restarting = true)
++
++        assertEquals(1, seen.size)
++        assertFalse(seen.single().allowVoice)
++        assertNotEquals(before, controller.generation.value)
++    }
++
++    @Test
++    fun `restart into a less restrictive field does not notify`() {
++        controller.onStartInput(password(), false)
++        var calls = 0
++        controller.addRestrictionListener { calls++ }
++        val before = controller.generation.value
++
++        controller.onStartInput(text(), restarting = true)
++
++        assertEquals(0, calls)
++        assertEquals(before, controller.generation.value)
++        assertTrue(controller.decision.value.allowVoice)
++    }
++
++    @Test
++    fun `null EditorInfo does not crash and is unrestricted`() {
++        controller.onStartInput(null, false)
++        assertEquals(PolicyDecision.Unrestricted, controller.decision.value)
++    }
++
++    @Test
++    fun `locked device is evaluated on each start`() {
++        locked = true
++        controller.onStartInput(text(), false)
++        assertTrue(SensitivityReason.DEVICE_LOCKED in controller.decision.value.reasons)
++        locked = false
++        controller.onStartInput(text(), false)
++        assertFalse(SensitivityReason.DEVICE_LOCKED in controller.decision.value.reasons)
++    }
++
++    @Test
++    fun `private package is restricted`() = runTest {
++        store.update { it.copy(privatePackages = setOf("secret.app")) }
++        controller.onStartInput(text("secret.app"), false)
++        assertTrue(SensitivityReason.PRIVATE_APP in controller.decision.value.reasons)
++    }
++
++    @Test
++    fun `finishing the input view bumps generation`() {
++        val before = controller.generation.value
++        controller.onFinishInputView()
++        assertNotEquals(before, controller.generation.value)
++        assertFalse(controller.generation.isCurrent(before))
++    }
++
++    @Test
++    fun `settings that load after the first field lock it once`() = runTest {
++        controller.onStartInput(text("com.bank"), false)
++        assertTrue(controller.decision.value.allowVoice)
++        val seen = mutableListOf<PolicyDecision>()
++        controller.addRestrictionListener { seen += it }
++        val before = controller.generation.value
++
++        store.update { it.copy(privatePackages = setOf("com.bank")) }
++
++        assertEquals(1, seen.size)
++        assertTrue(SensitivityReason.PRIVATE_APP in controller.decision.value.reasons)
++        assertTrue(SensitivityReason.PRIVATE_APP in seen.single().reasons)
++        assertNotEquals(before, controller.generation.value)
++    }
++
++    @Test
++    fun `settings emission after finishing input does not resurrect a field`() = runTest {
++        controller.onStartInput(text("com.bank"), false)
++        controller.onFinishInput()
++        val denied = controller.decision.value
++        var calls = 0
++        controller.addRestrictionListener { calls++ }
++
++        store.update { it.copy(privatePackages = setOf("com.bank")) }
++
++        assertEquals(denied, controller.decision.value)
++        assertEquals(0, calls)
++    }
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/manifest/ManifestHardeningTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/manifest/ManifestHardeningTest.kt
+index bd830cac..4da3e57f 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/manifest/ManifestHardeningTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/manifest/ManifestHardeningTest.kt
+@@ -5,20 +5,21 @@
+ 
+ package com.manjul.aikeyboard.manifest
+ 
+ import java.io.File
+ import javax.xml.parsers.DocumentBuilderFactory
+ import org.w3c.dom.Document
+ import org.w3c.dom.Element
+ import kotlin.test.Test
+ import kotlin.test.assertEquals
+ import kotlin.test.assertFalse
++import kotlin.test.assertNotEquals
+ import kotlin.test.assertNotNull
+ import kotlin.test.assertTrue
+ import kotlin.test.fail
+ 
+ /**
+  * TRD §6.3 / §7.1 "Manifest/config tests" over the source manifest and XML config of :app:
+  * exported-component allow-list, IME/spell-checker bind permissions, FileProvider paths, backup rules
+  * and the network security config.
+  *
+  * Adding an exported component must be a reviewed change: extend [EXPORTED_ALLOW_LIST] with a reason.
+@@ -200,11 +201,19 @@ class ManifestHardeningTest {
+         assertEquals(listOf("system"), baseCerts, "Release trust anchors must be system CAs only")
+         for (domainConfig in config.children("domain-config")) {
+             assertFalse(domainConfig.getAttribute("cleartextTrafficPermitted") == "true", "No domain may allow cleartext")
+         }
+         val userCerts = config.children("certificates").filter { it.getAttribute("src") == "user" }
+         for (cert in userCerts) {
+             assertEquals("debug-overrides", (cert.parentNode.parentNode as Element).tagName, "User CAs are allowed only in debug-overrides")
+         }
+         assertTrue(manifest.elements("application").single().attr("usesCleartextTraffic") != "true")
+     }
++
++    @Test
++    fun `IME and spell checker services are not direct boot aware`() {
++        for (name in listOf(IME_SERVICE, SPELL_CHECKER_SERVICE)) {
++            val service = manifest.elements("service").single { qualify(it.attr("name")) == name }
++            assertNotEquals("true", service.attr("directBootAware"), "$name must not be directBootAware")
++        }
++    }
+ }
+diff --git a/core/datastore/build.gradle.kts b/core/datastore/build.gradle.kts
+new file mode 100644
+index 00000000..ec462522
+--- /dev/null
++++ b/core/datastore/build.gradle.kts
+@@ -0,0 +1,33 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++// :core:datastore (TRD §2.2): fork-owned settings (FeatureSettings) in a multi-process DataStore.
++// Upstream FlorisBoard preferences stay in jetpref.
++
++plugins {
++    alias(libs.plugins.aikeyboard.android.library)
++    alias(libs.plugins.kotlin.serialization)
++}
++
++apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
++
++android {
++    namespace = "com.manjul.aikeyboard.core.datastore"
++
++    testOptions {
++        unitTests.isIncludeAndroidResources = true
++    }
++}
++
++dependencies {
++    api(libs.kotlinx.coroutines)
++    api(libs.kotlinx.serialization.json)
++    api(libs.androidx.datastore)
++
++    testImplementation(libs.kotlinx.coroutines.test)
++    testImplementation(libs.junit4)
++    testImplementation(libs.robolectric)
++    testRuntimeOnly(libs.junit.vintage.engine)
++}
+diff --git a/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt b/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt
+new file mode 100644
+index 00000000..119a909a
+--- /dev/null
++++ b/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettings.kt
+@@ -0,0 +1,32 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.datastore
++
++import kotlinx.serialization.Serializable
++
++enum class VoiceEnginePreference { AUTO, ON_DEVICE, WHISPER }
++
++/** Source and target language tags of the translate feature. */
++@Serializable
++data class LanguagePair(val source: String, val target: String)
++
++/** Fork-owned settings, persisted by [FeatureSettingsStore]. Unknown or missing JSON keys fall back to defaults. */
++@Serializable
++data class FeatureSettings(
++    val incognitoManual: Boolean = false,
++    val privatePackages: Set<String> = emptySet(),
++    val smartbarPinned: List<String> = emptyList(),
++    val smartbarOrder: List<String> = emptyList(),
++    val voiceEnginePreference: VoiceEnginePreference = VoiceEnginePreference.AUTO,
++    val voiceSilenceMs: Int = 2000,
++    val spokenPunctuation: Boolean = true,
++    val onboardingStep: Int = 0,
++    val onboardingDone: Boolean = false,
++    val firstOpenAt: Long = 0L,
++    val translatePair: LanguagePair? = null,
++    val consentVoiceNoticeAt: Long = 0L,
++    val analyticsOptOut: Boolean = false,
++)
+diff --git a/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStore.kt b/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStore.kt
+new file mode 100644
+index 00000000..1b54b004
+--- /dev/null
++++ b/core/datastore/src/main/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStore.kt
+@@ -0,0 +1,81 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.datastore
++
++import android.content.Context
++import androidx.datastore.core.CorruptionException
++import androidx.datastore.core.DataStore
++import androidx.datastore.core.MultiProcessDataStoreFactory
++import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
++import androidx.datastore.core.Serializer
++import java.io.File
++import java.io.InputStream
++import java.io.OutputStream
++import kotlinx.coroutines.CoroutineDispatcher
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.launch
++import kotlinx.serialization.SerializationException
++import kotlinx.serialization.json.Json
++
++internal const val SILENCE_MS_MIN = 2000
++internal const val SILENCE_MS_MAX = 5000
++
++internal object FeatureSettingsSerializer : Serializer<FeatureSettings> {
++    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
++
++    override val defaultValue: FeatureSettings = FeatureSettings()
++
++    override suspend fun readFrom(input: InputStream): FeatureSettings = try {
++        json.decodeFromString(FeatureSettings.serializer(), input.readBytes().decodeToString())
++    } catch (e: SerializationException) {
++        // Never put the file content in the message (it can contain package names).
++        throw CorruptionException("feature_settings.json is not valid")
++    }
++
++    override suspend fun writeTo(t: FeatureSettings, output: OutputStream) {
++        output.write(json.encodeToString(FeatureSettings.serializer(), t).encodeToByteArray())
++    }
++}
++
++/**
++ * Persists [FeatureSettings] in `files/datastore/feature_settings.json`. [current] is a cached value that
++ * can be read synchronously from the IME main thread; it is [FeatureSettings] defaults until the first load
++ * completes, and reflects every [update] immediately.
++ */
++class FeatureSettingsStore(
++    context: Context,
++    dispatcher: CoroutineDispatcher = Dispatchers.IO,
++) {
++    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
++    private val dataStore: DataStore<FeatureSettings> = MultiProcessDataStoreFactory.create(
++        serializer = FeatureSettingsSerializer,
++        corruptionHandler = ReplaceFileCorruptionHandler { FeatureSettingsSerializer.defaultValue },
++        produceFile = { File(context.applicationContext.filesDir, "datastore/feature_settings.json") },
++        scope = scope,
++    )
++    private val cached = MutableStateFlow(FeatureSettingsSerializer.defaultValue)
++
++    init {
++        scope.launch { dataStore.data.collect { cached.value = it } }
++    }
++
++    val flow: Flow<FeatureSettings> get() = dataStore.data
++
++    val current: FeatureSettings get() = cached.value
++
++    suspend fun update(transform: (FeatureSettings) -> FeatureSettings) {
++        val written = dataStore.updateData { old ->
++            val new = transform(old)
++            new.copy(voiceSilenceMs = new.voiceSilenceMs.coerceIn(SILENCE_MS_MIN, SILENCE_MS_MAX))
++        }
++        // Read-your-writes for [current]; the collector above catches up with the same value.
++        cached.value = written
++    }
++}
+diff --git a/core/datastore/src/test/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStoreTest.kt b/core/datastore/src/test/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStoreTest.kt
+new file mode 100644
+index 00000000..864ab504
+--- /dev/null
++++ b/core/datastore/src/test/kotlin/com/manjul/aikeyboard/core/datastore/FeatureSettingsStoreTest.kt
+@@ -0,0 +1,75 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.datastore
++
++import android.app.Application
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.test.runTest
++import java.io.File
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class FeatureSettingsStoreTest {
++    private val app: Application get() = RuntimeEnvironment.getApplication()
++
++    @Test
++    fun `defaults`() = runTest {
++        val s = FeatureSettingsStore(app).flow.first()
++        assertEquals(FeatureSettings(), s)
++        assertEquals(2000, s.voiceSilenceMs)
++        assertTrue(s.spokenPunctuation)
++        assertNull(s.translatePair)
++    }
++
++    @Test
++    fun `update round-trips`() = runTest {
++        val expected = FeatureSettings(
++            incognitoManual = true,
++            privatePackages = setOf("a.b"),
++            smartbarPinned = listOf("x"),
++            voiceEnginePreference = VoiceEnginePreference.WHISPER,
++            translatePair = LanguagePair("en", "de"),
++            onboardingStep = 3,
++        )
++        val store = FeatureSettingsStore(app)
++        store.update { expected }
++        assertEquals(expected, store.flow.first())
++        assertEquals(expected, store.current)
++        // What is on disk decodes to the same value.
++        val file = File(app.filesDir, "datastore/feature_settings.json")
++        assertEquals(expected, file.inputStream().use { FeatureSettingsSerializer.readFrom(it) })
++    }
++
++    @Test
++    fun `voiceSilenceMs is clamped on write`() = runTest {
++        val store = FeatureSettingsStore(app)
++        store.update { it.copy(voiceSilenceMs = 9000) }
++        assertEquals(5000, store.flow.first().voiceSilenceMs)
++        store.update { it.copy(voiceSilenceMs = 10) }
++        assertEquals(2000, store.flow.first().voiceSilenceMs)
++    }
++
++    @Test
++    fun `corrupt file resets to defaults`() = runTest {
++        val file = File(app.filesDir, "datastore/feature_settings.json")
++        file.parentFile!!.mkdirs()
++        file.writeBytes(byteArrayOf(0x00, 0x7B, 0x7F, 0x13, 0x42))
++
++        val store = FeatureSettingsStore(app)
++
++        assertEquals(FeatureSettings(), store.flow.first())
++        store.update { it.copy(onboardingStep = 2) }
++        assertEquals(2, store.flow.first().onboardingStep)
++    }
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index 976d68b7..1fb7e277 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -38,20 +38,27 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/about/AboutScreen.kt` | S0-branding | Changelog and Repository rows (FlorisBoard GitHub) removed; Privacy policy row opens our `privacy_policy_url` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/setup/SetupScreen.kt` | S0-branding | Footer: Privacy policy opens our `privacy_policy_url`; the Repository link (FlorisBoard GitHub) and its bullet separator are removed |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/lib/crashutility/CrashDialogActivity.kt` | S0-branding | Crash text carries a plain version (plus commit hash in debug) instead of a link to upstream's commit/release page; the GitHub report instructions are hidden; the "Open issue tracker" button (FlorisBoard issues) is now a "Share" button (`ACTION_SEND` chooser with the crash text). Copy to clipboard is unchanged. `crash_dialog.xml` is untouched (button text set in code) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/ext/AddonBox.kt` | S0-branding | No links to upstream's Addons Store (`BuildConfig.FLADDONS_STORE_URL`, `beta.addons.florisboard.org`): the "Visit Addons Store" button is removed, the info text is our `ext__home__info_import_only`, and `UpdateBox` ("Search for updates", which opens the store's check-updates page) renders nothing (`ADDONS_STORE_ENABLED = false`). Local extension import is unchanged. The `FLADDONS_*` build config fields in `app/build.gradle.kts` are kept (no remaining UI call site) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/typing/TypingScreen.kt` | S0-branding | Auto-space-punctuation card: feedback request and link to upstream's GitHub discussion removed; the experimental-feature warning stays |
+ | Deleted: `app/src/main/res/drawable/ic_app_icon_{stable,beta,debug}_{foreground,monochrome}.xml`, `app/src/main/res/mipmap-*dpi/ic_app_icon_{stable,beta,debug}{,_round}.png`, `app/src/main/ic_app_icon_{stable,preview,debug}-playstore.png` | S0-branding | FlorisBoard launcher foreground/monochrome vectors, legacy PNG mipmaps and Play Store icons (see the `mipmap-anydpi-v26` row) |
+ | Deleted: `app/src/main/assets/license/project_license.txt` | S0-licences | Copy of LICENSE replaced by the build-generated `assets/licenses/` (see the `ProjectLicenseScreen.kt` row) |
+ | `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-ci | Upstream v0.5.2 imports `org.florisboard.lib.color.schemes.yellow{Light,Dark}Scheme`, which does not exist in `:lib:color` at that tag, so the `:lib:snygg` unit tests did not compile. The two fixed schemes are now built with `:lib:color`'s `neutralDynamicColorScheme` (yellow 500 seed); all assertions are unchanged |
+ | Deleted: `fastlane/`, `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `crowdin.yml`, `ROADMAP.md`, `AI_POLICY.md`, `LANGUAGEPACKS*.md`, `.idea/icon.svg` | S0-branding | Upstream store listings, project-process docs, CI that uses FlorisBoard secrets, and the FlorisBoard logo. `README.md` was rewritten for the fork |
+ | `build.gradle.kts`, `settings.gradle.kts`, `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/res/xml/backup_rules.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/{app/ext/AddonBox,app/settings/about/AboutScreen,app/settings/about/ProjectLicenseScreen,app/settings/typing/TypingScreen,app/setup/SetupScreen,lib/crashutility/CrashDialogActivity,lib/crashutility/CrashUtility}.kt`, `lib/compose/src/main/kotlin/org/florisboard/lib/compose/Resources.kt`, `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-licences, S0-ci | Markers only, for the per-hunk marker check: the "Modified by AI Keyboard contributors, 2026" header line carries `FORK(S0-licences)`; removed imports and removed lines get a one-line `FORK(<ticket>)` comment at the deletion point; `AndroidManifest.xml` moves `android:name` onto the `<application` line and `networkSecurityConfig` next to `dataExtractionRules` so the marker sits within 3 lines of both edits. No behaviour change |
++| `settings.gradle.kts` | S1-policy | `include(":core:datastore")` |
++| `gradle/libs.versions.toml` | S1-policy | `androidx-datastore` 1.2.1 (latest stable on Google Maven, 2026-10-18), `robolectric` 4.17 (latest on Maven Central), `junit-vintage-engine` (version from the junit-bom), inside the `# --- AI Keyboard ---` blocks |
++| `app/build.gradle.kts` | S1-policy | `implementation(projects.core.datastore)`, `implementation(projects.ime.policy)`; Robolectric, JUnit 4, junit-vintage and coroutines-test as test dependencies; applies `gradle/robolectric-offline.gradle.kts` (new file: resolves Robolectric's android-all jar through Gradle so tests need no download into the home directory) |
++| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-policy | Lazy `featureSettingsStore` and `Context.featureSettingsStore()` accessor |
++| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy | Owns an `ImePolicyController` (keyguard read on every evaluation, no forced packages until S3); calls it from `onStartInput`, `onFinishInputView`, `onFinishInput`, `onDestroy`; companion `policyController()` accessor. `onStartInputView` needs no call: the decision is made in `onStartInput`, which always precedes it |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt` | S1-policy | `isIncognitoMode` is also true when the policy decision does not allow learning; composing is off when it does not allow the suggestion strip |
++| `app/src/main/AndroidManifest.xml` | S1-policy | `android:directBootAware="false"` on the IME and spell-checker services (was `true` / absent): the policy and settings store live in credential-encrypted storage. Guarded by `ManifestHardeningTest`. The attributes share the `<service` line so the marker sits within 3 lines of each edit (per-hunk marker check); no behaviour change from that |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised
+@@ -83,21 +90,22 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
+ 
+ ## Our modules and convention plugins (S0-modules)
+ 
+ New code lives in our own modules (TRD §2.1, §2.2). These are new files, not upstream patches:
+ 
+ - `build-logic/` (included build): `aikeyboard.android.library`, `aikeyboard.android.library.compose`,
+   `aikeyboard.jvm.library`, `aikeyboard.module-rules`. SDK levels are read from the root
+   `gradle.properties` keys `projectCompileSdk`, `projectMinSdk`, `projectTargetSdk`, so our modules
+   always match the upstream ones. Java/Kotlin bytecode target 11 and JUnit 5, as upstream.
+ - `:core:common` (Android library): dispatcher qualifier/provider, `Outcome` result type.
+-- `:ime:policy` (pure JVM): placeholder `SensitiveFieldPolicy` contract; implemented in Sprint 1.
++- `:ime:policy` (pure JVM): `SensitiveFieldPolicy` (Sprint 1).
++- `:core:datastore` (Android library, S1-policy): `FeatureSettings` and `FeatureSettingsStore` (multi-process DataStore, JSON).
+ 
+ Layout decision: the upstream IME stays in `:app` (no `:ime` module split in Sprint 0).
+ 
+ ## Module dependency rules
+ 
+ `aikeyboard.module-rules` (applied in the root `build.gradle.kts`) inspects every project-to-project
+ dependency, in any configuration, after all projects are evaluated, and fails the build when:
+ 
+ 1. `:ime` or an `:ime:*` project (not a prefix-only sibling such as `:imeTools`) reaches `:core:ads`, `:core:billing` or any `:feature:*`
+    project, directly or through other projects;
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 3b192a4a..5d2022d4 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -33,20 +33,23 @@ junit-jupiter-params = "5.13.3"
+ kotlinx-kover = "0.9.1"
+ 
+ # --- AI Keyboard ---
+ # FORK(S0-modules): entries below were added by the fork (see docs/FORK_PATCHES.md). Keep them in this block.
+ javax-inject = "1"
+ # Lint API for :lint-rules. Must stay at AGP version + 23 (AGP 8.12.0 -> lint 31.12.0).
+ android-lint = "31.12.0"
+ junit4 = "4.13.2"
+ # :core:ads consent (Google UMP). 4.0.0 is the latest release on Google Maven (checked 2026-10-18)
+ google-ump = "4.0.0"
++# FORK(S1-policy): :core:datastore (latest stable on Google Maven / Maven Central, checked 2026-10-18)
++androidx-datastore = "1.2.1"
++robolectric = "4.17"
+ 
+ 
+ 
+ [libraries]
+ # Main
+ androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+ androidx-activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "androidx-activity" }
+ androidx-autofill = { module = "androidx.autofill:autofill", version.ref = "androidx-autofill" }
+ androidx-collection-ktx = { module = "androidx.collection:collection-ktx", version.ref = "androidx-collection" }
+ androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }
+@@ -99,20 +102,24 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
+ # build-logic (convention plugins) compile-time classpath
+ android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "android-gradle-plugin" }
+ kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+ # :lint-rules (custom lint checks)
+ android-lint-api = { module = "com.android.tools.lint:lint-api", version.ref = "android-lint" }
+ android-lint-checks = { module = "com.android.tools.lint:lint-checks", version.ref = "android-lint" }
+ android-lint-tests = { module = "com.android.tools.lint:lint-tests", version.ref = "android-lint" }
+ junit4 = { module = "junit:junit", version.ref = "junit4" }
+ # :core:ads
+ google-ump = { module = "com.google.android.ump:user-messaging-platform", version.ref = "google-ump" }
++# FORK(S1-policy): :core:datastore and Robolectric tests (junit-vintage runs JUnit4 tests on the JUnit 5 platform; version from the junit-bom)
++androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "androidx-datastore" }
++robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
++junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine" }
+ 
+ 
+ 
+ [plugins]
+ # Main
+ agp-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
+ agp-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
+ agp-test = { id = "com.android.test", version.ref = "android-gradle-plugin" }
+ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+diff --git a/gradle/robolectric-offline.gradle.kts b/gradle/robolectric-offline.gradle.kts
+new file mode 100644
+index 00000000..8b2b3c05
+--- /dev/null
++++ b/gradle/robolectric-offline.gradle.kts
+@@ -0,0 +1,30 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++// Applied by modules with Robolectric tests. Robolectric normally downloads its android-all jar into
++// ~/.m2 at test time (and takes a lock file in the home directory). Resolving it through Gradle instead
++// keeps the build hermetic and lets the tests run in sandboxes with a read-only home.
++// Keep the version in step with the SDK that robolectric 4.x maps SDK 34 to (tests use @Config(sdk = [34])).
++
++val androidAll = configurations.create("robolectricAndroidAll") {
++    isCanBeConsumed = false
++    isTransitive = false
++}
++
++dependencies {
++    add("robolectricAndroidAll", "org.robolectric:android-all-instrumented:14-robolectric-10818077-i7")
++}
++
++val syncRobolectricAndroidAll = tasks.register<Sync>("syncRobolectricAndroidAll") {
++    from(androidAll)
++    into(layout.buildDirectory.dir("robolectric-deps"))
++}
++
++tasks.withType<Test>().configureEach {
++    dependsOn(syncRobolectricAndroidAll)
++    val depsDir = layout.buildDirectory.dir("robolectric-deps").get().asFile
++    systemProperty("robolectric.offline", "true")
++    systemProperty("robolectric.dependency.dir", depsDir.absolutePath)
++}
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+index eb08ba04..b6a5d072 100644
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -53,13 +53,15 @@ include(":lib:color")
+ include(":lib:compose")
+ include(":lib:kotlin")
+ include(":lib:native")
+ include(":lib:snygg")
+ 
+ // FORK(S0-modules): AI Keyboard modules (TRD §2.2). The upstream IME stays in :app for now.
+ include(":core:common")
+ // FORK(S0-ads): app-process-only ads module (consent, placement registry, caps); never used by the IME
+ include(":core:ads")
+ include(":ime:policy")
++// FORK(S1-policy): feature settings store (DataStore)
++include(":core:datastore")
+ 
+ // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
+ include(":lint-rules")

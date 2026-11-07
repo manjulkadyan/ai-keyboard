@@ -1,0 +1,960 @@
+# Review package: 8a532cad..ffe72272
+
+## Commits
+ffe72272 fix(voice): address review for task 11
+
+## Files changed
+ .../manjul/aikeyboard/fork/voice/ImeTextTarget.kt  |  22 +++-
+ .../aikeyboard/fork/voice/MicPermissionActivity.kt |   5 +
+ .../fork/voice/MicPermissionActivityTest.kt        |  14 +++
+ .../aikeyboard/fork/voice/VoiceImeSessionTest.kt   |  61 ++++++++++-
+ .../manjul/aikeyboard/core/voice/SpeechSession.kt  |   6 ++
+ .../aikeyboard/core/voice/SpeechSessionTest.kt     |  12 +++
+ .../ime/voiceui/ComposingSpanController.kt         |  57 ++++++++---
+ .../aikeyboard/ime/voiceui/VoiceController.kt      |   8 +-
+ .../ime/voiceui/ComposingSpanControllerTest.kt     | 111 +++++++++++++++++++++
+ .../aikeyboard/ime/voiceui/VoiceControllerTest.kt  |  54 +++++++++-
+ 10 files changed, 324 insertions(+), 26 deletions(-)
+
+## Diff
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt
+index 2fe961b8..eeabdf96 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt
+@@ -6,21 +6,22 @@
+ package com.manjul.aikeyboard.fork.voice
+ 
+ import android.view.inputmethod.InputConnection
+ import com.manjul.aikeyboard.ime.voiceui.TextTarget
+ 
+ /**
+  * [TextTarget] over the IME's current [InputConnection]. Each edit is one batch edit, so the host reports one
+  * selection update for it. While a region is ours, [setOwnsComposing] tells the editor not to move the composing
+  * region on its own (it would otherwise re-derive one from the last word).
+  *
+- * Never deletes text other than the single space the caller asks to join punctuation with, and never logs text.
++ * Never deletes text other than the single space the caller asks to join punctuation with and our own verified region
++ * ([clearComposing]), and never logs text.
+  */
+ class ImeTextTarget(
+     private val connection: () -> InputConnection?,
+     private val isRawInputEditor: () -> Boolean,
+     private val setOwnsComposing: (Boolean) -> Unit,
+ ) : TextTarget {
+     private var owned = false
+ 
+     override fun setComposing(text: String): Boolean {
+         if (isRawInputEditor()) return false
+@@ -49,16 +50,35 @@ class ImeTextTarget(
+             ic.endBatchEdit()
+         }
+     }
+ 
+     override fun finishComposing(): Boolean {
+         if (!owned) return true
+         own(false)
+         return connection()?.finishComposingText() ?: false
+     }
+ 
++    override fun clearComposing(expected: String): Boolean {
++        if (!owned) return false
++        val ic = connection() ?: return false
++        own(false)
++        // In memory only: the field text is never logged.
++        if (ic.getTextBeforeCursor(expected.length, 0)?.toString() != expected) {
++            ic.finishComposingText()
++            return false
++        }
++        ic.beginBatchEdit()
++        try {
++            ic.setComposingText("", 1)
++            ic.finishComposingText()
++            return true
++        } finally {
++            ic.endBatchEdit()
++        }
++    }
++
+     private fun own(value: Boolean) {
+         if (owned == value) return
+         owned = value
+         setOwnsComposing(value)
+     }
+ }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt
+index 7752ccf3..8792f1b2 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivity.kt
+@@ -72,20 +72,23 @@ class MicPermissionActivity : ComponentActivity() {
+     }
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+             finish()
+             return
+         }
+         deps = depsOverride ?: defaultDeps(this)
+         requested = savedInstanceState?.getBoolean(KEY_REQUESTED) ?: false
++        // The rationale has no other way back after a configuration change (the result was already delivered).
++        // The notice is rebuilt by the flow below, with the engine it names.
++        if (savedInstanceState?.getBoolean(KEY_RATIONALE) == true) screen = Screen.RATIONALE
+         setContent {
+             ProvideLocalizedResources(this, appName = R.string.app_name) {
+                 FlorisAppTheme(AppTheme.AUTO) {
+                     when (screen) {
+                         Screen.NONE -> Unit
+                         Screen.DISCLOSURE -> VoiceDisclosureSheet(
+                             engineKind = { disclosureKind },
+                             store = deps.store,
+                             clock = deps.clock,
+                             onAgree = ::request,
+@@ -117,40 +120,42 @@ class MicPermissionActivity : ComponentActivity() {
+             } else {
+                 disclosureKind = deps.engineKind(lang)
+                 screen = Screen.DISCLOSURE
+             }
+         }
+     }
+ 
+     override fun onSaveInstanceState(outState: Bundle) {
+         super.onSaveInstanceState(outState)
+         outState.putBoolean(KEY_REQUESTED, requested)
++        outState.putBoolean(KEY_RATIONALE, screen == Screen.RATIONALE)
+     }
+ 
+     private fun request() {
+         screen = Screen.NONE
+         requested = true
+         launcher.launch(Manifest.permission.RECORD_AUDIO)
+     }
+ 
+     private fun openAppSettings() {
+         startActivity(
+             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+         )
+         finish()
+     }
+ 
+     companion object {
+         /** BCP-47 tag of the keyboard language, to name the recognizer that will be used in the notice. */
+         const val EXTRA_LANG = "com.manjul.aikeyboard.extra.VOICE_LANG"
+         private const val KEY_REQUESTED = "requested"
++        private const val KEY_RATIONALE = "rationale"
+         private const val DEFAULT_LANG = "en"
+ 
+         @VisibleForTesting
+         internal var depsOverride: Deps? = null
+ 
+         fun intent(context: Context, lang: String): Intent =
+             Intent(context, MicPermissionActivity::class.java)
+                 .putExtra(EXTRA_LANG, lang)
+                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+ 
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivityTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivityTest.kt
+index abb3d4b5..cf02c762 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivityTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/MicPermissionActivityTest.kt
+@@ -158,20 +158,34 @@ class MicPermissionActivityTest {
+ 
+         compose.onNodeWithText("Open app settings").performClick()
+         idle()
+ 
+         val started = otherStartedActivities().single()
+         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, started.action)
+         assertEquals("package:${app.packageName}", started.dataString)
+         assertTrue(scenario.isFinishing())
+     }
+ 
++    @Test
++    fun rationaleSurvivesRecreation() {
++        runBlocking { store.update { it.copy(consentVoiceNoticeAt = 5L) } }
++        val scenario = launch()
++        scenario.answer(granted = false)
++        compose.onNodeWithText("Microphone is off").assertExists()
++
++        scenario.recreate()
++        idle()
++
++        compose.onNodeWithText("Microphone is off").assertExists()
++        assertEquals(1, events.count { it.name == "voice_permission_result" })
++    }
++
+     @Test
+     fun alreadyGrantedFinishesAtOnce() {
+         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+         val scenario = launch()
+         assertTrue(scenario.isFinishing())
+         assertTrue(events.isEmpty())
+         // Not even the permission dialog.
+         assertTrue(generateSequence { shadowOf(app).nextStartedActivity }.none())
+     }
+ 
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt
+index dbcbd861..ab6bd273 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt
+@@ -17,20 +17,21 @@ import android.widget.EditText
+ import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
+ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+ import com.manjul.aikeyboard.core.voice.EngineKind
+ import com.manjul.aikeyboard.core.voice.SpeechEngine
+ import com.manjul.aikeyboard.core.voice.platform.RecognizerCapabilities
+ import com.manjul.aikeyboard.fork.policy.ImePolicyController
+ import com.manjul.aikeyboard.ime.voiceui.VoiceUiState
+ import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.test.StandardTestDispatcher
+ import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.advanceTimeBy
+ import kotlinx.coroutines.test.runCurrent
+ import kotlinx.coroutines.test.runTest
+ import org.junit.Test
+ import org.junit.runner.RunWith
+ import org.robolectric.RobolectricTestRunner
+ import org.robolectric.RuntimeEnvironment
+ import org.robolectric.Shadows.shadowOf
+ import org.robolectric.annotation.Config
+ import kotlin.test.assertEquals
+ import kotlin.test.assertFalse
+@@ -139,60 +140,105 @@ class VoiceImeSessionTest {
+     private fun TestScope.listen(r: Rig, partial: String) {
+         r.policy.onStartInput(textField(), false)
+         r.session.controller.toggle()
+         runCurrent()
+         r.engine.listener!!.onReady()
+         r.engine.listener!!.onPartial(partial)
+         runCurrent()
+         r.report()
+     }
+ 
+-    @Test fun passwordRestartFinishesThePartialWithoutCommittingIt() = run {
++    @Test fun passwordRestartRemovesOurPartialWithoutCommittingIt() = run {
+         val r = Rig(this)
+         listen(r, "hel")
+         assertEquals("hel", r.text)
+         assertEquals(0, BaseInputConnection.getComposingSpanStart(r.edit.text))
+         assertTrue(r.ownsComposing)
+ 
+         r.policy.onStartInput(passwordField(), true)
+         runCurrent()
+ 
++        // R24: our own verified composing region is removed; nothing is deleted outside it.
++        assertEquals("", r.text)
+         assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
+         assertTrue(r.commits.isEmpty())
+         assertEquals(0, r.deletes)
+         assertFalse(r.ownsComposing)
+         assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
+         assertTrue(r.engine.destroyed)
+         assertNotNull(shadowOf(r.audioManager).lastAbandonedAudioFocusRequest)
+         assertEquals("field_change", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
+ 
+         // A late result for the old field changes nothing.
+         r.engine.listener!!.onFinal("hello")
+         runCurrent()
+-        assertEquals("hel", r.text)
++        assertEquals("", r.text)
+         assertTrue(r.commits.isEmpty())
+     }
+ 
++    @Test fun cancelLeavesTheFieldAloneWhenTheTextBeforeTheCursorIsNoLongerOurs() = run {
++        val r = Rig(this, initial = "abc ")
++        listen(r, "hel")
++        assertEquals("abc hel", r.text)
++        // The host moved the cursor; its selection update has not arrived yet.
++        Selection.setSelection(r.edit.text, 2)
++
++        r.policy.onStartInput(passwordField(), true)
++        runCurrent()
++
++        assertEquals("abc hel", r.text)
++        assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
++        assertEquals(0, r.deletes)
++        assertTrue(r.commits.isEmpty())
++        assertFalse(r.ownsComposing)
++    }
++
++    @Test fun punctuationAfterTheHostMovedTheCursorDeletesNothing() = run {
++        val r = Rig(this, initial = "ab cd")
++        r.policy.onStartInput(textField(), false)
++        r.session.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.engine.listener!!.onFinal("hello")
++        runCurrent()
++        r.report()
++        assertEquals("ab cdhello ", r.text)
++
++        // The host moves the cursor to just after its own space; no composing region before or after.
++        Selection.setSelection(r.edit.text, 3)
++        r.report()
++
++        advanceTimeBy(RESTART_MS)
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.engine.listener!!.onFinal(", x")
++        runCurrent()
++
++        assertEquals(0, r.deletes)
++        assertTrue(r.text.startsWith("ab , x"), r.text)
++        assertTrue(r.text.endsWith("cdhello "), r.text)
++    }
++
+     @Test fun hostEditDuringAPartialDeletesNoHostText() = run {
+         val r = Rig(this, initial = "abc ")
+         listen(r, "hel")
+         assertEquals("abc hel", r.text)
+ 
+         // The app inserts text in front of our region; the region shifts away from where we put it.
+         r.edit.text.insert(0, "X")
+         r.report()
+         r.engine.listener!!.onPartial("hello")
+         runCurrent()
+         r.report()
+ 
+-        assertTrue(r.text.startsWith("Xabc hel"), "host text and the earlier partial stay")
+-        assertEquals("Xabc helhello", r.text)
++        // The region moved intact (same text, cursor at its end): it is still ours and is updated in place.
++        assertEquals("Xabc hello", r.text)
+         assertEquals(0, r.deletes)
+         assertTrue(r.commits.isEmpty())
+     }
+ 
+     @Test fun ownPartialUpdatesKeepReplacingTheRegion() = run {
+         val r = Rig(this, initial = "abc ")
+         listen(r, "hel")
+         r.engine.listener!!.onPartial("hello")
+         r.engine.listener!!.onPartial("hello wor")
+         runCurrent()
+@@ -212,28 +258,33 @@ class VoiceImeSessionTest {
+         listen(r, "hi")
+         assertTrue(r.session.controller.ui.value is VoiceUiState.Listening)
+ 
+         r.policy.onFinishInputView()
+         r.session.onFinishInputView()
+         runCurrent()
+ 
+         assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
+         assertTrue(r.engine.destroyed)
+         assertNotNull(shadowOf(r.audioManager).lastAbandonedAudioFocusRequest)
+-        assertEquals("hi", r.text)
++        // A cancel, like a field change: the unfinished partial is ours and is removed (R24).
++        assertEquals("", r.text)
+         assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
++        assertEquals(0, r.deletes)
+     }
+ 
+     @Test fun firstDictationIsPersisted() = run {
+         val r = Rig(this)
+         listen(r, "hi")
+         r.session.controller.toggle()
+         r.engine.listener!!.onFinal("hi")
+         runCurrent()
+         assertEquals(1, r.events.count { it.name == "first_dictation" })
+         assertEquals(NOW, r.store.flow.first().firstDictationAt)
+     }
+ 
+     private companion object {
+         const val NOW = 1_234L
++
++        /** Past VoiceTimings.restartDelayMs, short of the silence end. */
++        const val RESTART_MS = 300L
+     }
+ }
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
+index ffacd6f6..f910a1a1 100644
+--- a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
+@@ -43,20 +43,24 @@ class SpeechSession(
+     val output: Flow<VoiceOutput> = channel.receiveAsFlow()
+ 
+     private val _tapToResume = MutableStateFlow(false)
+ 
+     /** True after repeated no-speech restarts stopped the session; the UI offers "tap to resume". */
+     val tapToResume: StateFlow<Boolean> = _tapToResume.asStateFlow()
+ 
+     var endReason: String? = null
+         private set
+ 
++    /** Raw recognizer error code (android.speech.SpeechRecognizer.ERROR_*) last seen since [start]; never text. */
++    var lastErrorCode: Int? = null
++        private set
++
+     /** Clock reading when the current (or last) session started. */
+     var startedAtMs: Long = 0
+         private set
+ 
+     private var active = false
+     private var lang = ""
+     private var continuous = false
+     private var engine: SpeechEngine? = null
+     private var generation = 0
+     private var stopping = false
+@@ -76,20 +80,21 @@ class SpeechSession(
+     /** False once an engine of [kind] ended a session on onFinal without ever delivering onSegment. */
+     fun isSegmentedSupported(kind: EngineKind, lang: String): Boolean = segmentedSupported[segKey(kind, lang)] ?: true
+ 
+     fun start(lang: String, continuous: Boolean) {
+         if (active) return
+         this.lang = lang
+         this.continuous = continuous
+         active = true
+         stopping = false
+         endReason = null
++        lastErrorCode = null
+         startedAtMs = clock()
+         pendingPartial = null
+         restarts = 0
+         busyRetries = 0
+         _tapToResume.value = false
+         _state.value = VoiceState.Starting
+         capJob = scope.launch {
+             delay(timings.sessionCapMs)
+             val e = engine
+             // A recorder without partials holds the only copy of the audio: transcribe it instead of dropping it.
+@@ -261,20 +266,21 @@ class SpeechSession(
+ 
+     private fun armSilence() {
+         silenceJob?.cancel()
+         silenceJob = scope.launch {
+             delay(timings.silenceMs)
+             finish("silence", commitPending = true)
+         }
+     }
+ 
+     private fun handleError(code: Int) {
++        lastErrorCode = code
+         if (stopping && code != ERROR_SPEECH_TIMEOUT && code != ERROR_NO_MATCH) {
+             // Includes BUSY: restarting while stopping would leave the session stuck.
+             val e = engine
+             if (pendingPartial != null || e?.supportsPartials != false) {
+                 finish(stopReason, commitPending = true)
+             } else {
+                 fail(errorKind(code)) // Whisper: the recording is lost, tell the user.
+             }
+             return
+         }
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
+index b6121cdb..ff91523c 100644
+--- a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
+@@ -491,11 +491,23 @@ class SpeechSessionTest {
+             clock = { currentTime },
+             punctuationEnabled = false,
+         )
+         session.output.test {
+             session.start("en", false)
+             runCurrent()
+             engine.listener!!.onFinal("hello comma world")
+             assertEquals(VoiceOutput.Commit("hello comma world "), awaitItem())
+         }
+     }
++
++    @Test fun lastErrorCodeKeepsTheRawRecognizerCodeUntilTheNextStart() = runSession {
++        val r = rig()
++        assertNull(r.session.lastErrorCode)
++        r.session.start("en", true)
++        runCurrent()
++        r.l.onError(2)
++        assertEquals(2, r.session.lastErrorCode)
++        r.session.start("en", true)
++        runCurrent()
++        assertNull(r.session.lastErrorCode)
++    }
+ }
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanController.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanController.kt
+index c730fbe8..a7e7b377 100644
+--- a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanController.kt
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanController.kt
+@@ -14,104 +14,131 @@ interface TextTarget {
+     fun setComposing(text: String): Boolean
+ 
+     /**
+      * Replaces our composing region (if any) with [text] and finishes it. With [removeSpaceBefore], a single space
+      * directly before the insertion point is removed first (the trailing space of our previous commit).
+      */
+     fun commit(text: String, removeSpaceBefore: Boolean = false): Boolean
+ 
+     /** Finishes our composing region: the text stays as it is. Never deletes. */
+     fun finishComposing(): Boolean
++
++    /**
++     * Removes our composing region, but only while it is ours and the text right before the cursor is still
++     * [expected]; otherwise finishes it like [finishComposing]. Returns whether it removed anything.
++     */
++    fun clearComposing(expected: String): Boolean
+ }
+ 
+ /**
+  * Keeps the dictation partial in a composing region and lets it go as soon as the host field moves away from what
+  * we wrote. Main thread only.
+  *
+  * Selection updates arrive late: one for each of our edits, possibly after we already made the next one. Every edit
+  * queues the composing length it will report (-1 for none); an update matching a queued entry is ours. Anything
+  * else (cursor moved, host edited the text, region gone) drops the span, so the next partial starts a new one at the
+- * cursor instead of overwriting text that is not ours.
++ * cursor instead of overwriting text that is not ours. A region the host only shifted (same length, cursor still at its
++ * end, e.g. text inserted before it) is still ours and stays.
+  */
+ class ComposingSpanController(private val target: TextTarget) {
+-    private class Expect(val span: Int, val length: Int)
++    private class Expect(val span: Int, val length: Int, val commit: Int = 0)
+ 
+     private var span: String? = null
+     private var spanId = 0
+-    private var anchor = -1
++    private var commitId = 0
+     private val expected = ArrayDeque<Expect>()
+ 
+     /** The last commit ended with a space and the host has not changed the field since. */
+     private var trailingSpace = false
+ 
++    /** Cursor reported for the last commit (-1 until its update arrives); any other cursor means the host moved it. */
++    private var commitCursor = -1
++
+     val hasSpan: Boolean get() = span != null
+ 
+     fun update(text: String) {
+         if (span == text) return
+-        if (span == null) {
+-            spanId++
+-            anchor = -1
+-        }
++        if (span == null) spanId++
+         if (!target.setComposing(text)) {
+             span = null
+             return
+         }
+         span = text
+         expect(text.length)
+     }
+ 
+     fun commit(text: String) {
+         if (text.isEmpty()) {
+             drop()
+             return
+         }
+         val joinPunctuation = trailingSpace && text.first() in LEADING_PUNCTUATION
+         span = null
+         target.commit(text, removeSpaceBefore = joinPunctuation)
+-        expect(-1)
++        commitId++
++        commitCursor = -1
++        expect(-1, commit = commitId)
+         trailingSpace = text.endsWith(' ')
+     }
+ 
++    /** A new dictation: never join punctuation to the previous one's last word. */
++    fun startSession() {
++        trailingSpace = false
++    }
++
+     /** Finishes the composing region and forgets it. Never deletes. */
+     fun drop() {
+         trailingSpace = false
+         if (span == null) return
+         span = null
+         target.finishComposing()
+         expect(-1)
+     }
+ 
++    /**
++     * Removes our partial from the field (the session was cancelled, and the field may now be sensitive). Only our
++     * verified region is removed (see [TextTarget.clearComposing]); a span we already let go of stays as it is.
++     */
++    fun discard() {
++        trailingSpace = false
++        val text = span ?: return
++        span = null
++        target.clearComposing(text)
++        expect(-1)
++    }
++
+     fun onSelectionUpdate(newSelStart: Int, newSelEnd: Int, candStart: Int, candEnd: Int) {
+         val length = if (candStart < 0 || candEnd < candStart) -1 else candEnd - candStart
+         val index = expected.indexOfFirst { it.length == length }
+         if (index < 0) {
+             hostChanged()
+             return
+         }
+         repeat(index) { expected.removeFirst() }
+         // Keep the newest entry once matched (a host may report the same state twice), but not an older one:
+         // after a later edit that state cannot come back, so seeing it again means the host changed the field.
+         val match = if (expected.size > 1) expected.removeFirst() else expected.first()
+-        if (span == null || length < 0 || match.span != spanId) return
+-        if (newSelStart != candEnd || newSelEnd != candEnd || (anchor >= 0 && candStart != anchor)) {
+-            hostChanged()
+-            return
++        if (match.commit != 0 && match.commit == commitId) {
++            // No region either way, so the cursor is the only sign the host moved it.
++            if (commitCursor < 0) commitCursor = newSelStart else if (newSelStart != commitCursor) trailingSpace = false
+         }
+-        anchor = candStart
++        if (span == null || length < 0 || match.span != spanId) return
++        // Same length (matched above) and the cursor at its end: ours, even if the host shifted where it starts.
++        if (newSelStart != candEnd || newSelEnd != candEnd) hostChanged()
+     }
+ 
+     private fun hostChanged() {
+         expected.clear()
+         drop()
+     }
+ 
+-    private fun expect(length: Int) {
++    private fun expect(length: Int, commit: Int = 0) {
+         if (expected.size >= MAX_EXPECTED) expected.removeFirst()
+-        expected.addLast(Expect(if (length < 0) -1 else spanId, length))
++        expected.addLast(Expect(if (length < 0) -1 else spanId, length, commit))
+     }
+ 
+     private companion object {
+         /** A commit starting with one of these joins the previous word: "hello " + ", " gives "hello, ". */
+         const val LEADING_PUNCTUATION = ",.?!،؟।"
+         const val MAX_EXPECTED = 32
+     }
+ }
+diff --git a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt
+index 6bc559ba..569aa4d6 100644
+--- a/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt
++++ b/ime/voice-ui/src/main/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceController.kt
+@@ -145,51 +145,52 @@ class VoiceController(
+     }
+ 
+     fun downloadSystemModel() {
+         val lang = lastLang ?: return
+         downloadSystemModel?.invoke(lang)
+         _ui.value = VoiceUiState.Hidden
+     }
+ 
+     val canDownloadSystemModel: Boolean get() = downloadSystemModel != null
+ 
+-    /** Field change, keyboard hidden or a more restrictive field: drop everything, commit nothing more. */
++    /** Field change, keyboard hidden or a more restrictive field: remove our partial, commit nothing more. */
+     fun cancel(reason: String) {
+         startJob?.cancel()
+         startJob = null
+         stopDraining()
+         val a = active
+         if (a != null) {
+             a.outputJob?.cancel()
+             a.stateJob?.cancel()
+             a.session.cancel()
+             end(a, error = null, reason = EndReason.entries.firstOrNull { it.value == reason } ?: EndReason.FIELD_CHANGE)
+         }
+-        span.drop()
++        span.discard()
+         focus.release()
+         _ui.value = VoiceUiState.Hidden
+     }
+ 
+     fun destroy() {
+         cancel(EndReason.FIELD_CHANGE.value)
+     }
+ 
+     private fun stopDraining() {
+         draining?.let {
+             it.outputJob?.cancel()
+             it.stateJob?.cancel()
+         }
+         draining = null
+     }
+ 
+     private fun begin(kind: EngineKind, lang: String, token: Int) {
+         stopDraining()
++        span.startSession()
+         val segmented = segKey(kind, lang) !in segmentedOff
+         val session = sessionFactory { engines.create(kind, segmented) }
+         val a = Active(session, token, kind, lang)
+         active = a
+         a.outputJob = scope.launch { session.output.collect { onOutput(a, it) } }
+         a.stateJob = scope.launch { session.state.collect { onState(a, it) } }
+         analytics(EventCatalog.voiceSessionStart(lang, kind.toAnalytics()))
+         session.start(lang, continuous = true)
+     }
+ 
+@@ -227,21 +228,22 @@ class VoiceController(
+         if (a.cancelled) return
+         if (reason != null) a.cancelled = true
+         if (!a.ended) {
+             a.ended = true
+             if (active === a) active = null
+             // An error state can still follow the idle state, and the last commit can still be queued.
+             if (reason == null) draining = a
+             focus.release()
+             if (!a.session.isSegmentedSupported(a.kind, a.lang)) segmentedOff += segKey(a.kind, a.lang)
+             val endReason = reason ?: EndReason.entries.firstOrNull { it.value == a.session.endReason } ?: EndReason.ERROR
+-            analytics(EventCatalog.voiceSessionEnd(clock() - a.session.startedAtMs, a.words, endReason, errorCode = null))
++            val errorCode = if (endReason == EndReason.ERROR) a.session.lastErrorCode else null
++            analytics(EventCatalog.voiceSessionEnd(clock() - a.session.startedAtMs, a.words, endReason, errorCode))
+             if (a.words > 0) logFirstDictation(a.lang)
+             _ui.value = if (a.session.tapToResume.value) VoiceUiState.TapToResume else VoiceUiState.Hidden
+         }
+         if (error != null && reason == null) _ui.value = VoiceUiState.Message(error.toMessageKind())
+     }
+ 
+     private fun logFirstDictation(lang: String) {
+         if (firstDictationLogged || firstDictation.logged) return
+         firstDictationLogged = true
+         firstDictation.markLogged()
+diff --git a/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanControllerTest.kt b/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanControllerTest.kt
+index 793ee0f4..db662185 100644
+--- a/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanControllerTest.kt
++++ b/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/ComposingSpanControllerTest.kt
+@@ -57,20 +57,44 @@ class ComposingSpanControllerTest {
+         }
+ 
+         override fun finishComposing(): Boolean {
+             calls += "finish"
+             compStart = -1
+             compEnd = -1
+             report()
+             return true
+         }
+ 
++        override fun clearComposing(expected: String): Boolean {
++            calls += "clear:$expected"
++            if (compStart < 0 || cursor < expected.length || text.substring(cursor - expected.length, cursor) != expected) {
++                return false
++            }
++            text.delete(compStart, compEnd)
++            cursor = compStart
++            compStart = -1
++            compEnd = -1
++            report()
++            return true
++        }
++
++        /** The host inserts [s] at [at] on its own; a region after [at] shifts with the text, as in an EditText. */
++        fun hostInsert(at: Int, s: String) {
++            text.insert(at, s)
++            if (cursor >= at) cursor += s.length
++            if (compStart >= at) {
++                compStart += s.length
++                compEnd += s.length
++            }
++            report()
++        }
++
+         /** The host edits the field on its own (types, moves the cursor, drops the region). */
+         fun hostEdit(newCursor: Int, keepRegion: Boolean) {
+             cursor = newCursor
+             if (!keepRegion) {
+                 compStart = -1
+                 compEnd = -1
+             }
+             report()
+         }
+ 
+@@ -182,11 +206,98 @@ class ComposingSpanControllerTest {
+         assertEquals("commit:, :false", field.calls.last())
+     }
+ 
+     @Test fun emptyCommitDropsTheSpan() {
+         val field = FakeField()
+         val span = ComposingSpanController(field)
+         span.update("um")
+         span.commit("")
+         assertEquals(listOf("set:um", "finish"), field.calls)
+     }
++
++    @Test fun discardRemovesOurOwnPartial() {
++        val field = FakeField("keep ")
++        val span = ComposingSpanController(field)
++        span.update("hel")
++        field.deliver(span)
++        span.discard()
++        assertEquals(listOf("set:hel", "clear:hel"), field.calls)
++        assertEquals("keep ", field.text.toString())
++        assertFalse(span.hasSpan)
++        span.discard()
++        assertEquals(2, field.calls.size)
++    }
++
++    @Test fun discardAfterTheHostTookTheRegionClearsNothing() {
++        val field = FakeField("keep ")
++        val span = ComposingSpanController(field)
++        span.update("hel")
++        field.deliver(span)
++        field.hostEdit(newCursor = 0, keepRegion = false)
++        field.deliver(span)
++        span.discard()
++        assertTrue(field.calls.none { it.startsWith("clear:") })
++        assertEquals("keep hel", field.text.toString())
++    }
++
++    @Test fun hostMovingTheCursorAfterACommitBlocksThePunctuationJoin() {
++        val field = FakeField("ab")
++        val span = ComposingSpanController(field)
++        span.commit("hello ")
++        field.deliver(span)
++        // No composing region either way: only the cursor position tells the host moved it.
++        field.hostEdit(newCursor = 1, keepRegion = false)
++        field.deliver(span)
++        span.commit(", x")
++        assertEquals("commit:, x:false", field.calls.last())
++        assertEquals("a, xbhello ", field.text.toString())
++    }
++
++    @Test fun repeatedReportsOfOurCommitKeepThePunctuationJoin() {
++        val field = FakeField()
++        val span = ComposingSpanController(field)
++        span.commit("hello ")
++        field.deliver(span)
++        field.hostEdit(newCursor = 6, keepRegion = false)
++        field.deliver(span)
++        span.commit(", ")
++        assertEquals("hello, ", field.text.toString())
++    }
++
++    @Test fun twoCommitsReportedLateStillJoin() {
++        val field = FakeField()
++        val span = ComposingSpanController(field)
++        span.commit("hello ")
++        span.commit("world ")
++        field.deliver(span)
++        span.commit(". ")
++        assertEquals("hello world. ", field.text.toString())
++    }
++
++    @Test fun newSessionNeverJoinsTheLastCommitOfTheOldOne() {
++        val field = FakeField()
++        val span = ComposingSpanController(field)
++        span.commit("hello ")
++        field.deliver(span)
++        span.startSession()
++        span.commit(", x")
++        assertEquals("commit:, x:false", field.calls.last())
++    }
++
++    @Test fun regionShiftedIntactByTheHostIsReanchored() {
++        val field = FakeField("abc ")
++        val span = ComposingSpanController(field)
++        span.update("hel")
++        field.deliver(span)
++        field.hostInsert(0, "X")
++        field.deliver(span)
++        assertTrue(span.hasSpan)
++        span.update("hello")
++        field.deliver(span)
++        assertEquals("Xabc hello", field.text.toString())
++        assertTrue(field.calls.none { it == "finish" })
++        // Still ours after the move: a cursor move away from it drops it.
++        field.hostEdit(newCursor = 1, keepRegion = true)
++        field.deliver(span)
++        assertEquals("finish", field.calls.last())
++    }
+ }
+diff --git a/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceControllerTest.kt b/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceControllerTest.kt
+index 59e79e0f..ffca40a5 100644
+--- a/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceControllerTest.kt
++++ b/ime/voice-ui/src/test/kotlin/com/manjul/aikeyboard/ime/voiceui/VoiceControllerTest.kt
+@@ -48,22 +48,26 @@ class VoiceControllerTest {
+         override fun isRecognitionAvailable() = service
+         override fun isOnDeviceAvailable() = onDevice
+         override suspend fun onDeviceSupports(lang: String): Boolean? = true
+         override fun whisperModelReady(lang: String) = false
+         override fun whisperLangEnabled(lang: String) = false
+     }
+ 
+     private class Field : TextTarget {
+         val calls = mutableListOf<String>()
+         override fun setComposing(text: String): Boolean { calls += "set:$text"; return true }
+-        override fun commit(text: String, removeSpaceBefore: Boolean): Boolean { calls += "commit:$text"; return true }
++        override fun commit(text: String, removeSpaceBefore: Boolean): Boolean {
++            calls += if (removeSpaceBefore) "commit+join:$text" else "commit:$text"
++            return true
++        }
+         override fun finishComposing(): Boolean { calls += "finish"; return true }
++        override fun clearComposing(expected: String): Boolean { calls += "clear:$expected"; return true }
+     }
+ 
+     private class Flag : FirstDictationFlag {
+         override var logged = false
+         override fun markLogged() { logged = true }
+     }
+ 
+     private class Rig(val scope: TestScope, caps: Caps = Caps()) {
+         var permission = true
+         var permissionChecks = 0
+@@ -166,21 +170,22 @@ class VoiceControllerTest {
+         r.engine.listener!!.onReady()
+         r.engine.listener!!.onPartial("hel")
+         runCurrent()
+         r.controller.cancel("field_change")
+         runCurrent()
+         assertFalse(r.focus.isHeld)
+         assertTrue(r.engine.destroyed)
+         val end = r.events.single { it.name == "voice_session_end" }
+         assertEquals("field_change", end.params["end_reason"])
+         assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
+-        assertEquals(listOf("set:hel", "finish"), r.field.calls)
++        // Our own partial is removed (R24): the field may have become sensitive.
++        assertEquals(listOf("set:hel", "clear:hel"), r.field.calls)
+     }
+ 
+     @Test fun lateCommitFromAnOldGenerationIsDiscarded() = run {
+         val r = Rig(this)
+         r.controller.toggle()
+         runCurrent()
+         r.engine.listener!!.onReady()
+         // The field changes, then the engine delivers a final result for the old one.
+         r.generation = 2
+         r.engine.listener!!.onFinal("secret words")
+@@ -277,11 +282,56 @@ class VoiceControllerTest {
+         runCurrent()
+         r.controller.toggle()
+         runCurrent()
+         assertEquals(VoiceUiState.Transcribing, r.controller.ui.value)
+         r.engine.listener!!.onFinal("hi there")
+         runCurrent()
+         assertEquals(VoiceUiState.Hidden, r.controller.ui.value)
+         assertEquals("commit:hi there ", r.field.calls.last())
+         assertEquals("user", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
+     }
++
++    @Test fun aNewSessionNeverJoinsPunctuationToTheLastSessionsCommit() = run {
++        val r = Rig(this)
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.controller.toggle()
++        r.engine.listener!!.onFinal("hello")
++        runCurrent()
++        assertEquals("commit:hello ", r.field.calls.last())
++
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.controller.toggle()
++        r.engine.listener!!.onFinal(", x")
++        runCurrent()
++        assertTrue(r.field.calls.last(), r.field.calls.last().startsWith("commit:,"))
++        assertTrue(r.field.calls.none { it.startsWith("commit+join:") })
++    }
++
++    @Test fun errorEndCarriesTheRecognizerErrorCode() = run {
++        val r = Rig(this)
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.engine.listener!!.onError(2)
++        runCurrent()
++        val end = r.events.single { it.name == "voice_session_end" }
++        assertEquals("error", end.params["end_reason"])
++        assertEquals(2, end.params["error_code"])
++    }
++
++    @Test fun userEndCarriesNoErrorCode() = run {
++        val r = Rig(this)
++        r.controller.toggle()
++        runCurrent()
++        r.engine.listener!!.onReady()
++        r.controller.toggle()
++        r.engine.listener!!.onFinal("hi")
++        runCurrent()
++        val end = r.events.single { it.name == "voice_session_end" }
++        assertEquals("user", end.params["end_reason"])
++        assertFalse("error_code" in end.params)
++    }
+ }

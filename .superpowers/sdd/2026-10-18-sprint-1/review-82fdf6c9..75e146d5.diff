@@ -1,0 +1,801 @@
+# Review package: 82fdf6c9..75e146d5
+
+## Commits
+75e146d5 fix(onboarding): address review for task 8
+
+## Files changed
+ app/build.gradle.kts                               |  6 +-
+ .../com/manjul/aikeyboard/app/FlorisAppActivity.kt | 16 +++--
+ .../kotlin/com/manjul/aikeyboard/app/Routes.kt     |  3 +-
+ .../aikeyboard/fork/onboarding/ImeStatusSource.kt  | 23 ++++---
+ .../aikeyboard/fork/onboarding/OnboardingScreen.kt | 57 +++++++++-------
+ .../fork/onboarding/OnboardingViewModel.kt         | 10 +--
+ .../fork/onboarding/VoiceDisclosureSheet.kt        | 13 +++-
+ .../fork/onboarding/OnboardingScreenTest.kt        | 75 ++++++++++++++++++++++
+ .../fork/onboarding/OnboardingViewModelTest.kt     | 25 +++++++-
+ docs/FORK_PATCHES.md                               |  2 +-
+ gradle/libs.versions.toml                          |  2 +-
+ 11 files changed, 183 insertions(+), 49 deletions(-)
+
+## Diff
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 9656b07f..a1cf7469 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -217,20 +217,21 @@ androidComponents {
+ tasks.withType<Test> {
+     useJUnitPlatform()
+ }
+ 
+ // FORK(S1-policy): offline android-all jar for Robolectric (see the script header)
+ apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
+ 
+ dependencies {
+     val composeBom = platform(libs.androidx.compose.bom)
+     implementation(composeBom)
++    // testImplementation(composeBom)
+     // androidTestImplementation(composeBom)
+ 
+     implementation(libs.androidx.activity.compose)
+     implementation(libs.androidx.activity.ktx)
+     implementation(libs.androidx.autofill)
+     implementation(libs.androidx.collection.ktx)
+     implementation(libs.androidx.compose.material.icons)
+     implementation(libs.androidx.compose.material3)
+     implementation(libs.androidx.compose.runtime.livedata)
+     implementation(libs.androidx.compose.ui)
+@@ -277,22 +278,25 @@ dependencies {
+     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
+     lintChecks(projects.lintRules)
+ 
+     testImplementation(libs.kotlin.test.junit5)
+     // FORK(S1-policy): Robolectric (JUnit 4) tests run on the JUnit 5 platform through the vintage engine
+     testImplementation(platform(libs.junit.bom))
+     testImplementation(libs.junit4)
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
+     testRuntimeOnly(libs.junit.vintage.engine)
+-    // FORK(S1-onboarding): onboarding view model tests
++    // FORK(S1-onboarding): onboarding view model and screen tests
+     testImplementation(libs.turbine)
++    testImplementation(platform(composeBom))
++    testImplementation(libs.androidx.compose.ui.test.junit4)
++    debugImplementation(libs.androidx.compose.ui.test.manifest)
+     androidTestImplementation(libs.androidx.test.ext)
+     androidTestImplementation(libs.androidx.test.espresso.core)
+ }
+ 
+ fun getGitCommitHash(short: Boolean = false): Provider<String> {
+     if (!File(".git").exists()) {
+         return providers.provider { "null" }
+     }
+ 
+     val execProvider = providers.exec {
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt b/app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt
+index d97fd45e..c168b16f 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt
+@@ -43,37 +43,36 @@ import androidx.core.view.WindowCompat
+ import androidx.lifecycle.lifecycleScope
+ import androidx.navigation.NavController
+ import androidx.navigation.compose.rememberNavController
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.app.apptheme.FlorisAppTheme
+ import com.manjul.aikeyboard.app.ext.ExtensionImportScreenType
+ import com.manjul.aikeyboard.app.setup.NotificationPermissionState
+ import com.manjul.aikeyboard.appContext
+ import com.manjul.aikeyboard.cacheManager
+ import com.manjul.aikeyboard.featureSettingsStore // FORK(S1-onboarding)
+-import com.manjul.aikeyboard.lib.util.InputMethodUtils // FORK(S1-onboarding)
+-import kotlinx.coroutines.flow.first // FORK(S1-onboarding)
+-import kotlinx.coroutines.withTimeoutOrNull // FORK(S1-onboarding)
+ import com.manjul.aikeyboard.lib.FlorisLocale
+ import com.manjul.aikeyboard.lib.compose.LocalPreviewFieldController
+ import com.manjul.aikeyboard.lib.compose.PreviewKeyboardField
+ import com.manjul.aikeyboard.lib.compose.rememberPreviewFieldController
+ import com.manjul.aikeyboard.lib.util.AppVersionUtils
+-import dev.patrickgold.jetpref.datastore.model.observeAsState
++import com.manjul.aikeyboard.lib.util.InputMethodUtils // FORK(S1-onboarding)
+ import dev.patrickgold.jetpref.datastore.ui.ProvideDefaultDialogPrefStrings
+ import org.florisboard.lib.android.AndroidVersion
+ import org.florisboard.lib.android.hideAppIcon
+ import org.florisboard.lib.android.showAppIcon
+ import org.florisboard.lib.compose.ProvideLocalizedResources
+ import org.florisboard.lib.compose.conditional
+ import org.florisboard.lib.compose.stringRes
+ import org.florisboard.lib.kotlin.collectIn
++import kotlinx.coroutines.flow.first // FORK(S1-onboarding)
++import kotlinx.coroutines.withTimeoutOrNull // FORK(S1-onboarding)
+ import java.util.concurrent.atomic.AtomicBoolean
+ 
+ // FORK(S1-onboarding)
+ private const val SPLASH_MAX_MS = 1000L
+ 
+ enum class AppTheme(val id: String) {
+     AUTO("auto"),
+     AUTO_AMOLED("auto_amoled"),
+     LIGHT("light"),
+     DARK("dark"),
+@@ -88,25 +87,26 @@ class FlorisAppActivity : ComponentActivity() {
+     private val prefs by FlorisPreferenceStore
+     private val appContext by appContext()
+     private val cacheManager by cacheManager()
+     private var appTheme by mutableStateOf(AppTheme.AUTO)
+     private var showAppIcon = true
+     private var resourcesContext by mutableStateOf(this as Context)
+     private var intentToBeHandled by mutableStateOf<Intent?>(null)
+     // FORK(S1-onboarding)
+     private val featureSettingsStore by featureSettingsStore()
+     private var startAtHome = false
++    private var splashStart = 0L
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         // Splash screen should be installed before calling super.onCreate()
+         // FORK(S1-onboarding): splash is held at most 1 s, even if the stores are slow to load
+-        val splashStart = SystemClock.uptimeMillis()
++        splashStart = SystemClock.uptimeMillis()
+         installSplashScreen().apply {
+             setKeepOnScreenCondition {
+                 !appContext.preferenceStoreLoaded.value && SystemClock.uptimeMillis() - splashStart < SPLASH_MAX_MS
+             }
+         }
+         super.onCreate(savedInstanceState)
+         WindowCompat.setDecorFitsSystemWindows(window, false)
+ 
+         prefs.other.settingsTheme.asFlow().collectIn(lifecycleScope) {
+             appTheme = it
+@@ -129,21 +129,23 @@ class FlorisAppActivity : ComponentActivity() {
+             if (!loaded || isModelLoaded.getAndSet(true)) return@collectIn
+             // Check if android 13+ is running and the NotificationPermission is not set
+             if (AndroidVersion.ATLEAST_API33_T &&
+                 prefs.internal.notificationPermissionState.get() == NotificationPermissionState.NOT_SET
+             ) {
+                 // update pref value to show the setup screen again
+                 prefs.internal.isImeSetUp.set(false)
+             }
+             AppVersionUtils.updateVersionOnInstallAndLastUse(this, prefs)
+             // FORK(S1-onboarding): Home only for a finished onboarding with the keyboard enabled and selected
+-            val settings = withTimeoutOrNull(SPLASH_MAX_MS) { featureSettingsStore.flow.first() }
++            // On timeout we fall back to onboarding (it sends a finished user on to Home), never a blank window.
++            val remainingMs = (SPLASH_MAX_MS - (SystemClock.uptimeMillis() - splashStart)).coerceAtLeast(0)
++            val settings = withTimeoutOrNull(remainingMs) { featureSettingsStore.flow.first() }
+             startAtHome = settings?.onboardingDone == true &&
+                 InputMethodUtils.isFlorisboardEnabled(this) && InputMethodUtils.isFlorisboardSelected(this)
+             setContent {
+                 ProvideLocalizedResources(
+                     resourcesContext,
+                     appName = R.string.app_name,
+                 ) {
+                     FlorisAppTheme(theme = appTheme) {
+                         Surface(color = MaterialTheme.colorScheme.background) {
+                             AppContent()
+@@ -186,21 +188,21 @@ class FlorisAppActivity : ComponentActivity() {
+             return
+         }
+         intentToBeHandled = null
+     }
+ 
+     @Composable
+     private fun AppContent() {
+         val navController = rememberNavController()
+         val previewFieldController = rememberPreviewFieldController()
+ 
+-
++        // FORK(S1-onboarding): isImeSetUp no longer decides the start destination (see startAtHome)
+         CompositionLocalProvider(
+             LocalNavController provides navController,
+             LocalPreviewFieldController provides previewFieldController,
+         ) {
+             ProvideDefaultDialogPrefStrings(
+                 confirmLabel = stringRes(R.string.action__ok),
+                 dismissLabel = stringRes(R.string.action__cancel),
+                 neutralLabel = stringRes(R.string.action__default),
+             ) {
+                 Column(
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt b/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
+index c80b401b..904ac142 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt
+@@ -272,21 +272,22 @@ object Routes {
+                 slideOut { IntOffset(-it.width, 0) } + fadeOut()
+             },
+             popEnterTransition = { EnterTransition.None },
+             popExitTransition = {
+                 scaleOut(
+                     targetScale = 0.85F,
+                     transformOrigin = TransformOrigin(pivotFractionX = 0.8f, pivotFractionY = 0.5f)
+                 ) + fadeOut(spring(stiffness = Spring.StiffnessMedium))
+             },
+         ) {
+-            // FORK(S1-onboarding): the setup route shows the new onboarding flow; upstream SetupScreen stays, unused
++            // FORK(S1-onboarding): the setup route shows the new onboarding flow; upstream SetupScreen stays, unused;
++            // its notification-permission step is deferred (ruling R17)
+             composable<Setup.Screen> { OnboardingScreen() }
+ 
+             composableWithDeepLink(Settings.Home::class) { HomeScreen() }
+ 
+             composableWithDeepLink(Settings.Localization::class) { LocalizationScreen() }
+             composableWithDeepLink(Settings.SelectLocale::class) { SelectLocaleScreen() }
+             composableWithDeepLink(Settings.LanguagePackManager::class) { navBackStack ->
+                 val payload = navBackStack.toRoute<Settings.LanguagePackManager>()
+                 LanguagePackManagerScreen(payload.action)
+             }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/ImeStatusSource.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/ImeStatusSource.kt
+index 322f96b4..c202f69f 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/ImeStatusSource.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/ImeStatusSource.kt
+@@ -1,46 +1,51 @@
+ /*
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.fork.onboarding
+ 
+ import android.content.Context
+ import com.manjul.aikeyboard.lib.util.InputMethodUtils
++import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.SharingStarted
+ import kotlinx.coroutines.flow.MutableSharedFlow
+ import kotlinx.coroutines.flow.distinctUntilChanged
+ import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.flow.flow
++import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.shareIn
+ import kotlinx.coroutines.withTimeoutOrNull
+ 
+ /** Whether our IME is enabled in system settings and whether it is the selected one. */
+ interface ImeStatusSource {
+     val enabled: Flow<Boolean>
+     val selected: Flow<Boolean>
+ }
+ 
+ private const val POLL_MS = 500L
+ 
+ /**
+- * Production [ImeStatusSource] over [InputMethodUtils]. Polls every [POLL_MS] while collected and re-checks
+- * at once on [recheck] (called from the activity's onResume, when the user returns from system settings).
++ * Production [ImeStatusSource] over [InputMethodUtils]. One poll every [POLL_MS] feeds both flows (shared in
++ * [scope] while collected); [recheck] re-reads at once (called from onResume, when the user returns from
++ * system settings).
+  */
+-class InputMethodImeStatus(context: Context) : ImeStatusSource {
++class InputMethodImeStatus(context: Context, scope: CoroutineScope) : ImeStatusSource {
+     private val appContext = context.applicationContext
+     private val trigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+ 
+     fun recheck() {
+         trigger.tryEmit(Unit)
+     }
+ 
+-    override val enabled: Flow<Boolean> = polled { InputMethodUtils.isFlorisboardEnabled(appContext) }
+-    override val selected: Flow<Boolean> = polled { InputMethodUtils.isFlorisboardSelected(appContext) }
+-
+-    private fun polled(read: () -> Boolean): Flow<Boolean> = flow {
++    private val status: Flow<Pair<Boolean, Boolean>> = flow {
+         while (true) {
+-            emit(read())
++            emit(InputMethodUtils.isFlorisboardEnabled(appContext) to InputMethodUtils.isFlorisboardSelected(appContext))
+             withTimeoutOrNull(POLL_MS) { trigger.first() }
+         }
+-    }.distinctUntilChanged()
++    }.distinctUntilChanged().shareIn(scope, SharingStarted.WhileSubscribed(), replay = 1)
++
++    override val enabled: Flow<Boolean> = status.map { it.first }.distinctUntilChanged()
++    override val selected: Flow<Boolean> = status.map { it.second }.distinctUntilChanged()
+ }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreen.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreen.kt
+index dd1217f2..75d2291e 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreen.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreen.kt
+@@ -26,69 +26,82 @@ import androidx.compose.material3.Button
+ import androidx.compose.material3.Checkbox
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+ import androidx.compose.material3.TextButton
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.collectAsState
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.mutableStateListOf
+-import androidx.compose.runtime.rememberCoroutineScope
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+-import androidx.compose.ui.platform.LocalConfiguration
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.ViewModel
+ import androidx.lifecycle.compose.LifecycleEventEffect
++import androidx.lifecycle.viewmodel.compose.viewModel
++import androidx.lifecycle.viewmodel.initializer
++import androidx.lifecycle.viewmodel.viewModelFactory
+ import androidx.navigation.NavController
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.app.LocalNavController
+ import com.manjul.aikeyboard.app.Routes
+ import com.manjul.aikeyboard.appContext
+ import com.manjul.aikeyboard.featureSettingsStore
+ import com.manjul.aikeyboard.fork.subtypes.MVP_LANGUAGE_TAGS
+ import com.manjul.aikeyboard.lib.util.InputMethodUtils
+ import com.manjul.aikeyboard.subtypeManager
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
+ import org.florisboard.lib.compose.stringRes
+ import java.util.Locale
+ 
+ /** ON_DEVICE when the platform reports an on-device recognizer (API 31+), otherwise the system speech service. */
+ fun systemDisclosureEngineKind(context: Context): DisclosureEngineKind =
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+         DisclosureEngineKind.ON_DEVICE
+     } else {
+         DisclosureEngineKind.SYSTEM_SERVICE
+     }
+ 
++/** Keeps the view model across rotation, so a configuration change does not log the step view again. */
++internal class OnboardingHolder(context: Context) : ViewModel() {
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
++    val imeStatus = InputMethodImeStatus(context, scope)
++    val vm = OnboardingViewModel(
++        store = context.featureSettingsStore().value,
++        imeStatus = imeStatus,
++        analytics = context.appContext().value.analytics.value::log,
++        ensureSubtypes = context.subtypeManager().value::ensureDefaultSubtypes,
++        clock = System::currentTimeMillis,
++        scope = scope,
++        systemLocaleTags = context.resources.configuration.locales.let { l -> List(l.size()) { l[it].toLanguageTag() } },
++    )
++
++    override fun onCleared() {
++        scope.cancel()
++    }
++}
++
+ /** O1-O5 route content: builds the view model on the app singletons and leaves for Home when it reaches DONE. */
+ @Composable
+ fun OnboardingScreen(navController: NavController = LocalNavController.current) {
+-    val context = LocalContext.current
+-    val scope = rememberCoroutineScope()
++    val context = LocalContext.current.applicationContext
++    val activityContext = LocalContext.current
+     val store = context.featureSettingsStore().value
+-    val analytics = context.appContext().value.analytics.value
+-    val subtypeManager = context.subtypeManager().value
+-    val localeList = LocalConfiguration.current.locales
+-    val imeStatus = remember { InputMethodImeStatus(context) }
+-    val vm = remember {
+-        OnboardingViewModel(
+-            store = store,
+-            imeStatus = imeStatus,
+-            analytics = analytics::log,
+-            ensureSubtypes = subtypeManager::ensureDefaultSubtypes,
+-            clock = System::currentTimeMillis,
+-            scope = scope,
+-            systemLocaleTags = localeList.let { l -> List(l.size()) { l[it].toLanguageTag() } },
+-        )
+-    }
++    val holder = viewModel<OnboardingHolder>(factory = viewModelFactory { initializer { OnboardingHolder(context) } })
++    val vm = holder.vm
++    val imeStatus = holder.imeStatus
+     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { imeStatus.recheck() }
+ 
+     val state by vm.state.collectAsState()
+     LaunchedEffect(state.step) {
+         if (state.step == OnboardingStep.DONE) {
+             navController.navigate(Routes.Settings.Home) { popUpTo(Routes.Setup.Screen) { inclusive = true } }
+         }
+     }
+     val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission(), vm::onMicPermissionResult)
+ 
+@@ -99,35 +112,35 @@ fun OnboardingScreen(navController: NavController = LocalNavController.current)
+                 title = R.string.onboarding__welcome_title,
+                 body = R.string.onboarding__welcome_tagline,
+                 note = R.string.onboarding__welcome_privacy,
+                 button = R.string.onboarding__get_started,
+                 onButton = vm::next,
+             )
+             OnboardingStep.ENABLE -> InfoStep(
+                 title = R.string.onboarding__enable_title,
+                 body = R.string.onboarding__enable_body,
+                 button = R.string.onboarding__enable_button,
+-                onButton = { InputMethodUtils.showImeEnablerActivity(context) },
++                onButton = { InputMethodUtils.showImeEnablerActivity(activityContext) },
+             )
+             OnboardingStep.SELECT -> InfoStep(
+                 title = R.string.onboarding__select_title,
+                 body = R.string.onboarding__select_body,
+                 button = R.string.onboarding__select_button,
+-                onButton = { InputMethodUtils.showImePicker(context) },
++                onButton = { InputMethodUtils.showImePicker(activityContext) },
+             )
+             OnboardingStep.LANGUAGES -> LanguagesStep(
+                 preselected = state.defaultLanguageTags,
+                 onContinue = { tags -> vm.onLanguagesChosen(tags, defaultTranslatePair(tags)) },
+                 onSkip = vm::skip,
+             )
+             OnboardingStep.TRY_IT -> TryItStep(
+-                engineKind = { systemDisclosureEngineKind(context) },
++                engineKind = { systemDisclosureEngineKind(activityContext) },
+                 store = store,
+                 clock = System::currentTimeMillis,
+                 micGranted = state.micGranted,
+                 requestMicPermission = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                 onSkip = vm::skip,
+                 onDone = vm::next,
+             )
+             OnboardingStep.DONE -> Unit
+         }
+     }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingViewModel.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingViewModel.kt
+index b99778fd..b5a80385 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingViewModel.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingViewModel.kt
+@@ -62,21 +62,21 @@ class OnboardingViewModel(
+     private val ensureSubtypes: (List<String>) -> Unit,
+     private val clock: () -> Long,
+     private val scope: CoroutineScope,
+     systemLocaleTags: List<String> = emptyList(),
+     private val source: OnboardingSource = OnboardingSource.LAUNCHER,
+ ) {
+     private val _state = MutableStateFlow(OnboardingUiState(defaultLanguageTags = defaultLanguageSelection(systemLocaleTags)))
+     val state: StateFlow<OnboardingUiState> = _state.asStateFlow()
+ 
+     private var startedAt = 0L
+-    /** Already onboarded once, but the IME got disabled or deselected: set up again, skipping the language step. */
++    /** Already onboarded once, but the IME got disabled or deselected: set up again, skipping the language step; no funnel events. */
+     private var reentry = false
+     private var lastEnabled = false
+     private var lastSelected = false
+ 
+     init {
+         scope.launch {
+             load()
+             if (_state.value.step != OnboardingStep.DONE) {
+                 combine(imeStatus.enabled, imeStatus.selected) { enabled, selected -> enabled to selected }
+                     .collect { (enabled, selected) -> onImeStatus(enabled, selected) }
+@@ -105,25 +105,25 @@ class OnboardingViewModel(
+             OnboardingStep.entries[settings.onboardingStep.coerceIn(0, OnboardingStep.DONE.ordinal)]
+         }
+         _state.update { it.copy(loaded = true, step = step) }
+         logStepView(step)
+     }
+ 
+     private fun onImeStatus(enabled: Boolean, selected: Boolean) {
+         lastEnabled = enabled
+         lastSelected = selected
+         if (_state.value.step == OnboardingStep.ENABLE && enabled) {
+-            analytics(EventCatalog.imeEnabled(secondsSinceStart()))
++            if (!reentry) analytics(EventCatalog.imeEnabled(secondsSinceStart()))
+             goTo(OnboardingStep.SELECT)
+         }
+         if (_state.value.step == OnboardingStep.SELECT && selected) {
+-            analytics(EventCatalog.imeSelected(secondsSinceStart()))
++            if (!reentry) analytics(EventCatalog.imeSelected(secondsSinceStart()))
+             if (reentry) finish(skipped = false) else goTo(OnboardingStep.LANGUAGES)
+         }
+     }
+ 
+     /** Advances O1 to O2 and finishes O5; ENABLE, SELECT and LANGUAGES move on by their own triggers. */
+     fun next() {
+         when (_state.value.step) {
+             OnboardingStep.WELCOME -> {
+                 goTo(OnboardingStep.ENABLE)
+                 // The keyboard may already be enabled or selected: no new status emission will tell us.
+@@ -157,26 +157,28 @@ class OnboardingViewModel(
+ 
+     private fun goTo(step: OnboardingStep) {
+         _state.update { it.copy(step = step) }
+         scope.launch { store.update { it.copy(onboardingStep = step.ordinal) } }
+         logStepView(step)
+     }
+ 
+     private fun finish(skipped: Boolean) {
+         _state.update { it.copy(step = OnboardingStep.DONE) }
+         scope.launch { store.update { it.copy(onboardingDone = true, onboardingStep = OnboardingStep.DONE.ordinal) } }
+-        analytics(EventCatalog.onboardingComplete(skipped))
++        if (!reentry) analytics(EventCatalog.onboardingComplete(skipped))
+     }
+ 
++    /** Funnel timing is measured from `firstOpenAt` (ruling R16), not from the current session. */
+     private fun secondsSinceStart() = ((clock() - startedAt) / 1000).coerceAtLeast(0)
+ 
+     private fun logStepView(step: OnboardingStep) {
++        if (reentry) return // a user who finished onboarding once must not re-enter the funnel
+         val event = when (step) {
+             OnboardingStep.WELCOME -> StepEvent.ONE
+             OnboardingStep.ENABLE -> StepEvent.TWO
+             OnboardingStep.SELECT -> StepEvent.THREE
+             OnboardingStep.TRY_IT -> StepEvent.TRY
+             // LANGUAGES is reported through languages_set; the closed step set has no value for it.
+             OnboardingStep.LANGUAGES, OnboardingStep.DONE -> return
+         }
+         analytics(EventCatalog.onboardingStepView(event))
+     }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/VoiceDisclosureSheet.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/VoiceDisclosureSheet.kt
+index ef310a60..901b6626 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/VoiceDisclosureSheet.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/onboarding/VoiceDisclosureSheet.kt
+@@ -16,23 +16,30 @@ import androidx.compose.material3.ExperimentalMaterial3Api
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.ModalBottomSheet
+ import androidx.compose.material3.Text
+ import androidx.compose.material3.TextButton
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.rememberCoroutineScope
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.unit.dp
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import kotlinx.coroutines.NonCancellable
+ import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
+ import org.florisboard.lib.compose.stringRes
+ 
++/** Records that the voice notice was agreed to; not cancellable, so dismissing the sheet cannot lose it. */
++suspend fun recordVoiceConsent(store: FeatureSettingsStore, now: Long) {
++    withContext(NonCancellable) { store.update { it.copy(consentVoiceNoticeAt = now) } }
++}
++
+ /**
+  * Voice notice shown before the first microphone request. It names the recognizer that will be used
+  * ([engineKind] is read when the sheet is shown) and records `consentVoiceNoticeAt` on "Agree".
+  */
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun VoiceDisclosureSheet(
+     engineKind: () -> DisclosureEngineKind,
+     store: FeatureSettingsStore,
+     clock: () -> Long,
+@@ -48,17 +55,19 @@ fun VoiceDisclosureSheet(
+     ModalBottomSheet(onDismissRequest = onDismiss) {
+         Column(modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+             Text(stringRes(R.string.onboarding__voice_notice_title), style = MaterialTheme.typography.titleLarge)
+             Spacer(Modifier.height(12.dp))
+             Text(stringRes(body), style = MaterialTheme.typography.bodyMedium)
+             Spacer(Modifier.height(16.dp))
+             Row(modifier = Modifier.fillMaxWidth()) {
+                 TextButton(onClick = onDismiss) { Text(stringRes(R.string.onboarding__voice_notice_not_now)) }
+                 Spacer(Modifier.weight(1f))
+                 Button(onClick = {
+-                    scope.launch { store.update { it.copy(consentVoiceNoticeAt = clock()) } }
+-                    onAgree()
++                    scope.launch {
++                        recordVoiceConsent(store, clock())
++                        onAgree()
++                    }
+                 }) { Text(stringRes(R.string.onboarding__voice_notice_agree)) }
+             }
+         }
+     }
+ }
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreenTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreenTest.kt
+new file mode 100644
+index 00000000..b33f9aeb
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingScreenTest.kt
+@@ -0,0 +1,75 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.onboarding
++
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.test.assertIsDisplayed
++import androidx.compose.ui.test.hasSetTextAction
++import androidx.compose.ui.test.junit4.createComposeRule
++import androidx.compose.ui.test.onAllNodesWithText
++import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performClick
++import com.manjul.aikeyboard.R
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.runBlocking
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.florisboard.lib.compose.ProvideLocalizedResources
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class OnboardingScreenTest {
++    @get:Rule
++    val compose = createComposeRule()
++
++    private val store = FeatureSettingsStore(RuntimeEnvironment.getApplication())
++    private var micRequests = 0
++
++    private fun show(micGranted: Boolean? = null) = compose.setContent {
++        ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
++        TryItStep(
++            engineKind = { DisclosureEngineKind.ON_DEVICE },
++            store = store,
++            clock = { 777L },
++            micGranted = micGranted,
++            requestMicPermission = { micRequests++ },
++            onSkip = {},
++            onDone = {},
++        )
++        }
++    }
++
++    @Test
++    fun tryItShowsTextFieldAndSkip() {
++        show()
++        compose.onNode(hasSetTextAction()).assertIsDisplayed()
++        compose.onNodeWithText("Skip").assertIsDisplayed()
++    }
++
++    @Test
++    fun micPermissionIsRequestedOnlyAfterAgree() {
++        show()
++        compose.onNodeWithText("Speak instead").performClick()
++        compose.onNodeWithText("Agree").assertIsDisplayed()
++        assertEquals(0, micRequests)
++        compose.onNodeWithText("Agree").performClick()
++        compose.waitUntil(5_000) { micRequests == 1 }
++        assertEquals(1, micRequests)
++        val consent = runBlocking { store.flow.first { it.consentVoiceNoticeAt != 0L }.consentVoiceNoticeAt }
++        assertEquals(777L, consent)
++        assertTrue(compose.onAllNodesWithTextCount("Agree") == 0)
++    }
++
++    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextCount(t: String) =
++        onAllNodesWithText(t).fetchSemanticsNodes().size
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingViewModelTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingViewModelTest.kt
+index 7a4162d2..5abc30f6 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingViewModelTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/onboarding/OnboardingViewModelTest.kt
+@@ -8,20 +8,21 @@ package com.manjul.aikeyboard.fork.onboarding
+ import app.cash.turbine.test
+ import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
+ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+ import com.manjul.aikeyboard.core.datastore.LanguagePair
+ import java.io.File
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.cancel
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.launch
+ import kotlinx.coroutines.test.UnconfinedTestDispatcher
+ import kotlinx.coroutines.test.runTest
+ import org.junit.After
+ import org.junit.Test
+ import org.junit.runner.RunWith
+ import org.robolectric.RobolectricTestRunner
+ import org.robolectric.RuntimeEnvironment
+ import org.robolectric.annotation.Config
+ import kotlin.test.assertEquals
+ import kotlin.test.assertFalse
+@@ -77,21 +78,21 @@ class OnboardingViewModelTest {
+         vm.state.test {
+             assertEquals(OnboardingStep.ENABLE, awaitItem().step)
+             now += 12_000
+             ime.enabled.value = true
+             assertEquals(OnboardingStep.SELECT, awaitItem().step)
+             now += 3_000
+             ime.selected.value = true
+             assertEquals(OnboardingStep.LANGUAGES, awaitItem().step)
+         }
+         assertEquals("5-15", named("ime_enabled").single().params["seconds_since_start_bucket"])
+-        assertEquals(1, named("ime_selected").size)
++        assertEquals("15-30", named("ime_selected").single().params["seconds_since_start_bucket"])
+     }
+ 
+     @Test
+     fun resumesAtSelectAfterProcessDeath() = runTest {
+         val ime = FakeIme()
+         val first = vm(ime)
+         first.next()
+         ime.enabled.value = true
+         assertEquals(OnboardingStep.SELECT, first.state.value.step)
+         store.flow.first { it.onboardingStep == OnboardingStep.SELECT.ordinal }
+@@ -161,20 +162,42 @@ class OnboardingViewModelTest {
+     @Test
+     fun returningUserWhoDeselectedGoesBackToSelectThenDone() = runTest {
+         store.update { it.copy(onboardingDone = true, firstOpenAt = 5L) }
+         val ime = FakeIme(enabled = true, selected = false)
+         val vm = vm(ime)
+         assertEquals(OnboardingStep.SELECT, vm.state.value.step)
+         ime.selected.value = true
+         assertEquals(OnboardingStep.DONE, vm.state.value.step)
+     }
+ 
++    @Test
++    fun reentryLogsNoFunnelEvents() = runTest {
++        store.update { it.copy(onboardingDone = true, firstOpenAt = 5L) }
++        val ime = FakeIme(enabled = false, selected = false)
++        val vm = vm(ime)
++        assertEquals(OnboardingStep.ENABLE, vm.state.value.step)
++        ime.enabled.value = true
++        assertEquals(OnboardingStep.SELECT, vm.state.value.step)
++        ime.selected.value = true
++        assertEquals(OnboardingStep.DONE, vm.state.value.step)
++        assertEquals(emptyList(), events.filter {
++            it.name in setOf("onboarding_step_view", "ime_enabled", "ime_selected", "onboarding_complete", "onboarding_start")
++        })
++    }
++
++    @Test
++    fun recordVoiceConsentPersistsEvenWhenCallerIsCancelled() = runTest {
++        val job = scope.launch { recordVoiceConsent(store, 4242L) }
++        job.cancel()
++        assertEquals(4242L, store.flow.first { it.consentVoiceNoticeAt != 0L }.consentVoiceNoticeAt)
++    }
++
+     @Test
+     fun micDenialLogsAndStaysOnTryIt() = runTest {
+         val vm = vm(FakeIme(enabled = true, selected = true))
+         vm.next()
+         vm.onLanguagesChosen(listOf("en-US"), "en" to "es")
+         vm.onMicPermissionResult(false)
+         assertEquals(mapOf<String, Any>("granted" to false), named("voice_permission_result").single().params)
+         assertEquals(OnboardingStep.TRY_IT, vm.state.value.step)
+         assertEquals(false, vm.state.value.micGranted)
+         vm.next()
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index b081020a..b6ac4862 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -68,21 +68,21 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/text/key/KeyCode.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/text/keyboard/TextKeyData.kt` | S1-smartbar | `TOGGLE_PRIVATE_APP` (-246) key code and predefined key data (also in the internal key list) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-smartbar | Handles `TOGGLE_PRIVATE_APP` (adds the focused editor's package to the private apps; package read on the main thread, never logged); `VOICE_INPUT` is dispatched and enabled only when the policy decision allows voice, `IME_UI_MODE_CLIPBOARD` is enabled only when it allows clipboard history; fail closed (`PolicyDecision.Locked`) without a service |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/ComputingEvaluator.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickAction.kt` | S1-smartbar | Lock icon, name and tooltip for `TOGGLE_PRIVATE_APP` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-smartbar | Renders `PrivateLockIndicator` first in the main row (nothing unless the field is sensitive); the sticky action is removed when the policy disallows it |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/{QuickActionsRow,QuickActionsOverflowPanel}.kt` | S1-smartbar | Dynamic actions pass through `policyFiltered()` (disallowed chips are removed, not greyed out); the overflow panel uses the same filtered list so the visible-count arithmetic stays consistent |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/quickaction/QuickActionArrangement.kt` | S1-smartbar | `Default`: Mic sticky; Emoji, Clipboard, Settings and the private-app action dynamic; upstream's other actions moved to `hiddenActions` (still available in the actions editor). Translate and AI are not present. Users still on the default pref get the new default; only explicitly saved arrangements are unaffected |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-smartbar | `Settings.PrivateApps` route (`settings/privacy/private-apps`) and a home entry for it |
+ | `app/src/main/AndroidManifest.xml` | S1-smartbar | `<queries>` entry for MAIN/LAUNCHER intents so the Private apps screen can list launchable apps on API 30+ |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-onboarding | Start destination is onboarding unless `onboardingDone` and the keyboard is enabled and selected (read once before `setContent`, 1 s cap); splash held at most 1 s; `Setup.Screen` route renders `fork/onboarding/OnboardingScreen` (upstream `SetupScreen.kt` is kept, unused, untouched); Home card text "Select AI Keyboard as your keyboard" |
+ | `app/src/main/AndroidManifest.xml` | S1-onboarding | `RECORD_AUDIO` permission (requested only after the voice notice) |
+-| `app/build.gradle.kts`, `gradle/libs.versions.toml` | S1-onboarding | Turbine (`testImplementation`) for the onboarding view model test |
++| `app/build.gradle.kts`, `gradle/libs.versions.toml` | S1-onboarding | Turbine and Compose UI test (`ui-test-junit4`, `ui-test-manifest` as `debugImplementation`, versions from the BOM) for the onboarding tests; the commented `testImplementation(composeBom)` line is kept |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index ae165a87..1b058b13 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -108,21 +108,21 @@ kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", v
+ android-lint-api = { module = "com.android.tools.lint:lint-api", version.ref = "android-lint" }
+ android-lint-checks = { module = "com.android.tools.lint:lint-checks", version.ref = "android-lint" }
+ android-lint-tests = { module = "com.android.tools.lint:lint-tests", version.ref = "android-lint" }
+ junit4 = { module = "junit:junit", version.ref = "junit4" }
+ # :core:ads
+ google-ump = { module = "com.google.android.ump:user-messaging-platform", version.ref = "google-ump" }
+ # FORK(S1-policy): :core:datastore and Robolectric tests (junit-vintage runs JUnit4 tests on the JUnit 5 platform; version from the junit-bom)
+ androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "androidx-datastore" }
+ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+ junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine" }
+-# FORK(S1-onboarding): onboarding view model tests (Turbine)
++# FORK(S1-onboarding): onboarding tests (Turbine, Compose UI test; versions from the Compose BOM)
+ turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+ androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+ androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+ 
+ 
+ 
+ [plugins]
+ # Main
+ agp-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
+ agp-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }

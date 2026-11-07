@@ -1,0 +1,383 @@
+# Review package: 8e5d4638..HEAD
+
+## Commits
+4849c315 fix(ime): address review for task 2
+
+## Files changed
+ .../com/manjul/aikeyboard/FlorisApplication.kt     |  1 +
+ .../com/manjul/aikeyboard/FlorisImeService.kt      | 32 +++++----
+ .../fork/policy/PolicyStateDerivation.kt           | 17 +++++
+ .../manjul/aikeyboard/ime/editor/EditorInstance.kt | 26 +++++--
+ .../fork/policy/PolicyStateDerivationTest.kt       | 84 ++++++++++++++++++++++
+ docs/FORK_PATCHES.md                               |  4 +-
+ gradle/libs.versions.toml                          |  1 +
+ 7 files changed, 146 insertions(+), 19 deletions(-)
+
+## Diff
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+index d444c5d2..43d5e8dc 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+@@ -110,20 +110,21 @@ class FlorisApplication : Application() {
+             }
+ 
+             init()
+         } catch (e: Exception) {
+             CrashUtility.stageException(e)
+             return
+         }
+     }
+ 
+     fun init() {
++        featureSettingsStore.value // FORK(S1-policy): start loading the fork settings at process start
+         cacheDir?.deleteContentsRecursively()
+         scope.launch {
+             val result = FlorisPreferenceStore.initAndroid(
+                 context = this@FlorisApplication,
+                 datastoreName = FlorisPreferenceModel.NAME,
+             )
+             Log.i("PREFS", result.toString())
+             preferenceStoreLoaded.value = true
+         }
+         extensionManager.value.init()
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
+index f01dad67..00628a24 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
+@@ -145,21 +145,26 @@ private var FlorisImeServiceReference = WeakReference<FlorisImeService?>(null)
+  * Core class responsible for linking together all managers and UI compose-ables to provide an IME service. Sets
+  * up the window and context to be lifecycle-aware, so LiveData and Jetpack Compose can be used without issues.
+  */
+ class FlorisImeService : LifecycleInputMethodService() {
+     companion object {
+         private val InlineSuggestionUiSmallestSize = Size(0, 0)
+         private val InlineSuggestionUiBiggestSize = Size(Int.MAX_VALUE, Int.MAX_VALUE)
+ 
+         // FORK(S1-policy): policy controller accessor for features (voice, smartbar, ...)
+         fun policyController(): ImePolicyController {
+-            return checkNotNull(FlorisImeServiceReference.get()) { "IME service is not running" }.policyController
++            return checkNotNull(policyControllerOrNull()) { "IME service is not running" }
++        }
++
++        fun policyControllerOrNull(): ImePolicyController? {
++            val service = FlorisImeServiceReference.get() ?: return null
++            return if (service::policyController.isInitialized) service.policyController else null
+         }
+ 
+         fun currentInputConnection(): InputConnection? {
+             return FlorisImeServiceReference.get()?.currentInputConnection
+         }
+ 
+         fun inputFeedbackController(): InputFeedbackController? {
+             return FlorisImeServiceReference.get()?.inputFeedbackController
+         }
+ 
+@@ -272,39 +277,42 @@ class FlorisImeService : LifecycleInputMethodService() {
+     private var inputWindowView by mutableStateOf<View?>(null)
+     private var inputViewSize by mutableStateOf(IntSize.Zero)
+     private val inputFeedbackController by lazy { InputFeedbackController.new(this) }
+     private var isWindowShown: Boolean = false
+     private var isFullscreenUiMode by mutableStateOf(false)
+     private var isExtractUiShown by mutableStateOf(false)
+     private var resourcesContext by mutableStateOf(this as Context)
+ 
+     private val wallpaperChangeReceiver = WallpaperChangeReceiver()
+ 
+-    // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. The keyguard state is read
+-    // on each evaluation, never cached. Remote-config forced packages arrive in S3.
+-    private val policyController by lazy {
+-        val keyguardManager = getSystemService(KeyguardManager::class.java)
+-        ImePolicyController(
+-            store = featureSettingsStore().value,
+-            keyguard = { keyguardManager?.isDeviceLocked ?: true },
+-            forcedPackages = { emptySet() },
+-            scope = lifecycleScope,
+-        )
+-    }
++    // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. Created in onCreate so the store
++    // load and the settings collector start with the service. Keyguard state is read on each evaluation, never
++    // cached. Remote-config forced packages arrive in S3.
++    private lateinit var policyController: ImePolicyController
+ 
+     init {
+         setTheme(R.style.FlorisImeTheme)
+     }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         FlorisImeServiceReference = WeakReference(this)
++        // FORK(S1-policy): see the policyController declaration
++        val keyguardManager = getSystemService(KeyguardManager::class.java)
++        policyController = ImePolicyController(
++            store = featureSettingsStore().value,
++            keyguard = { keyguardManager?.isDeviceLocked ?: true },
++            forcedPackages = { emptySet() },
++            scope = lifecycleScope,
++        )
++        // Settings can arrive after the field started: recompute the editor state from the new decision.
++        policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
+         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
+         subtypeManager.activeSubtypeFlow.collectIn(lifecycleScope) { subtype ->
+             val config = Configuration(resources.configuration)
+             if (prefs.localization.displayKeyboardLabelsInSubtypeLanguage.get()) {
+                 config.setLocale(subtype.primaryLocale.base)
+             }
+             resourcesContext = createConfigurationContext(config)
+         }
+         prefs.localization.displayKeyboardLabelsInSubtypeLanguage.asFlow().collectIn(lifecycleScope) { shouldSync ->
+             val config = Configuration(resources.configuration)
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/PolicyStateDerivation.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/PolicyStateDerivation.kt
+new file mode 100644
+index 00000000..76009af5
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/PolicyStateDerivation.kt
+@@ -0,0 +1,17 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.policy
++
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++
++/** How a [PolicyDecision] narrows the editor state that upstream derives from preferences and the field. */
++object PolicyStateDerivation {
++    fun composingEnabled(upstream: Boolean, decision: PolicyDecision): Boolean =
++        upstream && decision.allowSuggestionStrip
++
++    fun incognito(upstream: Boolean, decision: PolicyDecision): Boolean =
++        upstream || !decision.allowLearning
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt
+index 42a34c5b..908308e2 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt
+@@ -16,20 +16,23 @@
+ 
+ package com.manjul.aikeyboard.ime.editor
+ 
+ import android.content.ClipDescription
+ import android.content.ContentUris
+ import android.content.Context
+ import android.view.KeyEvent
+ import androidx.core.view.inputmethod.InputConnectionCompat
+ import androidx.core.view.inputmethod.InputContentInfoCompat
+ import com.manjul.aikeyboard.FlorisImeService
++// FORK(S1-policy): imports for the policy decision
++import com.manjul.aikeyboard.fork.policy.PolicyStateDerivation
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
+ import com.manjul.aikeyboard.appContext
+ import com.manjul.aikeyboard.clipboardManager
+ import com.manjul.aikeyboard.ime.ImeUiMode
+ import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFileStorage
+ import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
+ import com.manjul.aikeyboard.ime.clipboard.provider.ItemType
+ import com.manjul.aikeyboard.ime.input.InputShiftState
+ import com.manjul.aikeyboard.ime.keyboard.IncognitoMode
+ import com.manjul.aikeyboard.ime.keyboard.KeyboardMode
+@@ -101,40 +104,53 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
+                     }
+                 }
+                 KeyboardMode.CHARACTERS
+             }
+             else -> {
+                 activeState.keyVariation = KeyVariation.NORMAL
+                 KeyboardMode.CHARACTERS
+             }
+         }
+         activeState.keyboardMode = keyboardMode
+-        activeState.isComposingEnabled = when (keyboardMode) {
++        // FORK(S1-policy): upstream value is kept so a later policy decision can be re-applied to it
++        upstreamComposingEnabled = when (keyboardMode) {
+             KeyboardMode.NUMERIC,
+             KeyboardMode.PHONE,
+             KeyboardMode.PHONE2,
+             -> false
+             else -> activeState.keyVariation != KeyVariation.PASSWORD &&
+-                // FORK(S1-policy): no suggestions in sensitive fields
+-                FlorisImeService.policyController().decision.value.allowSuggestionStrip &&
+                 prefs.suggestion.enabled.get()// &&
+             //!instance.inputAttributes.flagTextAutoComplete &&
+             //!instance.inputAttributes.flagTextNoSuggestions
+         }
+-        val policyIncognito = !FlorisImeService.policyController().decision.value.allowLearning // FORK(S1-policy): sensitive fields never learn
+-        activeState.isIncognitoMode = policyIncognito || when (prefs.suggestion.incognitoMode.get()) {
++        // FORK(S1-policy): upstream value is kept so a later policy decision can be re-applied to it
++        upstreamIncognitoMode = when (prefs.suggestion.incognitoMode.get()) {
+             IncognitoMode.FORCE_OFF -> false
+             IncognitoMode.FORCE_ON -> true
+             IncognitoMode.DYNAMIC_ON_OFF -> {
+                 editorInfo.imeOptions.flagNoPersonalizedLearning || prefs.suggestion.forceIncognitoModeFromDynamic.get()
+             }
+         }
++        applyPolicyDecision(currentPolicyDecision()) // FORK(S1-policy)
++    }
++
++    // FORK(S1-policy): sensitive fields never learn and show no suggestions. Re-applied by the service when a
++    // restriction listener fires (settings can arrive after the field started). Fails closed without a service.
++    private var upstreamComposingEnabled = false
++    private var upstreamIncognitoMode = false
++
++    private fun currentPolicyDecision(): PolicyDecision =
++        FlorisImeService.policyControllerOrNull()?.decision?.value ?: PolicyDecision.Locked
++
++    fun applyPolicyDecision(decision: PolicyDecision) {
++        activeState.isComposingEnabled = PolicyStateDerivation.composingEnabled(upstreamComposingEnabled, decision)
++        activeState.isIncognitoMode = PolicyStateDerivation.incognito(upstreamIncognitoMode, decision)
+     }
+ 
+     override fun handleSelectionUpdate(oldSelection: EditorRange, newSelection: EditorRange, composing: EditorRange) {
+         autoSpace.setInactiveFromUpdate()
+         phantomSpace.setInactiveFromUpdate()
+         if (massSelection.isActive) {
+             super.handleMassSelectionUpdate(newSelection, composing)
+         } else {
+             super.handleSelectionUpdate(oldSelection, newSelection, composing)
+         }
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PolicyStateDerivationTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PolicyStateDerivationTest.kt
+new file mode 100644
+index 00000000..e43dd1fc
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PolicyStateDerivationTest.kt
+@@ -0,0 +1,84 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.policy
++
++import android.text.InputType
++import android.view.inputmethod.EditorInfo
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.runTest
++import org.junit.After
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++/**
++ * `EditorInstance` is not instantiated here: it needs `FlorisApplication` (native library, managers). Its two
++ * derivations and the service's restriction listener are one-line calls into [PolicyStateDerivation], so the
++ * wiring is tested with the same calls on a real controller.
++ */
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class PolicyStateDerivationTest {
++    @Test
++    fun `unrestricted decision keeps the upstream values`() {
++        assertTrue(PolicyStateDerivation.composingEnabled(true, PolicyDecision.Unrestricted))
++        assertFalse(PolicyStateDerivation.composingEnabled(false, PolicyDecision.Unrestricted))
++        assertFalse(PolicyStateDerivation.incognito(false, PolicyDecision.Unrestricted))
++        assertTrue(PolicyStateDerivation.incognito(true, PolicyDecision.Unrestricted))
++    }
++
++    @Test
++    fun `restricted decision turns composing off and incognito on`() {
++        assertFalse(PolicyStateDerivation.composingEnabled(true, PolicyDecision.Locked))
++        assertTrue(PolicyStateDerivation.incognito(false, PolicyDecision.Locked))
++    }
++
++    private val dispatcher = UnconfinedTestDispatcher()
++    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
++
++    @After
++    fun tearDown() {
++        scope.cancel()
++    }
++
++    @Test
++    fun `private package that loads after the field ends up incognito`() = runTest {
++        val store = FeatureSettingsStore(RuntimeEnvironment.getApplication(), dispatcher)
++        val controller = ImePolicyController(store, keyguard = { false }, forcedPackages = { emptySet() }, scope = scope)
++        var incognito = false
++        var composing = true
++        // What FlorisImeService registers: re-apply the decision to the upstream values (false / true).
++        controller.addRestrictionListener {
++            incognito = PolicyStateDerivation.incognito(false, it)
++            composing = PolicyStateDerivation.composingEnabled(true, it)
++        }
++        val info = EditorInfo().apply {
++            packageName = "com.bank"
++            inputType = InputType.TYPE_CLASS_TEXT
++        }
++        controller.onStartInput(info, false) // default settings
++        incognito = PolicyStateDerivation.incognito(false, controller.decision.value)
++        composing = PolicyStateDerivation.composingEnabled(true, controller.decision.value)
++        assertFalse(incognito)
++        assertTrue(composing)
++
++        store.update { it.copy(privatePackages = setOf("com.bank")) }
++
++        assertTrue(incognito)
++        assertFalse(composing)
++        assertEquals(false, controller.decision.value.allowLearning)
++    }
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index 1fb7e277..258bcbc2 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -41,22 +41,22 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/ext/AddonBox.kt` | S0-branding | No links to upstream's Addons Store (`BuildConfig.FLADDONS_STORE_URL`, `beta.addons.florisboard.org`): the "Visit Addons Store" button is removed, the info text is our `ext__home__info_import_only`, and `UpdateBox` ("Search for updates", which opens the store's check-updates page) renders nothing (`ADDONS_STORE_ENABLED = false`). Local extension import is unchanged. The `FLADDONS_*` build config fields in `app/build.gradle.kts` are kept (no remaining UI call site) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/typing/TypingScreen.kt` | S0-branding | Auto-space-punctuation card: feedback request and link to upstream's GitHub discussion removed; the experimental-feature warning stays |
+ | Deleted: `app/src/main/res/drawable/ic_app_icon_{stable,beta,debug}_{foreground,monochrome}.xml`, `app/src/main/res/mipmap-*dpi/ic_app_icon_{stable,beta,debug}{,_round}.png`, `app/src/main/ic_app_icon_{stable,preview,debug}-playstore.png` | S0-branding | FlorisBoard launcher foreground/monochrome vectors, legacy PNG mipmaps and Play Store icons (see the `mipmap-anydpi-v26` row) |
+ | Deleted: `app/src/main/assets/license/project_license.txt` | S0-licences | Copy of LICENSE replaced by the build-generated `assets/licenses/` (see the `ProjectLicenseScreen.kt` row) |
+ | `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-ci | Upstream v0.5.2 imports `org.florisboard.lib.color.schemes.yellow{Light,Dark}Scheme`, which does not exist in `:lib:color` at that tag, so the `:lib:snygg` unit tests did not compile. The two fixed schemes are now built with `:lib:color`'s `neutralDynamicColorScheme` (yellow 500 seed); all assertions are unchanged |
+ | Deleted: `fastlane/`, `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `crowdin.yml`, `ROADMAP.md`, `AI_POLICY.md`, `LANGUAGEPACKS*.md`, `.idea/icon.svg` | S0-branding | Upstream store listings, project-process docs, CI that uses FlorisBoard secrets, and the FlorisBoard logo. `README.md` was rewritten for the fork |
+ | `build.gradle.kts`, `settings.gradle.kts`, `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/res/xml/backup_rules.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/{app/ext/AddonBox,app/settings/about/AboutScreen,app/settings/about/ProjectLicenseScreen,app/settings/typing/TypingScreen,app/setup/SetupScreen,lib/crashutility/CrashDialogActivity,lib/crashutility/CrashUtility}.kt`, `lib/compose/src/main/kotlin/org/florisboard/lib/compose/Resources.kt`, `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-licences, S0-ci | Markers only, for the per-hunk marker check: the "Modified by AI Keyboard contributors, 2026" header line carries `FORK(S0-licences)`; removed imports and removed lines get a one-line `FORK(<ticket>)` comment at the deletion point; `AndroidManifest.xml` moves `android:name` onto the `<application` line and `networkSecurityConfig` next to `dataExtractionRules` so the marker sits within 3 lines of both edits. No behaviour change |
+ | `settings.gradle.kts` | S1-policy | `include(":core:datastore")` |
+ | `gradle/libs.versions.toml` | S1-policy | `androidx-datastore` 1.2.1 (latest stable on Google Maven, 2026-10-18), `robolectric` 4.17 (latest on Maven Central), `junit-vintage-engine` (version from the junit-bom), inside the `# --- AI Keyboard ---` blocks |
+ | `app/build.gradle.kts` | S1-policy | `implementation(projects.core.datastore)`, `implementation(projects.ime.policy)`; Robolectric, JUnit 4, junit-vintage and coroutines-test as test dependencies; applies `gradle/robolectric-offline.gradle.kts` (new file: resolves Robolectric's android-all jar through Gradle so tests need no download into the home directory) |
+-| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-policy | Lazy `featureSettingsStore` and `Context.featureSettingsStore()` accessor |
+-| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy | Owns an `ImePolicyController` (keyguard read on every evaluation, no forced packages until S3); calls it from `onStartInput`, `onFinishInputView`, `onFinishInput`, `onDestroy`; companion `policyController()` accessor. `onStartInputView` needs no call: the decision is made in `onStartInput`, which always precedes it |
++| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-policy | Lazy `featureSettingsStore`, `Context.featureSettingsStore()` accessor; loading starts in `init()` |
++| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy | Creates an `ImePolicyController` in `onCreate` (restriction listener re-applies the decision to `EditorInstance`; keyguard read on every evaluation, no forced packages until S3); calls it from `onStartInput`, `onFinishInputView`, `onFinishInput`, `onDestroy`; companion `policyController()` accessor. `onStartInputView` needs no call: the decision is made in `onStartInput`, which always precedes it |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt` | S1-policy | `isIncognitoMode` is also true when the policy decision does not allow learning; composing is off when it does not allow the suggestion strip |
+ | `app/src/main/AndroidManifest.xml` | S1-policy | `android:directBootAware="false"` on the IME and spell-checker services (was `true` / absent): the policy and settings store live in credential-encrypted storage. Guarded by `ManifestHardeningTest`. The attributes share the `<service` line so the marker sits within 3 lines of each edit (per-hunk marker check); no behaviour change from that |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 5d2022d4..021b8f61 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -35,20 +35,21 @@ kotlinx-kover = "0.9.1"
+ # --- AI Keyboard ---
+ # FORK(S0-modules): entries below were added by the fork (see docs/FORK_PATCHES.md). Keep them in this block.
+ javax-inject = "1"
+ # Lint API for :lint-rules. Must stay at AGP version + 23 (AGP 8.12.0 -> lint 31.12.0).
+ android-lint = "31.12.0"
+ junit4 = "4.13.2"
+ # :core:ads consent (Google UMP). 4.0.0 is the latest release on Google Maven (checked 2026-10-18)
+ google-ump = "4.0.0"
+ # FORK(S1-policy): :core:datastore (latest stable on Google Maven / Maven Central, checked 2026-10-18)
+ androidx-datastore = "1.2.1"
++# Moving this version means re-checking the android-all pin (14-robolectric-...) in gradle/robolectric-offline.gradle.kts
+ robolectric = "4.17"
+ 
+ 
+ 
+ [libraries]
+ # Main
+ androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+ androidx-activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "androidx-activity" }
+ androidx-autofill = { module = "androidx.autofill:autofill", version.ref = "androidx-autofill" }
+ androidx-collection-ktx = { module = "androidx.collection:collection-ktx", version.ref = "androidx-collection" }

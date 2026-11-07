@@ -1,0 +1,923 @@
+# Review package: 584c0ecc..HEAD
+
+## Commits
+3e39a94d feat(layouts): own Urdu standard and Hindi phonetic layouts with coverage tests
+
+## Files changed
+ .../keyboard/org.aikeyboard.layouts/extension.json |  31 +++
+ .../layouts/characters/hindi_phonetic.json         |  34 ++++
+ .../layouts/characters/urdu_standard.json          |  48 +++++
+ .../org.florisboard.localization/extension.json    |   3 +-
+ .../popupMappings/ar.json                          |   1 +
+ .../popupMappings/ur-PK.json                       |   9 +
+ .../com/manjul/aikeyboard/lib/FlorisLocale.kt      |   2 +-
+ .../aikeyboard/fork/layouts/ScriptCoverageTest.kt  | 226 +++++++++++++++++++++
+ docs/FORK_PATCHES.md                               |   5 +
+ docs/linguist/arabic-coverage-checklist.md         |  75 +++++++
+ docs/linguist/hindi-coverage-checklist.md          | 157 ++++++++++++++
+ docs/linguist/urdu-coverage-checklist.md           | 105 ++++++++++
+ 12 files changed, 694 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/extension.json b/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/extension.json
+new file mode 100644
+index 00000000..c60170c1
+--- /dev/null
++++ b/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/extension.json
+@@ -0,0 +1,31 @@
++{
++  "$": "ime.extension.keyboard",
++  "meta": {
++    "id": "org.aikeyboard.layouts",
++    "version": "0.1.0",
++    "title": "AI Keyboard layouts",
++    "description": "Urdu standard and Hindi phonetic layouts. Pick them in the subtype editor.",
++    "maintainers": [ "AI Keyboard contributors" ],
++    "license": "apache-2.0"
++  },
++  "dependencies": [
++    "org.florisboard.layouts"
++  ],
++  "layouts": {
++    "characters": [
++      {
++        "id": "urdu_standard",
++        "label": "اردو (Standard)",
++        "authors": [ "AI Keyboard contributors" ],
++        "direction": "rtl",
++        "modifier": "org.florisboard.layouts:arabic"
++      },
++      {
++        "id": "hindi_phonetic",
++        "label": "हिंदी (Phonetic)",
++        "authors": [ "AI Keyboard contributors" ],
++        "direction": "ltr"
++      }
++    ]
++  }
++}
+diff --git a/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/layouts/characters/hindi_phonetic.json b/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/layouts/characters/hindi_phonetic.json
+new file mode 100644
+index 00000000..7c7fc09a
+--- /dev/null
++++ b/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/layouts/characters/hindi_phonetic.json
+@@ -0,0 +1,34 @@
++[
++  [
++    { "$": "case_selector", "lower": { "code": 2335, "label": "ट" }, "upper": { "code": 2336, "label": "ठ" } },
++    { "$": "case_selector", "lower": { "code": 2357, "label": "व" }, "upper": { "code": 2377, "label": "ॉ" } },
++    { "$": "case_selector", "lower": { "code": 2375, "label": "े" }, "upper": { "code": 2376, "label": "ै" } },
++    { "$": "case_selector", "lower": { "code": 2352, "label": "र" }, "upper": { "code": 2371, "label": "ृ" } },
++    { "$": "case_selector", "lower": { "code": 2340, "label": "त" }, "upper": { "code": 2341, "label": "थ" } },
++    { "$": "case_selector", "lower": { "code": 2351, "label": "य" }, "upper": { "code": 2334, "label": "ञ" } },
++    { "$": "case_selector", "lower": { "code": 2369, "label": "ु" }, "upper": { "code": 2370, "label": "ू" } },
++    { "$": "case_selector", "lower": { "code": 2367, "label": "ि" }, "upper": { "code": 2368, "label": "ी" } },
++    { "$": "case_selector", "lower": { "code": 2379, "label": "ो" }, "upper": { "code": 2380, "label": "ौ" } },
++    { "$": "case_selector", "lower": { "code": 2346, "label": "प" }, "upper": { "code": 2347, "label": "फ" } }
++  ],
++  [
++    { "$": "case_selector", "lower": { "code": 2366, "label": "ा" }, "upper": { "code": 2310, "label": "आ" } },
++    { "$": "case_selector", "lower": { "code": 2360, "label": "स" }, "upper": { "code": 2358, "label": "श" } },
++    { "$": "case_selector", "lower": { "code": 2342, "label": "द" }, "upper": { "code": 2343, "label": "ध" } },
++    { "$": "case_selector", "lower": { "code": 2337, "label": "ड" }, "upper": { "code": 2338, "label": "ढ" } },
++    { "$": "case_selector", "lower": { "code": 2327, "label": "ग" }, "upper": { "code": 2328, "label": "घ" } },
++    { "$": "case_selector", "lower": { "code": 2361, "label": "ह" }, "upper": { "code": 2307, "label": "ः" } },
++    { "$": "case_selector", "lower": { "code": 2332, "label": "ज" }, "upper": { "code": 2333, "label": "झ" } },
++    { "$": "case_selector", "lower": { "code": 2325, "label": "क" }, "upper": { "code": 2326, "label": "ख" } },
++    { "$": "case_selector", "lower": { "code": 2354, "label": "ल" }, "upper": { "code": 2355, "label": "ळ" } }
++  ],
++  [
++    { "$": "case_selector", "lower": { "code": 2381, "label": "्" }, "upper": { "code": 2364, "label": " ़" } },
++    { "$": "case_selector", "lower": { "code": 2359, "label": "ष" }, "upper": { "code": 2329, "label": "ङ" } },
++    { "$": "case_selector", "lower": { "code": 2330, "label": "च" }, "upper": { "code": 2331, "label": "छ" } },
++    { "$": "case_selector", "lower": { "code": 2306, "label": "ं" }, "upper": { "code": 2309, "label": "अ" } },
++    { "$": "case_selector", "lower": { "code": 2348, "label": "ब" }, "upper": { "code": 2349, "label": "भ" } },
++    { "$": "case_selector", "lower": { "code": 2344, "label": "न" }, "upper": { "code": 2339, "label": "ण" } },
++    { "$": "case_selector", "lower": { "code": 2350, "label": "म" }, "upper": { "code": 2305, "label": "ँ" } }
++  ]
++]
+diff --git a/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/layouts/characters/urdu_standard.json b/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/layouts/characters/urdu_standard.json
+new file mode 100644
+index 00000000..e6614bf6
+--- /dev/null
++++ b/app/src/main/assets/ime/keyboard/org.aikeyboard.layouts/layouts/characters/urdu_standard.json
+@@ -0,0 +1,48 @@
++[
++  [
++    { "code": 1590, "label": "ض" },
++    { "code": 1589, "label": "ص" },
++    { "code": 1579, "label": "ث" },
++    { "code": 1602, "label": "ق" },
++    { "code": 1601, "label": "ف" },
++    { "code": 1594, "label": "غ" },
++    { "code": 1593, "label": "ع" },
++    { "code": 1582, "label": "خ" },
++    { "code": 1581, "label": "ح" },
++    { "code": 1580, "label": "ج" }
++  ],
++  [
++    { "code": 1588, "label": "ش" },
++    { "code": 1587, "label": "س" },
++    { "$": "case_selector", "lower": { "code": 1740, "label": "ی" }, "upper": { "code": 1574, "label": "ئ" } },
++    { "code": 1576, "label": "ب" },
++    { "code": 1604, "label": "ل" },
++    { "$": "case_selector", "lower": { "code": 1575, "label": "ا" }, "upper": { "code": 1570, "label": "آ" } },
++    { "code": 1578, "label": "ت" },
++    { "code": 1606, "label": "ن" },
++    { "code": 1605, "label": "م" },
++    { "code": 1705, "label": "ک" }
++  ],
++  [
++    { "$": "case_selector", "lower": { "code": 1591, "label": "ط" }, "upper": { "code": 1592, "label": "ظ" } },
++    { "code": 1672, "label": "ڈ" },
++    { "code": 1657, "label": "ٹ" },
++    { "code": 1585, "label": "ر" },
++    { "code": 1583, "label": "د" },
++    { "code": 1662, "label": "پ" },
++    { "$": "case_selector", "lower": { "code": 1608, "label": "و" }, "upper": { "code": 1572, "label": "ؤ" } },
++    { "code": 1711, "label": "گ" },
++    { "code": 1670, "label": "چ" }
++  ],
++  [
++    { "code": -11, "label": "shift", "type": "modifier" },
++    { "code": 1584, "label": "ذ" },
++    { "$": "case_selector", "lower": { "code": 1586, "label": "ز" }, "upper": { "code": 1688, "label": "ژ" } },
++    { "code": 1681, "label": "ڑ" },
++    { "code": 1722, "label": "ں" },
++    { "$": "case_selector", "lower": { "code": 1729, "label": "ہ" }, "upper": { "code": 1726, "label": "ھ" } },
++    { "$": "case_selector", "lower": { "code": 1569, "label": "ء" }, "upper": { "code": 1730, "label": "ۂ" } },
++    { "$": "case_selector", "lower": { "code": 1746, "label": "ے" }, "upper": { "code": 1747, "label": "ۓ" } },
++    { "$": "case_selector", "lower": { "code": 1748, "label": "۔" }, "upper": { "code": 1567, "label": "؟" } }
++  ]
++]
+diff --git a/app/src/main/assets/ime/keyboard/org.florisboard.localization/extension.json b/app/src/main/assets/ime/keyboard/org.florisboard.localization/extension.json
+index 03abcab6..6caa3305 100644
+--- a/app/src/main/assets/ime/keyboard/org.florisboard.localization/extension.json
++++ b/app/src/main/assets/ime/keyboard/org.florisboard.localization/extension.json
+@@ -690,21 +690,22 @@
+       "preferred": {
+         "characters": "org.florisboard.layouts:udmurt_extended"
+       }
+     },
+     {
+       "languageTag": "ur-PK",
+       "composer": "org.florisboard.composers:appender",
+       "currencySet": "org.florisboard.currencysets:pakistani_rupee",
+       "popupMapping": "org.florisboard.localization:ur-PK",
+       "preferred": {
+-        "characters": "org.florisboard.layouts:urdu_phonetic"
++        "characters": "org.florisboard.layouts:urdu_phonetic",
++        "numericRow": "org.florisboard.layouts:persian"
+       }
+     },
+     {
+       "languageTag": "zh-CN-zhengma",
+       "composer": "org.florisboard.composers:appender",
+       "nlpProviders": {
+         "spelling": "org.florisboard.nlp.providers.han.shape",
+         "suggestion": "org.florisboard.nlp.providers.han.shape"
+       },
+       "currencySet": "org.florisboard.currencysets:yen",
+diff --git a/app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ar.json b/app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ar.json
+index a85f6ca0..01ad1198 100644
+--- a/app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ar.json
++++ b/app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ar.json
+@@ -65,20 +65,21 @@
+       "main": { "code": 1574, "label": "ئ" }
+     },
+     "ز": {
+       "relevant": [
+         { "code": 1688, "label": "ژ" }
+       ]
+     },
+     "~right": {
+       "main": { "code": 1567, "label": "؟" },
+       "relevant": [
++        { "code": 1563, "label": "؛" },
+         { "code": 1611, "label": "ً" },
+         { "code": 1622, "label": "ٖ" },
+         { "code": 1648, "label": "ٰ" },
+         { "code": 1619, "label": "ٓ" },
+         { "code": 1615, "label": "ُ" },
+         { "code": 1616, "label": "ِ" },
+         { "code": 1614, "label": "َ" },
+         { "code": 1600, "label": "ـ" },
+         { "code": 1621, "label": "ٕ" },
+         { "code": 1620, "label": "ٔ" },
+diff --git a/app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ur-PK.json b/app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ur-PK.json
+index 7d4393eb..5dc56bd7 100644
+--- a/app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ur-PK.json
++++ b/app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ur-PK.json
+@@ -63,20 +63,27 @@
+       ]
+     },
+     "ہ": {
+       "relevant": [
+         { "code": 1726, "label": "ھ" },
+         { "code": 1607, "label": "ه" },
+         { "code": 1730, "label": "ۂ" },
+         { "code": 57, "label": "9" }
+       ]
+     },
++    "ه": {
++      "main": { "code": 1729, "label": "ہ" },
++      "relevant": [
++        { "code": 1726, "label": "ھ" },
++        { "code": 1730, "label": "ۂ" }
++      ]
++    },
+     "پ": {
+       "relevant": [
+         { "code": 48, "label": "0"}
+       ]
+     },
+     "ا": {
+       "main": { "code": 1570, "label": "آ" },
+       "relevant": [
+         { "code": 1571, "label": "أ" },
+         { "code": 1569, "label": "ء" },
+@@ -158,20 +165,22 @@
+       ]
+     },
+     "م": {
+       "relevant": [
+         { "code": 65012, "label": "ﷴ" }
+       ]
+     },
+     "~right": {
+       "main": { "code": 1611, "label": "ً" },
+       "relevant": [
++        { "code": 1748, "label": "۔" },
++        { "code": 1567, "label": "؟" },
+         { "code": 1622, "label": "ٖ" },
+         { "code": 1648, "label": "ٰ" },
+         { "code": 1619, "label": "ٓ" },
+         { "code": 1615, "label": "ُ" },
+         { "code": 1616, "label": "ِ" },
+         { "code": 1614, "label": "َ" },
+         { "code": 1600, "label": "ـ" },
+         { "code": 1621, "label": "ٕ" },
+         { "code": 1620, "label": "ٔ" },
+         { "code": 1617, "label": "ّ" },
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/lib/FlorisLocale.kt b/app/src/main/kotlin/com/manjul/aikeyboard/lib/FlorisLocale.kt
+index c87431a7..da5d5c38 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/lib/FlorisLocale.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/lib/FlorisLocale.kt
+@@ -210,21 +210,21 @@ class FlorisLocale private constructor(val base: Locale) {
+      * @see java.util.Locale.getISO3Country
+      */
+     val iso3Country: String get() = base.isO3Country
+ 
+     /**
+      * Returns true if this language has a capitalization concept, false otherwise.
+      * TODO: this is absolutely not exhaustive and hard-coded, find solution based on ICU or system
+      */
+     val supportsCapitalization: Boolean
+         get() = when (language) {
+-            "zh", "ko", "th", "bn", "hi" -> false
++            "zh", "ko", "th", "bn", "hi", "ur" -> false // FORK(S1-layouts): Urdu has no case; auto-shift would pick urdu_standard's shift layer
+             else -> true
+         }
+ 
+     /**
+      * Returns true if suggestions in this language should have spaces added after, false otherwise.
+      * TODO: this is absolutely not exhaustive and hard-coded, find solution based on ICU or system
+      */
+     val supportsAutoSpace: Boolean
+         get() = when (language) {
+             "zh", "ko", "jp", "th" -> false
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/layouts/ScriptCoverageTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/layouts/ScriptCoverageTest.kt
+new file mode 100644
+index 00000000..aaf50b99
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/layouts/ScriptCoverageTest.kt
+@@ -0,0 +1,226 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.layouts
++
++import com.manjul.aikeyboard.ime.keyboard.KeyboardExtension
++import com.manjul.aikeyboard.ime.keyboard.LayoutArrangement
++import com.manjul.aikeyboard.ime.popup.PopupMapping
++import com.manjul.aikeyboard.lib.FlorisLocale
++import com.manjul.aikeyboard.lib.ext.ExtensionJsonConfig
++import com.manjul.aikeyboard.lib.io.loadJsonAsset
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonElement
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.int
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import org.junit.Test
++import java.io.File
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++import kotlin.test.fail
++
++/**
++ * Checks that every letter, sign and digit of a script can be typed on the characters keyboard of a subtype, the way
++ * `LayoutManager` assembles it from the shipped JSON: the characters layout (every case/shift/variation branch and
++ * inline popups), its modifier layout (`modifier` from the layout meta, else `default`), the locale's popup mapping
++ * looked up by key label and group (`~left`/`~right`/`~enter`, falling back to the `default` mapping), and the
++ * preset's number-row layout, which is also the top row of the symbols layer (our digit choice: native or western).
++ */
++class ScriptCoverageTest {
++    private val keyboardDir: File by lazy {
++        listOf(File("src/main"), File("app/src/main"))
++            .map { File(it, "assets/ime/keyboard") }
++            .firstOrNull { it.isDirectory } ?: fail("assets/ime/keyboard not found")
++    }
++
++    private fun readJson(file: File): JsonElement {
++        if (!file.isFile) fail("missing ${file.relativeTo(keyboardDir)}")
++        return Json.parseToJsonElement(file.readText())
++    }
++
++    private fun manifest(extensionId: String) = readJson(File(keyboardDir, "$extensionId/extension.json")).jsonObject
++
++    private fun split(name: String) = name.substringBefore(':') to name.substringAfter(':')
++
++    private fun layoutMeta(type: String, name: String): JsonObject {
++        val (ext, id) = split(name)
++        return manifest(ext)["layouts"]?.jsonObject?.get(type)?.jsonArray
++            ?.map { it.jsonObject }
++            ?.firstOrNull { it.string("id") == id } ?: fail("$name is not declared in $ext/extension.json")
++    }
++
++    private fun layoutFile(type: String, name: String): File {
++        val (ext, id) = split(name)
++        return File(keyboardDir, "$ext/layouts/$type/$id.json")
++    }
++
++    private fun popupMappingFile(name: String): File {
++        val (ext, id) = split(name)
++        return File(keyboardDir, "$ext/popupMappings/$id.json")
++    }
++
++    private fun preset(languageTag: String): JsonObject =
++        manifest("org.florisboard.localization").getValue("subtypePresets").jsonArray
++            .map { it.jsonObject }
++            .firstOrNull { it.string("languageTag") == languageTag } ?: fail("no preset for $languageTag")
++
++    private fun JsonObject.string(key: String) = get(key)?.jsonPrimitive?.content
++
++    /** Collects code points of typeable keys under [element]; layout keys (not their popups) go to [keys]. */
++    private fun collect(element: JsonElement, out: MutableSet<Int>, keys: MutableList<JsonObject>?) {
++        when (element) {
++            is JsonArray -> element.forEach { collect(it, out, keys) }
++            is JsonObject -> {
++                val type = element.string("type")
++                val isText = element.containsKey("code") || element.containsKey("codePoints")
++                if (isText && (type == null || type == "character" || type == "numeric")) {
++                    element["code"]?.jsonPrimitive?.int?.takeIf { it > 0 }?.let { out.add(it) }
++                    element["codePoints"]?.jsonArray?.forEach { out.add(it.jsonPrimitive.int) }
++                    keys?.add(element)
++                }
++                for ((key, value) in element) {
++                    when (key) {
++                        "popup" -> collect(value, out, null)
++                        "code", "codePoints", "label", "type", "groupId", "$" -> Unit
++                        else -> collect(value, out, keys)
++                    }
++                }
++            }
++            else -> Unit
++        }
++    }
++
++    private fun reachable(characters: String, languageTag: String): Set<Int> {
++        val preset = preset(languageTag)
++        val modifier = layoutMeta("characters", characters).string("modifier") ?: "org.florisboard.layouts:default"
++        val numericRow = preset["preferred"]?.jsonObject?.string("numericRow") ?: "org.florisboard.layouts:western_arabic"
++
++        val out = mutableSetOf<Int>()
++        val keys = mutableListOf<JsonObject>()
++        collect(readJson(layoutFile("characters", characters)), out, keys)
++        collect(readJson(layoutFile("charactersMod", modifier)), out, keys)
++        collect(readJson(layoutFile("numericRow", numericRow)), out, null)
++
++        val localeAll = readJson(popupMappingFile(preset.string("popupMapping") ?: fail("$languageTag: no popupMapping")))
++            .jsonObject["all"]?.jsonObject ?: JsonObject(emptyMap())
++        val defaultAll = readJson(popupMappingFile("org.florisboard.localization:default"))
++            .jsonObject["all"]?.jsonObject ?: JsonObject(emptyMap())
++        fun lookup(label: String) = localeAll[label] ?: defaultAll[label]
++        for (key in keys) {
++            val label = key.string("label") ?: continue
++            val group = when (key["groupId"]?.jsonPrimitive?.int) {
++                1 -> "~left"
++                2 -> "~right"
++                3 -> "~enter"
++                else -> null
++            }
++            (group?.let(::lookup) ?: lookup(label))?.let { collect(it, out, null) }
++            if (group != null) lookup(label)?.let { collect(it, out, null) }
++        }
++        return out
++    }
++
++    private fun assertCovers(required: Set<Int>, characters: String, languageTag: String) {
++        val missing = required - reachable(characters, languageTag)
++        assertTrue(
++            missing.isEmpty(),
++            "$characters ($languageTag) cannot type: " +
++                missing.sorted().joinToString { "U+%04X %s".format(it, String(Character.toChars(it))) },
++        )
++    }
++
++    private fun range(from: Int, to: Int) = (from..to).toSet()
++
++    // ا آ ب پ ت ٹ ث ج چ ح خ د ڈ ذ ر ڑ ز ژ س ش ص ض ط ظ ع غ ف ق ک گ ل م ن ں و ہ ھ ء ی ے ۓ ۂ ئ ؤ
++    private val urduLetters = setOf(
++        0x0627, 0x0622, 0x0628, 0x067E, 0x062A, 0x0679, 0x062B, 0x062C, 0x0686, 0x062D, 0x062E, 0x062F, 0x0688, 0x0630,
++        0x0631, 0x0691, 0x0632, 0x0698, 0x0633, 0x0634, 0x0635, 0x0636, 0x0637, 0x0638, 0x0639, 0x063A, 0x0641, 0x0642,
++        0x06A9, 0x06AF, 0x0644, 0x0645, 0x0646, 0x06BA, 0x0648, 0x06C1, 0x06BE, 0x0621, 0x06CC, 0x06D2, 0x06D3, 0x06C2,
++        0x0626, 0x0624,
++    )
++
++    // ، ؟ ۔
++    private val urduPunctuation = setOf(0x060C, 0x061F, 0x06D4)
++
++    // ۰–۹
++    private val urduDigits = range(0x06F0, 0x06F9)
++
++    private val urdu = urduLetters + urduPunctuation + urduDigits
++
++    // vowels अ–औ, matras ा–ौ, consonants क–ह, ं ः ँ ् ़ ।, digits ०–९
++    private val hindi = range(0x0905, 0x0914) + range(0x093E, 0x094C) + range(0x0915, 0x0939) +
++        setOf(0x0902, 0x0903, 0x0901, 0x094D, 0x093C, 0x0964) + range(0x0966, 0x096F)
++
++    // ا–غ and ف–ي (U+063B–U+0640 are not Arabic-alphabet letters: extended letters and tatweel), ة ى ء أ إ آ ؤ ئ,
++    // ، ؟ ؛, ٠–٩
++    private val arabic = range(0x0627, 0x063A) + range(0x0641, 0x064A) +
++        setOf(0x0629, 0x0649, 0x0621, 0x0623, 0x0625, 0x0622, 0x0624, 0x0626) +
++        setOf(0x060C, 0x061F, 0x061B) + range(0x0660, 0x0669)
++
++    @Test
++    fun `urdu phonetic covers the urdu alphabet, punctuation and digits`() =
++        assertCovers(urdu, "org.florisboard.layouts:urdu_phonetic", "ur-PK")
++
++    @Test
++    fun `urdu standard covers the urdu alphabet, punctuation and digits`() =
++        assertCovers(urdu, "org.aikeyboard.layouts:urdu_standard", "ur-PK")
++
++    @Test
++    fun `hindi inscript covers the hindi alphabet, signs and digits`() =
++        assertCovers(hindi, "org.florisboard.layouts:hindi_in", "hi-IN")
++
++    @Test
++    fun `hindi phonetic covers the hindi alphabet, signs and digits`() =
++        assertCovers(hindi, "org.aikeyboard.layouts:hindi_phonetic", "hi-IN")
++
++    @Test
++    fun `arabic covers the arabic alphabet, punctuation and digits`() =
++        assertCovers(arabic, "org.florisboard.layouts:arabic", "ar")
++
++    @Test
++    fun `new layouts declare direction and modifier like upstream`() {
++        val urdu = layoutMeta("characters", "org.aikeyboard.layouts:urdu_standard")
++        assertEquals("rtl", urdu.string("direction"))
++        assertEquals("org.florisboard.layouts:arabic", urdu.string("modifier"))
++        val hindi = layoutMeta("characters", "org.aikeyboard.layouts:hindi_phonetic")
++        assertEquals("ltr", hindi.string("direction"))
++        assertEquals(null, hindi.string("modifier"))
++    }
++
++    @Test
++    fun `new extension and layouts decode with the app serializers`() {
++        val ext = ExtensionJsonConfig.decodeFromString(
++            KeyboardExtension.serializer(),
++            File(keyboardDir, "org.aikeyboard.layouts/extension.json").readText(),
++        )
++        assertEquals("org.aikeyboard.layouts", ext.meta.id)
++        assertEquals(
++            listOf("urdu_standard", "hindi_phonetic"),
++            ext.layouts.getValue("characters").map { it.id },
++        )
++        for (name in listOf("org.aikeyboard.layouts:urdu_standard", "org.aikeyboard.layouts:hindi_phonetic")) {
++            loadJsonAsset<LayoutArrangement>(layoutFile("characters", name).readText()).getOrThrow()
++        }
++        for (name in listOf("org.florisboard.localization:ur-PK", "org.florisboard.localization:hi-IN")) {
++            loadJsonAsset<PopupMapping>(popupMappingFile(name).readText()).getOrThrow()
++        }
++    }
++
++    @Test
++    fun `preset default layouts are unchanged`() {
++        assertEquals("org.florisboard.layouts:urdu_phonetic", preset("ur-PK")["preferred"]?.jsonObject?.string("characters"))
++        assertEquals("org.florisboard.layouts:hindi_in", preset("hi-IN")["preferred"]?.jsonObject?.string("characters"))
++    }
++
++    @Test
++    fun `urdu has no auto-capitalization so the shift layer is only reached on purpose`() {
++        assertFalse(FlorisLocale.fromTag("ur-PK").supportsCapitalization)
++    }
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index f09a39c3..e83bebb8 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -52,38 +52,43 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy | Creates an `ImePolicyController` in `onCreate` (restriction listener re-applies the decision to `EditorInstance`; keyguard read on every evaluation, no forced packages until S3); calls it from `onStartInput`, `onFinishInputView`, `onFinishInput`, `onDestroy`; companion `policyController()` accessor. `onStartInputView` needs no call: the decision is made in `onStartInput`, which always precedes it |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt` | S1-policy | `isIncognitoMode` is also true when the policy decision does not allow learning; composing is off when it does not allow the suggestion strip |
+ | `app/src/main/AndroidManifest.xml` | S1-policy | `android:directBootAware="false"` on the IME and spell-checker services (was `true` / absent): the policy and settings store live in credential-encrypted storage. Guarded by `ManifestHardeningTest`. The attributes share the `<service` line so the marker sits within 3 lines of each edit (per-hunk marker check); no behaviour change from that |
+ | `settings.gradle.kts` | S1-clipboard | `include(":core:privacy")` |
+ | `app/build.gradle.kts` | S1-clipboard | `implementation(projects.core.privacy)` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt` | S1-clipboard | Takes a `ClipboardCaptureGate` (fail-closed policy gate plus sensitivity classifier): `onPrimaryClipChanged` returns before `fromClipData`/URI clone for blocked or sensitive clips, `insertOrMoveBeginning` re-checks; `enforceExpiryDate` deletes unpinned items older than the TTL through the DAO |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt` | S1-clipboard | `deleteUnpinnedOlderThan` DAO query; `fallbackToDestructiveMigration()` removed from both clipboard databases (schema versions unchanged, so no migration is needed) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt` | S1-clipboard | `historyAutoCleanOldEnabled` default true, `historyAutoCleanOldAfter` default 1440 (minutes, 24 h) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt` | S1-clipboard | Auto-clean slider max 120 -> 1440 minutes so the 24 h default is reachable |
+ | `app/src/main/res/xml/method.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt` | S1-subtypes | `method.xml`: the single placeholder subtype is replaced by the 8 MVP subtypes (en-US, es-ES, fr-FR, pt-BR, ar, ur-PK, id, hi-IN; labels in `strings_fork.xml`). `SubtypeManager.ensureDefaultSubtypes(tags)` adds missing presets by primary locale, in order, idempotently; called from onboarding only, never on IME start |
++| `app/src/main/assets/ime/keyboard/org.florisboard.localization/extension.json` | S1-layouts | `ur-PK` preset: `numericRow` set to `org.florisboard.layouts:persian` (Extended Arabic-Indic digits U+06F0-U+06F9, the Urdu digits; each key's long-press gives the western digit). The number-row layout is also the top row of the symbols layer, so this is the per-subtype native/western digit choice; users switch it with "Number row layout" in the subtype editor (`western_arabic` for western). `ar` and `hi-IN` already default to native digits. Characters defaults are unchanged (`urdu_phonetic`, `hindi_in`); our `org.aikeyboard.layouts` layouts need no preset entry because the subtype editor lists every indexed characters layout |
++| `app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ur-PK.json` | S1-layouts | Coverage gaps in `urdu_phonetic` (guarded by `ScriptCoverageTest`): its h key is Arabic heh `ه` (U+0647), so the mapping's `ہ` entry never matched; a new `ه` entry offers `ہ` (main), `ھ`, `ۂ`. `~right` (the `.` key) now starts with `۔` and `؟` |
++| `app/src/main/assets/ime/keyboard/org.florisboard.localization/popupMappings/ar.json` | S1-layouts | `؛` (U+061B) added first in `~right` relevant (after the `؟` main): the Arabic characters keyboard had no Arabic semicolon |
++| `app/src/main/kotlin/com/manjul/aikeyboard/lib/FlorisLocale.kt` | S1-layouts | `supportsCapitalization` is false for `ur`: Urdu has no case, and auto-shift at sentence start would otherwise type the shift layer of `urdu_standard` (our layout, which puts `ھ`, `ۓ`, `ۂ`, `آ`, ... on shift) |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised
+ `dev.patrickgold.florisboard` <-> `com.manjul.aikeyboard`) pass without a row. The `*(global)*` row is
+ deliberately not used for matching, so any edit beyond the rename needs its own row.
+ 
+ The files below are listed but cannot (or need not) carry an inline marker. Keep this list short.
+ 
+ | File | Why no inline marker |
+ |---|---|
+ | `app/src/main/assets/ime/theme/org.florisboard.themes{,.my}/extension.json` | JSON has no comment syntax; branding-only title change recorded in the S0-branding row above |
++| `app/src/main/assets/ime/keyboard/org.florisboard.localization/{extension.json,popupMappings/ur-PK.json,popupMappings/ar.json}` | JSON has no comment syntax; S1-layouts additions recorded in the rows above |
+ | `README.md` | Rewritten from scratch for the fork (S0-branding); no upstream hunk is left to annotate |
+ 
+ ## Decisions
+ 
+ - The `org.florisboard.lib.*` library module namespaces (`:lib:android`, `:lib:color`, `:lib:compose`,
+   `:lib:kotlin`, `:lib:native`, `:lib:snygg`) are **not** renamed. They are internal module packages,
+   not user-visible branding, and renaming them would make every upstream merge touch every file.
+ - FlorisBoard extension IDs inside assets (e.g. `org.florisboard.layouts`, `org.florisboard.themes`)
+   are **not** renamed. They are data identifiers stored in user preferences and referenced across
+   extension JSON; renaming them would break upstream-compatible extensions and merges.
+diff --git a/docs/linguist/arabic-coverage-checklist.md b/docs/linguist/arabic-coverage-checklist.md
+new file mode 100644
+index 00000000..307d7c1b
+--- /dev/null
++++ b/docs/linguist/arabic-coverage-checklist.md
+@@ -0,0 +1,75 @@
++# Arabic coverage checklist (ar)
++
++Layout: `org.florisboard.layouts:arabic` (upstream, unchanged) with the `ar` popup mapping and the `eastern_arabic`
++number row (Arabic-Indic digits U+0660-U+0669). `؛` was missing and was added to the long-press of `.` in
++`ar.json`. The required letters are ا-غ and ف-ي; U+063B-U+0640 (extended letters, tatweel) are not part of the
++Arabic alphabet and are left out.
++
++Positions: `R<row> K<key>` counts rows from the top and keys in reading order (for right-to-left layouts K1 is
++the rightmost key). Layers: `base`, `shift` (press shift, then the key), `long-press` of the named key (from the
++locale popup mapping), `bottom row` (the modifier row with space), and the number row, which is also the top row
++of the symbols layer and is the subtype's digit choice ("Number row layout" in the subtype editor: native or
++`western_arabic`). Generated from the shipped layout JSON with the same rules as `ScriptCoverageTest`
++(`app/src/test/kotlin/com/manjul/aikeyboard/fork/layouts/ScriptCoverageTest.kt`); combining marks are shown on a
++dotted circle.
++
++Linguist: set **Linguist status** to `ok` or `change`, and say what to change in **Notes** (wrong letter, better
++position, missing form). Sign-off (PRD FR-03 AC1): name, date, verdict at the bottom.
++
++| # | Char | Code point | Name | `arabic` key, layer | Linguist status | Notes |
++|---|---|---|---|---|---|---|
++| 1 | ا | U+0627 | Arabic Letter Alef | R2 K6, base | pending | |
++| 2 | ب | U+0628 | Arabic Letter Beh | R2 K4, base | pending | |
++| 3 | ة | U+0629 | Arabic Letter Teh Marbuta | R3 K6, base | pending | |
++| 4 | ت | U+062A | Arabic Letter Teh | R2 K7, base | pending | |
++| 5 | ث | U+062B | Arabic Letter Theh | R1 K3, base | pending | |
++| 6 | ج | U+062C | Arabic Letter Jeem | R1 K11, base | pending | |
++| 7 | ح | U+062D | Arabic Letter Hah | R1 K10, base | pending | |
++| 8 | خ | U+062E | Arabic Letter Khah | R1 K9, base | pending | |
++| 9 | د | U+062F | Arabic Letter Dal | R3 K10, base | pending | |
++| 10 | ذ | U+0630 | Arabic Letter Thal | R3 K1, base | pending | |
++| 11 | ر | U+0631 | Arabic Letter Reh | R3 K4, base | pending | |
++| 12 | ز | U+0632 | Arabic Letter Zain | R3 K8, base | pending | |
++| 13 | س | U+0633 | Arabic Letter Seen | R2 K2, base | pending | |
++| 14 | ش | U+0634 | Arabic Letter Sheen | R2 K1, base | pending | |
++| 15 | ص | U+0635 | Arabic Letter Sad | R1 K2, base | pending | |
++| 16 | ض | U+0636 | Arabic Letter Dad | R1 K1, base | pending | |
++| 17 | ط | U+0637 | Arabic Letter Tah | R2 K11, base | pending | |
++| 18 | ظ | U+0638 | Arabic Letter Zah | R3 K9, base | pending | |
++| 19 | ع | U+0639 | Arabic Letter Ain | R1 K7, base | pending | |
++| 20 | غ | U+063A | Arabic Letter Ghain | R1 K6, base | pending | |
++| 21 | ف | U+0641 | Arabic Letter Feh | R1 K5, base | pending | |
++| 22 | ق | U+0642 | Arabic Letter Qaf | R1 K4, base | pending | |
++| 23 | ك | U+0643 | Arabic Letter Kaf | R2 K10, base | pending | |
++| 24 | ل | U+0644 | Arabic Letter Lam | R2 K5, base | pending | |
++| 25 | م | U+0645 | Arabic Letter Meem | R2 K9, base | pending | |
++| 26 | ن | U+0646 | Arabic Letter Noon | R2 K8, base | pending | |
++| 27 | ه | U+0647 | Arabic Letter Heh | R1 K8, base | pending | |
++| 28 | و | U+0648 | Arabic Letter Waw | R3 K7, base | pending | |
++| 29 | ى | U+0649 | Arabic Letter Alef Maksura | R3 K5, base | pending | |
++| 30 | ي | U+064A | Arabic Letter Yeh | R2 K3, base | pending | |
++| 31 | ء | U+0621 | Arabic Letter Hamza | R3 K2, base | pending | |
++| 32 | أ | U+0623 | Arabic Letter Alef With Hamza Above | R2 K6, long-press `ا` | pending | |
++| 33 | إ | U+0625 | Arabic Letter Alef With Hamza Below | R2 K6, long-press `ا` | pending | |
++| 34 | آ | U+0622 | Arabic Letter Alef With Madda Above | R2 K6, long-press `ا` | pending | |
++| 35 | ؤ | U+0624 | Arabic Letter Waw With Hamza Above | R3 K3, base | pending | |
++| 36 | ئ | U+0626 | Arabic Letter Yeh With Hamza Above | R2 K3, long-press `ي` | pending | |
++| 37 | ، | U+060C | Arabic Comma | bottom row, base | pending | |
++| 38 | ؟ | U+061F | Arabic Question Mark | bottom row, long-press `.` | pending | |
++| 39 | ؛ | U+061B | Arabic Semicolon | bottom row, long-press `.` | pending | |
++| 40 | ٠ | U+0660 | Arabic-Indic Digit Zero | number row / symbols top row K10 (`eastern_arabic`) | pending | |
++| 41 | ١ | U+0661 | Arabic-Indic Digit One | number row / symbols top row K1 (`eastern_arabic`) | pending | |
++| 42 | ٢ | U+0662 | Arabic-Indic Digit Two | number row / symbols top row K2 (`eastern_arabic`) | pending | |
++| 43 | ٣ | U+0663 | Arabic-Indic Digit Three | number row / symbols top row K3 (`eastern_arabic`) | pending | |
++| 44 | ٤ | U+0664 | Arabic-Indic Digit Four | number row / symbols top row K4 (`eastern_arabic`) | pending | |
++| 45 | ٥ | U+0665 | Arabic-Indic Digit Five | number row / symbols top row K5 (`eastern_arabic`) | pending | |
++| 46 | ٦ | U+0666 | Arabic-Indic Digit Six | number row / symbols top row K6 (`eastern_arabic`) | pending | |
++| 47 | ٧ | U+0667 | Arabic-Indic Digit Seven | number row / symbols top row K7 (`eastern_arabic`) | pending | |
++| 48 | ٨ | U+0668 | Arabic-Indic Digit Eight | number row / symbols top row K8 (`eastern_arabic`) | pending | |
++| 49 | ٩ | U+0669 | Arabic-Indic Digit Nine | number row / symbols top row K9 (`eastern_arabic`) | pending | |
++
++## Sign-off
++
++| Linguist | Date | Verdict |
++|---|---|---|
++| | | pending |
+diff --git a/docs/linguist/hindi-coverage-checklist.md b/docs/linguist/hindi-coverage-checklist.md
+new file mode 100644
+index 00000000..69995d08
+--- /dev/null
++++ b/docs/linguist/hindi-coverage-checklist.md
+@@ -0,0 +1,157 @@
++# Hindi coverage checklist (hi-IN)
++
++Layouts: `org.aikeyboard.layouts:hindi_phonetic` (ours) and `org.florisboard.layouts:hindi_in` (upstream InScript,
++the hi-IN preset default). Both use the `hi-IN` popup mapping and the `devanagari` number row. Hindi has no
++auto-capitalization, so shift is only reached on purpose.
++
++## hindi_phonetic mapping (ours)
++
++Each Latin QWERTY position types the Devanagari letter it sounds like where one exists (k क / K ख, g ग / G घ,
++a ा / A आ, ...). Uppercase gives the aspirated or long form. Letters with no Latin counterpart: q ट / Q ठ, f ड / F ढ
++(retroflex), x ष / X ङ, z virama / Z nukta, v anusvara / V अ, m म / M chandrabindu, y य / Y ञ, w व / W ॉ.
++Independent vowels other than अ आ are on the long-press of their matra (ि → इ ई, ु → उ ऊ, े → ए ऐ, ो → ओ औ),
++ऋ on long-press of र, । on long-press of `.`. Default modifier row (shift, delete, space, `,` `.`).
++
++| Latin key | Base | Shift |
++|---|---|---|
++| q / Q | ट U+091F | ठ U+0920 |
++| w / W | व U+0935 | ◌ॉ U+0949 |
++| e / E | ◌े U+0947 | ◌ै U+0948 |
++| r / R | र U+0930 | ◌ृ U+0943 |
++| t / T | त U+0924 | थ U+0925 |
++| y / Y | य U+092F | ञ U+091E |
++| u / U | ◌ु U+0941 | ◌ू U+0942 |
++| i / I | ◌ि U+093F | ◌ी U+0940 |
++| o / O | ◌ो U+094B | ◌ौ U+094C |
++| p / P | प U+092A | फ U+092B |
++| a / A | ◌ा U+093E | आ U+0906 |
++| s / S | स U+0938 | श U+0936 |
++| d / D | द U+0926 | ध U+0927 |
++| f / F | ड U+0921 | ढ U+0922 |
++| g / G | ग U+0917 | घ U+0918 |
++| h / H | ह U+0939 | ◌ः U+0903 |
++| j / J | ज U+091C | झ U+091D |
++| k / K | क U+0915 | ख U+0916 |
++| l / L | ल U+0932 | ळ U+0933 |
++| z / Z | ◌् U+094D | ◌़ U+093C |
++| x / X | ष U+0937 | ङ U+0919 |
++| c / C | च U+091A | छ U+091B |
++| v / V | ◌ं U+0902 | अ U+0905 |
++| b / B | ब U+092C | भ U+092D |
++| n / N | न U+0928 | ण U+0923 |
++| m / M | म U+092E | ◌ँ U+0901 |
++
++## Questions for the linguist
++
++- Is the phonetic table natural for Hindi typists (especially q/f/x/v/z, which have no Hindi sound)?
++- Should ज्ञ, क्ष, त्र, श्र be direct keys? (They are long-press of त and स, or typed with virama.)
++
++## Coverage
++
++The required set is the literal Unicode ranges अ-औ (U+0905-U+0914), ा-ौ (U+093E-U+094C) and क-ह (U+0915-U+0939),
++so it includes letters Hindi rarely uses (ऌ ऍ ऎ ऒ ऩ ऱ ऴ ॄ ॆ ॊ); they come from the upstream `hi-IN` long-press
++popups.
++
++Positions: `R<row> K<key>` counts rows from the top and keys in reading order (for right-to-left layouts K1 is
++the rightmost key). Layers: `base`, `shift` (press shift, then the key), `long-press` of the named key (from the
++locale popup mapping), `bottom row` (the modifier row with space), and the number row, which is also the top row
++of the symbols layer and is the subtype's digit choice ("Number row layout" in the subtype editor: native or
++`western_arabic`). Generated from the shipped layout JSON with the same rules as `ScriptCoverageTest`
++(`app/src/test/kotlin/com/manjul/aikeyboard/fork/layouts/ScriptCoverageTest.kt`); combining marks are shown on a
++dotted circle.
++
++Linguist: set **Linguist status** to `ok` or `change`, and say what to change in **Notes** (wrong letter, better
++position, missing form). Sign-off (PRD FR-03 AC1): name, date, verdict at the bottom.
++
++| # | Char | Code point | Name | `hindi_phonetic` key, layer | `hindi_in` key, layer | Linguist status | Notes |
++|---|---|---|---|---|---|---|---|
++| 1 | अ | U+0905 | Devanagari Letter A | R3 K4, shift | R2 K1, shift | pending | |
++| 2 | आ | U+0906 | Devanagari Letter Aa | R2 K1, shift | R2 K1, long-press `ा` | pending | |
++| 3 | इ | U+0907 | Devanagari Letter I | R1 K8, long-press `ि` | R1 K8, long-press `ि` | pending | |
++| 4 | ई | U+0908 | Devanagari Letter Ii | R1 K8, long-press `ि` | R1 K8, long-press `ि` | pending | |
++| 5 | उ | U+0909 | Devanagari Letter U | R1 K7, long-press `ु` | R1 K7, long-press `ु` | pending | |
++| 6 | ऊ | U+090A | Devanagari Letter Uu | R1 K7, long-press `ु` | R1 K7, long-press `ु` | pending | |
++| 7 | ऋ | U+090B | Devanagari Letter Vocalic R | R1 K4, long-press `र` | R1 K4, long-press `र` | pending | |
++| 8 | ऌ | U+090C | Devanagari Letter Vocalic L | R2 K9, long-press `ल` | R2 K9, long-press `ल` | pending | |
++| 9 | ऍ | U+090D | Devanagari Letter Candra E | R1 K3, long-press `े` | R1 K3, long-press `े` | pending | |
++| 10 | ऎ | U+090E | Devanagari Letter Short E | R1 K3, long-press `े` | R1 K3, long-press `े` | pending | |
++| 11 | ए | U+090F | Devanagari Letter E | R1 K3, long-press `े` | R1 K3, long-press `े` | pending | |
++| 12 | ऐ | U+0910 | Devanagari Letter Ai | R1 K3, long-press `े` | R1 K3, long-press `े` | pending | |
++| 13 | ऑ | U+0911 | Devanagari Letter Candra O | R1 K9, long-press `ो` | R1 K9, long-press `ो` | pending | |
++| 14 | ऒ | U+0912 | Devanagari Letter Short O | R1 K9, long-press `ो` | R1 K9, long-press `ो` | pending | |
++| 15 | ओ | U+0913 | Devanagari Letter O | R1 K9, long-press `ो` | R1 K9, long-press `ो` | pending | |
++| 16 | औ | U+0914 | Devanagari Letter Au | R1 K9, long-press `ो` | R1 K9, long-press `ो` | pending | |
++| 17 | ◌ा | U+093E | Devanagari Vowel Sign Aa | R2 K1, base | R2 K1, base | pending | |
++| 18 | ◌ि | U+093F | Devanagari Vowel Sign I | R1 K8, base | R1 K8, base | pending | |
++| 19 | ◌ी | U+0940 | Devanagari Vowel Sign Ii | R1 K8, shift | R1 K8, shift | pending | |
++| 20 | ◌ु | U+0941 | Devanagari Vowel Sign U | R1 K7, base | R1 K7, base | pending | |
++| 21 | ◌ू | U+0942 | Devanagari Vowel Sign Uu | R1 K7, shift | R1 K7, shift | pending | |
++| 22 | ◌ृ | U+0943 | Devanagari Vowel Sign Vocalic R | R1 K4, shift | R1 K4, shift | pending | |
++| 23 | ◌ॄ | U+0944 | Devanagari Vowel Sign Vocalic Rr | R1 K4, long-press `र` | R1 K4, long-press `र` | pending | |
++| 24 | ◌ॅ | U+0945 | Devanagari Vowel Sign Candra E | R2 K1, long-press `ा` | R2 K1, long-press `ा` | pending | |
++| 25 | ◌ॆ | U+0946 | Devanagari Vowel Sign Short E | R1 K3, long-press `े` | R1 K3, long-press `े` | pending | |
++| 26 | ◌े | U+0947 | Devanagari Vowel Sign E | R1 K3, base | R1 K3, base | pending | |
++| 27 | ◌ै | U+0948 | Devanagari Vowel Sign Ai | R1 K3, shift | R1 K3, shift | pending | |
++| 28 | ◌ॉ | U+0949 | Devanagari Vowel Sign Candra O | R1 K2, shift | R1 K9, long-press `ो` | pending | |
++| 29 | ◌ॊ | U+094A | Devanagari Vowel Sign Short O | R1 K9, long-press `ो` | R1 K9, long-press `ो` | pending | |
++| 30 | ◌ो | U+094B | Devanagari Vowel Sign O | R1 K9, base | R1 K9, base | pending | |
++| 31 | ◌ौ | U+094C | Devanagari Vowel Sign Au | R1 K9, shift | R1 K9, shift | pending | |
++| 32 | क | U+0915 | Devanagari Letter Ka | R2 K8, base | R2 K8, base | pending | |
++| 33 | ख | U+0916 | Devanagari Letter Kha | R2 K8, shift | R2 K8, shift | pending | |
++| 34 | ग | U+0917 | Devanagari Letter Ga | R2 K5, base | R2 K5, base | pending | |
++| 35 | घ | U+0918 | Devanagari Letter Gha | R2 K5, shift | R2 K5, shift | pending | |
++| 36 | ङ | U+0919 | Devanagari Letter Nga | R3 K2, shift | R3 K6, long-press `न` | pending | |
++| 37 | च | U+091A | Devanagari Letter Ca | R3 K3, base | R3 K3, base | pending | |
++| 38 | छ | U+091B | Devanagari Letter Cha | R3 K3, shift | R3 K3, shift | pending | |
++| 39 | ज | U+091C | Devanagari Letter Ja | R2 K7, base | R2 K7, base | pending | |
++| 40 | झ | U+091D | Devanagari Letter Jha | R2 K7, shift | R2 K7, shift | pending | |
++| 41 | ञ | U+091E | Devanagari Letter Nya | R1 K6, shift | R3 K1, base | pending | |
++| 42 | ट | U+091F | Devanagari Letter Tta | R1 K1, base | R1 K1, base | pending | |
++| 43 | ठ | U+0920 | Devanagari Letter Ttha | R1 K1, shift | R1 K1, shift | pending | |
++| 44 | ड | U+0921 | Devanagari Letter Dda | R2 K4, base | R1 K2, base | pending | |
++| 45 | ढ | U+0922 | Devanagari Letter Ddha | R2 K4, shift | R1 K2, shift | pending | |
++| 46 | ण | U+0923 | Devanagari Letter Nna | R3 K6, shift | R3 K6, shift | pending | |
++| 47 | त | U+0924 | Devanagari Letter Ta | R1 K5, base | R1 K5, base | pending | |
++| 48 | थ | U+0925 | Devanagari Letter Tha | R1 K5, shift | R1 K5, shift | pending | |
++| 49 | द | U+0926 | Devanagari Letter Da | R2 K3, base | R2 K3, base | pending | |
++| 50 | ध | U+0927 | Devanagari Letter Dha | R2 K3, shift | R2 K3, shift | pending | |
++| 51 | न | U+0928 | Devanagari Letter Na | R3 K6, base | R3 K6, base | pending | |
++| 52 | ऩ | U+0929 | Devanagari Letter Nnna | R3 K6, long-press `न` | R3 K6, long-press `न` | pending | |
++| 53 | प | U+092A | Devanagari Letter Pa | R1 K10, base | R1 K10, base | pending | |
++| 54 | फ | U+092B | Devanagari Letter Pha | R1 K10, shift | R2 K4, base | pending | |
++| 55 | ब | U+092C | Devanagari Letter Ba | R3 K5, base | R3 K5, base | pending | |
++| 56 | भ | U+092D | Devanagari Letter Bha | R3 K5, shift | R3 K5, shift | pending | |
++| 57 | म | U+092E | Devanagari Letter Ma | R3 K7, base | R3 K7, base | pending | |
++| 58 | य | U+092F | Devanagari Letter Ya | R1 K6, base | R1 K6, base | pending | |
++| 59 | र | U+0930 | Devanagari Letter Ra | R1 K4, base | R1 K4, base | pending | |
++| 60 | ऱ | U+0931 | Devanagari Letter Rra | R1 K4, long-press `र` | R1 K4, long-press `र` | pending | |
++| 61 | ल | U+0932 | Devanagari Letter La | R2 K9, base | R2 K9, base | pending | |
++| 62 | ळ | U+0933 | Devanagari Letter Lla | R2 K9, shift | R2 K9, shift | pending | |
++| 63 | ऴ | U+0934 | Devanagari Letter Llla | R2 K9, long-press `ल` | R2 K9, long-press `ल` | pending | |
++| 64 | व | U+0935 | Devanagari Letter Va | R1 K2, base | R3 K4, base | pending | |
++| 65 | श | U+0936 | Devanagari Letter Sha | R2 K2, shift | R2 K2, shift | pending | |
++| 66 | ष | U+0937 | Devanagari Letter Ssa | R3 K2, base | R3 K2, base | pending | |
++| 67 | स | U+0938 | Devanagari Letter Sa | R2 K2, base | R2 K2, base | pending | |
++| 68 | ह | U+0939 | Devanagari Letter Ha | R2 K6, base | R2 K6, base | pending | |
++| 69 | ◌ं | U+0902 | Devanagari Sign Anusvara | R3 K4, base | R3 K7, shift | pending | |
++| 70 | ◌ः | U+0903 | Devanagari Sign Visarga | R2 K6, shift | R2 K6, shift | pending | |
++| 71 | ◌ँ | U+0901 | Devanagari Sign Candrabindu | R3 K7, shift | R3 K7, long-press `म` | pending | |
++| 72 | ◌् | U+094D | Devanagari Sign Virama | R3 K1, base | R3 K1, base | pending | |
++| 73 | ◌़ | U+093C | Devanagari Sign Nukta | R3 K1, shift | R2 K4, shift | pending | |
++| 74 | । | U+0964 | Devanagari Danda | bottom row, long-press `.` | bottom row, long-press `.` | pending | |
++| 75 | ० | U+0966 | Devanagari Digit Zero | number row / symbols top row K10 (`devanagari`) | number row / symbols top row K10 (`devanagari`) | pending | |
++| 76 | १ | U+0967 | Devanagari Digit One | number row / symbols top row K1 (`devanagari`) | number row / symbols top row K1 (`devanagari`) | pending | |
++| 77 | २ | U+0968 | Devanagari Digit Two | number row / symbols top row K2 (`devanagari`) | number row / symbols top row K2 (`devanagari`) | pending | |
++| 78 | ३ | U+0969 | Devanagari Digit Three | number row / symbols top row K3 (`devanagari`) | number row / symbols top row K3 (`devanagari`) | pending | |
++| 79 | ४ | U+096A | Devanagari Digit Four | number row / symbols top row K4 (`devanagari`) | number row / symbols top row K4 (`devanagari`) | pending | |
++| 80 | ५ | U+096B | Devanagari Digit Five | number row / symbols top row K5 (`devanagari`) | number row / symbols top row K5 (`devanagari`) | pending | |
++| 81 | ६ | U+096C | Devanagari Digit Six | number row / symbols top row K6 (`devanagari`) | number row / symbols top row K6 (`devanagari`) | pending | |
++| 82 | ७ | U+096D | Devanagari Digit Seven | number row / symbols top row K7 (`devanagari`) | number row / symbols top row K7 (`devanagari`) | pending | |
++| 83 | ८ | U+096E | Devanagari Digit Eight | number row / symbols top row K8 (`devanagari`) | number row / symbols top row K8 (`devanagari`) | pending | |
++| 84 | ९ | U+096F | Devanagari Digit Nine | number row / symbols top row K9 (`devanagari`) | number row / symbols top row K9 (`devanagari`) | pending | |
++
++## Sign-off
++
++| Linguist | Date | Verdict |
++|---|---|---|
++| | | pending |
+diff --git a/docs/linguist/urdu-coverage-checklist.md b/docs/linguist/urdu-coverage-checklist.md
+new file mode 100644
+index 00000000..ea696f65
+--- /dev/null
++++ b/docs/linguist/urdu-coverage-checklist.md
+@@ -0,0 +1,105 @@
++# Urdu coverage checklist (ur-PK)
++
++Layouts: `org.aikeyboard.layouts:urdu_standard` (ours) and `org.florisboard.layouts:urdu_phonetic` (upstream,
++the ur-PK preset default). Both use the `ur-PK` popup mapping and the `persian` number row (Extended Arabic-Indic
++digits U+06F0-U+06F9, which Urdu uses; long-press gives the western digit).
++
++## urdu_standard arrangement (ours)
++
++Our own arrangement on a 4-row grid, right-to-left, with the `arabic` modifier row. The shift key starts R4
++(the `arabic` modifier has none). Shift gives the aspirate `ھ` (on `ہ`), `ۓ` (on `ے`), `ۂ` (on `ء`), and
++`آ ئ ؤ ظ ژ ؟` on their base letters. Urdu has no auto-capitalization, so the shift layer is only reached on purpose.
++
++| Row | Keys, right to left: base (shift) |
++|---|---|
++| R1 | ض · ص · ث · ق · ف · غ · ع · خ · ح · ج |
++| R2 | ش · س · ی (ئ) · ب · ل · ا (آ) · ت · ن · م · ک |
++| R3 | ط (ظ) · ڈ · ٹ · ر · د · پ · و (ؤ) · گ · چ |
++| R4 | shift · ذ · ز (ژ) · ڑ · ں · ہ (ھ) · ء (ۂ) · ے (ۓ) · ۔ (؟) |
++| bottom | (from `org.florisboard.layouts:arabic` modifier) symbols · ، · language · media · space · . · enter; delete ends R4 |
++
++## Questions for the linguist
++
++- `urdu_phonetic` (upstream) types Arabic heh `ه` (U+0647) on its h key, not Urdu `ہ` (U+06C1); `ہ`, `ھ` and `ۂ` are
++  only on its long-press. Should the base key change to `ہ`? (Not changed: the preset default stays as upstream.)
++- Glyphs: `۴ ۵ ۶ ۷` render in the Persian style unless the font is Urdu-localised. Acceptable?
++- Is `ۓ` needed as a key at all, or is `ے` + hamza preferred?
++
++## Coverage
++
++Positions: `R<row> K<key>` counts rows from the top and keys in reading order (for right-to-left layouts K1 is
++the rightmost key). Layers: `base`, `shift` (press shift, then the key), `long-press` of the named key (from the
++locale popup mapping), `bottom row` (the modifier row with space), and the number row, which is also the top row
++of the symbols layer and is the subtype's digit choice ("Number row layout" in the subtype editor: native or
++`western_arabic`). Generated from the shipped layout JSON with the same rules as `ScriptCoverageTest`
++(`app/src/test/kotlin/com/manjul/aikeyboard/fork/layouts/ScriptCoverageTest.kt`); combining marks are shown on a
++dotted circle.
++
++Linguist: set **Linguist status** to `ok` or `change`, and say what to change in **Notes** (wrong letter, better
++position, missing form). Sign-off (PRD FR-03 AC1): name, date, verdict at the bottom.
++
++| # | Char | Code point | Name | `urdu_standard` key, layer | `urdu_phonetic` key, layer | Linguist status | Notes |
++|---|---|---|---|---|---|---|---|
++| 1 | ا | U+0627 | Arabic Letter Alef | R2 K6, base | R2 K1, base | pending | |
++| 2 | آ | U+0622 | Arabic Letter Alef With Madda Above | R2 K6, shift | R2 K1, long-press `ا` | pending | |
++| 3 | ب | U+0628 | Arabic Letter Beh | R2 K4, base | R3 K5, base | pending | |
++| 4 | پ | U+067E | Arabic Letter Peh | R3 K6, base | R1 K10, base | pending | |
++| 5 | ت | U+062A | Arabic Letter Teh | R2 K7, base | R1 K5, base | pending | |
++| 6 | ٹ | U+0679 | Arabic Letter Tteh | R3 K3, base | R1 K5, long-press `ت` | pending | |
++| 7 | ث | U+062B | Arabic Letter Theh | R1 K3, base | R3 K3, long-press `چ` | pending | |
++| 8 | ج | U+062C | Arabic Letter Jeem | R1 K10, base | R2 K7, base | pending | |
++| 9 | چ | U+0686 | Arabic Letter Tcheh | R3 K9, base | R3 K3, base | pending | |
++| 10 | ح | U+062D | Arabic Letter Hah | R1 K9, base | R2 K6, base | pending | |
++| 11 | خ | U+062E | Arabic Letter Khah | R1 K8, base | R2 K8, long-press `ک` | pending | |
++| 12 | د | U+062F | Arabic Letter Dal | R3 K5, base | R2 K3, base | pending | |
++| 13 | ڈ | U+0688 | Arabic Letter Ddal | R3 K2, base | R2 K3, long-press `د` | pending | |
++| 14 | ذ | U+0630 | Arabic Letter Thal | R4 K2, base | R3 K1, base | pending | |
++| 15 | ر | U+0631 | Arabic Letter Reh | R3 K4, base | R1 K4, base | pending | |
++| 16 | ڑ | U+0691 | Arabic Letter Rreh | R4 K4, base | R1 K4, long-press `ر` | pending | |
++| 17 | ز | U+0632 | Arabic Letter Zain | R4 K3, base | R3 K1, long-press `ذ` | pending | |
++| 18 | ژ | U+0698 | Arabic Letter Jeh | R4 K3, shift | R3 K2, long-press `ش` | pending | |
++| 19 | س | U+0633 | Arabic Letter Seen | R2 K2, base | R2 K2, base | pending | |
++| 20 | ش | U+0634 | Arabic Letter Sheen | R2 K1, base | R3 K2, base | pending | |
++| 21 | ص | U+0635 | Arabic Letter Sad | R1 K2, base | R2 K2, long-press `س` | pending | |
++| 22 | ض | U+0636 | Arabic Letter Dad | R1 K1, base | R2 K7, long-press `ج` | pending | |
++| 23 | ط | U+0637 | Arabic Letter Tah | R3 K1, base | R3 K4, base | pending | |
++| 24 | ظ | U+0638 | Arabic Letter Zah | R3 K1, shift | R3 K4, long-press `ط` | pending | |
++| 25 | ع | U+0639 | Arabic Letter Ain | R1 K7, base | R1 K3, base | pending | |
++| 26 | غ | U+063A | Arabic Letter Ghain | R1 K6, base | R2 K5, long-press `گ` | pending | |
++| 27 | ف | U+0641 | Arabic Letter Feh | R1 K5, base | R2 K4, base | pending | |
++| 28 | ق | U+0642 | Arabic Letter Qaf | R1 K4, base | R1 K1, base | pending | |
++| 29 | ک | U+06A9 | Arabic Letter Keheh | R2 K10, base | R2 K8, base | pending | |
++| 30 | گ | U+06AF | Arabic Letter Gaf | R3 K8, base | R2 K5, base | pending | |
++| 31 | ل | U+0644 | Arabic Letter Lam | R2 K5, base | R2 K9, base | pending | |
++| 32 | م | U+0645 | Arabic Letter Meem | R2 K9, base | R3 K7, base | pending | |
++| 33 | ن | U+0646 | Arabic Letter Noon | R2 K8, base | R3 K6, base | pending | |
++| 34 | ں | U+06BA | Arabic Letter Noon Ghunna | R4 K5, base | R3 K6, long-press `ن` | pending | |
++| 35 | و | U+0648 | Arabic Letter Waw | R3 K7, base | R1 K2, base | pending | |
++| 36 | ہ | U+06C1 | Arabic Letter Heh Goal | R4 K6, base | R1 K9, long-press `ه` | pending | |
++| 37 | ھ | U+06BE | Arabic Letter Heh Doachashmee | R4 K6, shift | R1 K9, long-press `ه` | pending | |
++| 38 | ء | U+0621 | Arabic Letter Hamza | R4 K7, base | R1 K7, base | pending | |
++| 39 | ی | U+06CC | Arabic Letter Farsi Yeh | R2 K3, base | R1 K8, base | pending | |
++| 40 | ے | U+06D2 | Arabic Letter Yeh Barree | R4 K8, base | R1 K6, base | pending | |
++| 41 | ۓ | U+06D3 | Arabic Letter Yeh Barree With Hamza Above | R4 K8, shift | R1 K6, long-press `ے` | pending | |
++| 42 | ۂ | U+06C2 | Arabic Letter Heh Goal With Hamza Above | R4 K7, shift | R1 K9, long-press `ه` | pending | |
++| 43 | ئ | U+0626 | Arabic Letter Yeh With Hamza Above | R2 K3, shift | R1 K8, long-press `ی` | pending | |
++| 44 | ؤ | U+0624 | Arabic Letter Waw With Hamza Above | R3 K7, shift | R1 K2, long-press `و` | pending | |
++| 45 | ، | U+060C | Arabic Comma | bottom row, base | bottom row, base | pending | |
++| 46 | ؟ | U+061F | Arabic Question Mark | R4 K9, shift | bottom row, long-press `.` | pending | |
++| 47 | ۔ | U+06D4 | Arabic Full Stop | R4 K9, base | bottom row, long-press `.` | pending | |
++| 48 | ۰ | U+06F0 | Extended Arabic-Indic Digit Zero | number row / symbols top row K10 (`persian`) | number row / symbols top row K10 (`persian`) | pending | |
++| 49 | ۱ | U+06F1 | Extended Arabic-Indic Digit One | number row / symbols top row K1 (`persian`) | number row / symbols top row K1 (`persian`) | pending | |
++| 50 | ۲ | U+06F2 | Extended Arabic-Indic Digit Two | number row / symbols top row K2 (`persian`) | number row / symbols top row K2 (`persian`) | pending | |
++| 51 | ۳ | U+06F3 | Extended Arabic-Indic Digit Three | number row / symbols top row K3 (`persian`) | number row / symbols top row K3 (`persian`) | pending | |
++| 52 | ۴ | U+06F4 | Extended Arabic-Indic Digit Four | number row / symbols top row K4 (`persian`) | number row / symbols top row K4 (`persian`) | pending | |
++| 53 | ۵ | U+06F5 | Extended Arabic-Indic Digit Five | number row / symbols top row K5 (`persian`) | number row / symbols top row K5 (`persian`) | pending | |
++| 54 | ۶ | U+06F6 | Extended Arabic-Indic Digit Six | number row / symbols top row K6 (`persian`) | number row / symbols top row K6 (`persian`) | pending | |
++| 55 | ۷ | U+06F7 | Extended Arabic-Indic Digit Seven | number row / symbols top row K7 (`persian`) | number row / symbols top row K7 (`persian`) | pending | |
++| 56 | ۸ | U+06F8 | Extended Arabic-Indic Digit Eight | number row / symbols top row K8 (`persian`) | number row / symbols top row K8 (`persian`) | pending | |
++| 57 | ۹ | U+06F9 | Extended Arabic-Indic Digit Nine | number row / symbols top row K9 (`persian`) | number row / symbols top row K9 (`persian`) | pending | |
++
++## Sign-off
++
++| Linguist | Date | Verdict |
++|---|---|---|
++| | | pending |

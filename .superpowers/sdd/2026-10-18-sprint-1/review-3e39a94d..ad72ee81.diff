@@ -1,0 +1,734 @@
+# Review package: 3e39a94d..HEAD
+
+## Commits
+ad72ee81 feat(analytics): event catalog, limits test and batched consent-aware relay
+
+## Files changed
+ app/build.gradle.kts                               |  1 +
+ .../com/manjul/aikeyboard/FlorisApplication.kt     | 14 ++++
+ core/analytics/build.gradle.kts                    | 24 ++++++
+ .../aikeyboard/core/analytics/AnalyticsEvent.kt    |  9 ++
+ .../aikeyboard/core/analytics/AnalyticsSink.kt     | 10 +++
+ .../aikeyboard/core/analytics/BatchingRelay.kt     | 68 +++++++++++++++
+ .../manjul/aikeyboard/core/analytics/Buckets.kt    | 27 ++++++
+ .../aikeyboard/core/analytics/EventCatalog.kt      | 98 ++++++++++++++++++++++
+ .../manjul/aikeyboard/core/analytics/LogcatSink.kt | 17 ++++
+ .../manjul/aikeyboard/core/analytics/NoopSink.kt   | 11 +++
+ .../aikeyboard/core/analytics/SessionSampler.kt    | 24 ++++++
+ .../aikeyboard/core/analytics/BatchingRelayTest.kt | 91 ++++++++++++++++++++
+ .../aikeyboard/core/analytics/BucketsTest.kt       | 32 +++++++
+ .../core/analytics/EventCatalogLimitsTest.kt       | 62 ++++++++++++++
+ .../core/analytics/SessionSamplerTest.kt           | 24 ++++++
+ docs/FORK_PATCHES.md                               |  2 +
+ settings.gradle.kts                                |  2 +
+ 17 files changed, 516 insertions(+)
+
+## Diff
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index d2bfcd22..8fed54c3 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -266,20 +266,21 @@ dependencies {
+ 
+     // FORK(S0-ads): ads stack for app Activities only. The IME code in this module must not use it
+     // (ImeAdIsolationTest; TRD §2.2, §11.1). Nothing calls it yet.
+     implementation(projects.core.ads)
+ 
+     // FORK(S1-policy): fork settings store and the sensitive-field policy that FlorisImeService evaluates
+     implementation(projects.core.datastore)
+     implementation(projects.ime.policy)
+     // FORK(S1-clipboard): clipboard sensitivity classifier used by the capture gate
+     implementation(projects.core.privacy)
++    implementation(projects.core.analytics) // FORK(S1-analytics): event catalog and relay
+ 
+     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
+     lintChecks(projects.lintRules)
+ 
+     testImplementation(libs.kotlin.test.junit5)
+     // FORK(S1-policy): Robolectric (JUnit 4) tests run on the JUnit 5 platform through the vintage engine
+     testImplementation(platform(libs.junit.bom))
+     testImplementation(libs.junit4)
+     testImplementation(libs.robolectric)
+     testImplementation(libs.kotlinx.coroutines.test)
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+index 43d5e8dc..11328af1 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+@@ -45,20 +45,24 @@ import com.manjul.aikeyboard.lib.ext.ExtensionManager
+ import dev.patrickgold.jetpref.datastore.runtime.initAndroid
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.launch
+ import org.florisboard.lib.kotlin.io.deleteContentsRecursively
+ import org.florisboard.lib.kotlin.tryOrNull
+ import org.florisboard.libnative.dummyAdd
+ // FORK(S1-policy): import for the fork settings store
+ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++// FORK(S1-analytics): imports for the analytics relay
++import com.manjul.aikeyboard.core.analytics.BatchingRelay
++import com.manjul.aikeyboard.core.analytics.LogcatSink
++import com.manjul.aikeyboard.core.analytics.NoopSink
+ import java.lang.ref.WeakReference
+ 
+ /**
+  * Global weak reference for the [FlorisApplication] class. This is needed as in certain scenarios an application
+  * reference is needed, but the Android framework hasn't finished setting up
+  */
+ private var FlorisApplicationReference = WeakReference<FlorisApplication?>(null)
+ 
+ @Suppress("unused")
+ class FlorisApplication : Application() {
+@@ -79,20 +83,30 @@ class FlorisApplication : Application() {
+     val clipboardManager = lazy { ClipboardManager(this) }
+     val editorInstance = lazy { EditorInstance(this) }
+     val extensionManager = lazy { ExtensionManager(this) }
+     val glideTypingManager = lazy { GlideTypingManager(this) }
+     val keyboardManager = lazy { KeyboardManager(this) }
+     val nlpManager = lazy { NlpManager(this) }
+     val subtypeManager = lazy { SubtypeManager(this) }
+     val themeManager = lazy { ThemeManager(this) }
+     // FORK(S1-policy): fork-owned settings (DataStore), read by the policy controller
+     val featureSettingsStore = lazy { FeatureSettingsStore(this) }
++    // FORK(S1-analytics): batched, consent-aware analytics relay (Logcat in debug, no-op in release)
++    val analytics = lazy {
++        BatchingRelay(
++            sink = if (BuildConfig.DEBUG) LogcatSink else NoopSink,
++            clock = System::currentTimeMillis,
++            scope = scope,
++            optOut = { featureSettingsStore.value.current.analyticsOptOut },
++            policy = { FlorisImeService.policyControllerOrNull()?.decision?.value },
++        )
++    }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         FlorisApplicationReference = WeakReference(this)
+         try {
+             Flog.install(
+                 context = this,
+                 isFloggingEnabled = BuildConfig.DEBUG,
+                 flogTopics = LogTopic.ALL,
+                 flogLevels = Flog.LEVEL_ALL,
+diff --git a/core/analytics/build.gradle.kts b/core/analytics/build.gradle.kts
+new file mode 100644
+index 00000000..4c8d0691
+--- /dev/null
++++ b/core/analytics/build.gradle.kts
+@@ -0,0 +1,24 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++// :core:analytics (PRD §12): event catalog with the §12 limits and a batched, consent-aware relay.
++// No Firebase yet: debug builds use LogcatSink, release builds NoopSink.
++
++plugins {
++    alias(libs.plugins.aikeyboard.android.library)
++}
++
++android {
++    namespace = "com.manjul.aikeyboard.core.analytics"
++}
++
++dependencies {
++    api(libs.kotlinx.coroutines)
++    api(projects.ime.policy)
++
++    testImplementation(libs.kotlinx.coroutines.test)
++    testImplementation(libs.junit4)
++    testRuntimeOnly(libs.junit.vintage.engine)
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEvent.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEvent.kt
+new file mode 100644
+index 00000000..80171f4c
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEvent.kt
+@@ -0,0 +1,9 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++/** Param values are enums, buckets, language tags or booleans only; never user content (PRD §12). */
++data class AnalyticsEvent(val name: String, val params: Map<String, Any>)
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsSink.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsSink.kt
+new file mode 100644
+index 00000000..669a93bd
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsSink.kt
+@@ -0,0 +1,10 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++interface AnalyticsSink {
++    fun log(event: AnalyticsEvent)
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt
+new file mode 100644
+index 00000000..2a933e24
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt
+@@ -0,0 +1,68 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.launch
++
++/**
++ * Batches events and flushes to [sink] at most once per 60 s (PRD FR-35 AC2). The first event of a batch
++ * schedules the flush at its time + 60 s; later events join that batch. Opt-out drops everything; under a
++ * minimal policy only `ime_session_start` with `is_sensitive=true` passes.
++ */
++class BatchingRelay(
++    private val sink: AnalyticsSink,
++    private val clock: () -> Long,
++    private val scope: CoroutineScope,
++    private val optOut: () -> Boolean,
++    private val policy: () -> PolicyDecision?,
++) {
++    private val lock = Any()
++    private val pending = ArrayList<AnalyticsEvent>()
++    private var flushJob: Job? = null
++
++    fun log(event: AnalyticsEvent) {
++        if (optOut()) return
++        if (policy()?.analyticsMinimal == true && !isSensitiveSessionStart(event)) return
++        synchronized(lock) {
++            pending += event
++            if (flushJob == null) {
++                val deadline = clock() + FLUSH_INTERVAL_MS
++                flushJob = scope.launch {
++                    while (true) {
++                        val remaining = deadline - clock()
++                        if (remaining <= 0) break
++                        delay(remaining)
++                    }
++                    flushNow()
++                }
++            }
++        }
++    }
++
++    /** Sends the pending batch now (e.g. on background). Re-checks opt-out. */
++    fun flushNow() {
++        val batch: List<AnalyticsEvent>
++        synchronized(lock) {
++            batch = ArrayList(pending)
++            pending.clear()
++            flushJob?.cancel()
++            flushJob = null
++        }
++        if (optOut()) return
++        batch.forEach(sink::log)
++    }
++
++    private fun isSensitiveSessionStart(e: AnalyticsEvent) =
++        e.name == EventCatalog.IME_SESSION_START && e.params["is_sensitive"] == true
++
++    private companion object {
++        const val FLUSH_INTERVAL_MS = 60_000L
++    }
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/Buckets.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/Buckets.kt
+new file mode 100644
+index 00000000..61a772af
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/Buckets.kt
+@@ -0,0 +1,27 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++object Buckets {
++    fun seconds(s: Long): String = when {
++        s < 5 -> "0-5"
++        s < 15 -> "5-15"
++        s < 30 -> "15-30"
++        s < 60 -> "30-60"
++        s < 300 -> "60-300"
++        else -> "300+"
++    }
++
++    fun duration(ms: Long): String = seconds(ms / 1000)
++
++    fun words(n: Int): String = when {
++        n <= 0 -> "0"
++        n <= 5 -> "1-5"
++        n <= 20 -> "6-20"
++        n <= 50 -> "21-50"
++        else -> "51+"
++    }
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt
+new file mode 100644
+index 00000000..4b9932fd
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt
+@@ -0,0 +1,98 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++/**
++ * PRD §12 events used so far. Factories take enums, buckets, language tags and booleans only, so no
++ * event can carry text, package names or keystroke counts.
++ */
++object EventCatalog {
++    const val MAX_NAME = 40
++    const val MAX_PARAMS = 25
++    const val MAX_KEY = 40
++    const val MAX_VALUE = 100
++
++    const val ONBOARDING_START = "onboarding_start"
++    const val ONBOARDING_STEP_VIEW = "onboarding_step_view"
++    const val IME_ENABLED = "ime_enabled"
++    const val IME_SELECTED = "ime_selected"
++    const val LANGUAGES_SET = "languages_set"
++    const val ONBOARDING_COMPLETE = "onboarding_complete"
++    const val IME_SESSION_START = "ime_session_start"
++    const val FIRST_DICTATION = "first_dictation"
++    const val VOICE_SESSION_START = "voice_session_start"
++    const val VOICE_SESSION_END = "voice_session_end"
++    const val VOICE_PERMISSION_RESULT = "voice_permission_result"
++    const val VOICE_UNAVAILABLE = "voice_unavailable"
++    const val PRIVACY_PRIVATE_APP_ADD = "privacy_private_app_add"
++
++    val paramRegistry: Map<String, Set<String>> = mapOf(
++        ONBOARDING_START to setOf("source"),
++        ONBOARDING_STEP_VIEW to setOf("step"),
++        IME_ENABLED to setOf("seconds_since_start_bucket"),
++        IME_SELECTED to setOf("seconds_since_start_bucket"),
++        LANGUAGES_SET to setOf("count", "has_rtl"),
++        ONBOARDING_COMPLETE to setOf("skipped"),
++        IME_SESSION_START to setOf("subtype", "is_sensitive"),
++        FIRST_DICTATION to setOf("lang"),
++        VOICE_SESSION_START to setOf("lang", "engine"),
++        VOICE_SESSION_END to setOf("duration_bucket", "words_bucket", "end_reason", "error_code"),
++        VOICE_PERMISSION_RESULT to setOf("granted"),
++        VOICE_UNAVAILABLE to setOf("reason"),
++        PRIVACY_PRIVATE_APP_ADD to emptySet(),
++    )
++
++    val allNames: List<String> = paramRegistry.keys.toList()
++
++    private fun event(name: String, vararg params: Pair<String, Any>): AnalyticsEvent {
++        val allowed = paramRegistry.getValue(name)
++        val map = LinkedHashMap<String, Any>()
++        for ((k, v) in params) {
++            require(k in allowed && k.length <= MAX_KEY) { "param not registered for $name" }
++            map[k] = if (v is String) v.take(MAX_VALUE) else v
++        }
++        return AnalyticsEvent(name, map)
++    }
++
++    fun onboardingStart(source: String) = event(ONBOARDING_START, "source" to source)
++
++    /** [step] is "1", "2", "3" or "try". */
++    fun onboardingStepView(step: String) = event(ONBOARDING_STEP_VIEW, "step" to step)
++
++    fun imeEnabled(secondsBucket: String) = event(IME_ENABLED, "seconds_since_start_bucket" to secondsBucket)
++
++    fun imeSelected(secondsBucket: String) = event(IME_SELECTED, "seconds_since_start_bucket" to secondsBucket)
++
++    fun languagesSet(count: Int, hasRtl: Boolean) = event(LANGUAGES_SET, "count" to count, "has_rtl" to hasRtl)
++
++    fun onboardingComplete(skipped: Boolean) = event(ONBOARDING_COMPLETE, "skipped" to skipped)
++
++    fun imeSessionStart(subtype: String, isSensitive: Boolean) =
++        event(IME_SESSION_START, "subtype" to subtype, "is_sensitive" to isSensitive)
++
++    fun firstDictation(lang: String) = event(FIRST_DICTATION, "lang" to lang)
++
++    /** [engine] is system_on_device, system_default or whisper. */
++    fun voiceSessionStart(lang: String, engine: String) =
++        event(VOICE_SESSION_START, "lang" to lang, "engine" to engine)
++
++    /** [endReason] is user, silence, error, cap or field_change. */
++    fun voiceSessionEnd(durationBucket: String, wordsBucket: String, endReason: String, errorCode: Int?): AnalyticsEvent {
++        val base = arrayListOf<Pair<String, Any>>(
++            "duration_bucket" to durationBucket,
++            "words_bucket" to wordsBucket,
++            "end_reason" to endReason,
++        )
++        if (errorCode != null) base += "error_code" to errorCode
++        return event(VOICE_SESSION_END, *base.toTypedArray())
++    }
++
++    fun voicePermissionResult(granted: Boolean) = event(VOICE_PERMISSION_RESULT, "granted" to granted)
++
++    fun voiceUnavailable(reason: String) = event(VOICE_UNAVAILABLE, "reason" to reason)
++
++    fun privacyPrivateAppAdd() = event(PRIVACY_PRIVATE_APP_ADD)
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/LogcatSink.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/LogcatSink.kt
+new file mode 100644
+index 00000000..ca65b0cf
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/LogcatSink.kt
+@@ -0,0 +1,17 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++import android.util.Log
++
++/** Debug-only sink. The catalog guarantees params carry no user content. */
++object LogcatSink : AnalyticsSink {
++    const val TAG = "AiKbAnalytics"
++
++    override fun log(event: AnalyticsEvent) {
++        Log.d(TAG, "${event.name} ${event.params}")
++    }
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/NoopSink.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/NoopSink.kt
+new file mode 100644
+index 00000000..0e6e11f5
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/NoopSink.kt
+@@ -0,0 +1,11 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++/** Release sink until a backend is wired. */
++object NoopSink : AnalyticsSink {
++    override fun log(event: AnalyticsEvent) = Unit
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/SessionSampler.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/SessionSampler.kt
+new file mode 100644
+index 00000000..fea8d7d4
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/SessionSampler.kt
+@@ -0,0 +1,24 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++/** Lets one `ime_session_start` through per 10 minutes (PRD §12). */
++class SessionSampler(private val clock: () -> Long) {
++    private var last: Long? = null
++
++    @Synchronized
++    fun shouldLogImeSession(): Boolean {
++        val now = clock()
++        val prev = last
++        if (prev != null && now - prev < INTERVAL_MS) return false
++        last = now
++        return true
++    }
++
++    private companion object {
++        const val INTERVAL_MS = 10 * 60_000L
++    }
++}
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt
+new file mode 100644
+index 00000000..19099345
+--- /dev/null
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt
+@@ -0,0 +1,91 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.currentTime
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class BatchingRelayTest {
++    private class Recorder : AnalyticsSink {
++        val flushed = mutableListOf<AnalyticsEvent>()
++        override fun log(event: AnalyticsEvent) { flushed += event }
++    }
++
++    private fun TestScope.relay(
++        sink: AnalyticsSink,
++        optOut: () -> Boolean = { false },
++        policy: () -> PolicyDecision? = { null },
++    ) = BatchingRelay(sink, { currentTime }, this, optOut, policy)
++
++    @Test fun batchesIntoOneFlushAtSixtySeconds() = runTest {
++        val sink = Recorder()
++        val relay = relay(sink)
++        relay.log(EventCatalog.onboardingStart("launcher"))
++        advanceTimeBy(5_000)
++        relay.log(EventCatalog.onboardingStepView("1"))
++        advanceTimeBy(5_000)
++        relay.log(EventCatalog.onboardingStepView("2"))
++        advanceTimeBy(49_000) // t = 59 s
++        assertEquals(0, sink.flushed.size)
++        advanceTimeBy(1_001)
++        assertEquals(3, sink.flushed.size)
++        advanceTimeBy(120_000)
++        assertEquals(3, sink.flushed.size)
++    }
++
++    @Test fun nextEventAfterFlushStartsNewBatch() = runTest {
++        val sink = Recorder()
++        val relay = relay(sink)
++        relay.log(EventCatalog.privacyPrivateAppAdd())
++        advanceTimeBy(60_001)
++        relay.log(EventCatalog.privacyPrivateAppAdd())
++        advanceTimeBy(59_000)
++        assertEquals(1, sink.flushed.size)
++        advanceTimeBy(1_100)
++        assertEquals(2, sink.flushed.size)
++    }
++
++    @Test fun optOutDropsEverything() = runTest {
++        val sink = Recorder()
++        var out = true
++        val relay = relay(sink, optOut = { out })
++        relay.log(EventCatalog.privacyPrivateAppAdd())
++        advanceTimeBy(61_000)
++        assertEquals(0, sink.flushed.size)
++        out = false
++        relay.log(EventCatalog.privacyPrivateAppAdd())
++        out = true // opts out before the flush
++        advanceTimeBy(61_000)
++        assertEquals(0, sink.flushed.size)
++    }
++
++    @Test fun minimalPolicyOnlyPassesSensitiveSessionStart() = runTest {
++        val sink = Recorder()
++        val relay = relay(sink, policy = { PolicyDecision.Locked })
++        relay.log(EventCatalog.imeSessionStart("en", false))
++        relay.log(EventCatalog.voiceSessionStart("en", "whisper"))
++        relay.log(EventCatalog.imeSessionStart("en", true))
++        advanceTimeBy(61_000)
++        assertEquals(listOf(EventCatalog.imeSessionStart("en", true)), sink.flushed)
++    }
++
++    @Test fun flushNowSendsImmediatelyAndCancelsSchedule() = runTest {
++        val sink = Recorder()
++        val relay = relay(sink)
++        relay.log(EventCatalog.privacyPrivateAppAdd())
++        relay.flushNow()
++        assertEquals(1, sink.flushed.size)
++        advanceTimeBy(61_000)
++        assertEquals(1, sink.flushed.size)
++    }
++}
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BucketsTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BucketsTest.kt
+new file mode 100644
+index 00000000..3db5e5c9
+--- /dev/null
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BucketsTest.kt
+@@ -0,0 +1,32 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class BucketsTest {
++    @Test fun seconds() {
++        val cases = mapOf(
++            0L to "0-5", 4L to "0-5", 5L to "5-15", 14L to "5-15", 15L to "15-30", 29L to "15-30",
++            30L to "30-60", 59L to "30-60", 60L to "60-300", 299L to "60-300", 300L to "300+", 9999L to "300+",
++        )
++        cases.forEach { (s, b) -> assertEquals(b, Buckets.seconds(s), "seconds($s)") }
++    }
++
++    @Test fun duration() {
++        assertEquals("0-5", Buckets.duration(4_999))
++        assertEquals("5-15", Buckets.duration(5_000))
++        assertEquals("300+", Buckets.duration(300_000))
++    }
++
++    @Test fun words() {
++        val cases = mapOf(
++            0 to "0", 1 to "1-5", 5 to "1-5", 6 to "6-20", 20 to "6-20", 21 to "21-50", 50 to "21-50", 51 to "51+",
++        )
++        cases.forEach { (n, b) -> assertEquals(b, Buckets.words(n), "words($n)") }
++    }
++}
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt
+new file mode 100644
+index 00000000..6aaaf783
+--- /dev/null
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt
+@@ -0,0 +1,62 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++class EventCatalogLimitsTest {
++    private val all = listOf(
++        EventCatalog.onboardingStart("launcher"),
++        EventCatalog.onboardingStepView("try"),
++        EventCatalog.imeEnabled("5-15"),
++        EventCatalog.imeSelected("60-300"),
++        EventCatalog.languagesSet(3, true),
++        EventCatalog.onboardingComplete(false),
++        EventCatalog.imeSessionStart("en-US", false),
++        EventCatalog.firstDictation("ur"),
++        EventCatalog.voiceSessionStart("hi", "whisper"),
++        EventCatalog.voiceSessionEnd("5-15", "6-20", "error", 7),
++        EventCatalog.voiceSessionEnd("5-15", "6-20", "user", null),
++        EventCatalog.voicePermissionResult(true),
++        EventCatalog.voiceUnavailable("no_recognizer"),
++        EventCatalog.privacyPrivateAppAdd(),
++    )
++
++    @Test fun limitsHold() {
++        val nameRe = Regex("^[a-z][a-z0-9_]{0,39}$")
++        for (e in all) {
++            assertTrue(nameRe.matches(e.name), e.name)
++            assertTrue(e.params.size <= 25)
++            val registry = EventCatalog.paramRegistry.getValue(e.name)
++            for ((k, v) in e.params) {
++                assertTrue(k.length <= 40, k)
++                assertTrue(k in registry, "${e.name}.$k")
++                if (v is String) assertTrue(v.length <= 100)
++            }
++        }
++    }
++
++    @Test fun longStringValuesAreClamped() {
++        assertEquals(100, EventCatalog.firstDictation("x".repeat(500)).params["lang"].toString().length)
++    }
++
++    @Test fun nullErrorCodeIsOmitted() {
++        assertFalse("error_code" in EventCatalog.voiceSessionEnd("0-5", "0", "user", null).params)
++    }
++
++    @Test fun namesMatchPrd() {
++        val expected = setOf(
++            "onboarding_start", "onboarding_step_view", "ime_enabled", "ime_selected", "languages_set",
++            "onboarding_complete", "ime_session_start", "first_dictation", "voice_session_start",
++            "voice_session_end", "voice_permission_result", "voice_unavailable", "privacy_private_app_add",
++        )
++        assertEquals(expected, EventCatalog.allNames.toSet())
++        assertFalse("first_keystroke" in EventCatalog.allNames)
++    }
++}
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/SessionSamplerTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/SessionSamplerTest.kt
+new file mode 100644
+index 00000000..43d1bc7e
+--- /dev/null
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/SessionSamplerTest.kt
+@@ -0,0 +1,24 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++import kotlin.test.Test
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++class SessionSamplerTest {
++    @Test fun oncePerTenMinutes() {
++        var now = 1_000L
++        val s = SessionSampler { now }
++        assertTrue(s.shouldLogImeSession())
++        now += 9 * 60_000L
++        assertFalse(s.shouldLogImeSession())
++        now = 1_000L + 10 * 60_000L
++        assertTrue(s.shouldLogImeSession())
++        now += 1
++        assertFalse(s.shouldLogImeSession())
++    }
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index e83bebb8..f6bd3959 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -42,20 +42,22 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/typing/TypingScreen.kt` | S0-branding | Auto-space-punctuation card: feedback request and link to upstream's GitHub discussion removed; the experimental-feature warning stays |
+ | Deleted: `app/src/main/res/drawable/ic_app_icon_{stable,beta,debug}_{foreground,monochrome}.xml`, `app/src/main/res/mipmap-*dpi/ic_app_icon_{stable,beta,debug}{,_round}.png`, `app/src/main/ic_app_icon_{stable,preview,debug}-playstore.png` | S0-branding | FlorisBoard launcher foreground/monochrome vectors, legacy PNG mipmaps and Play Store icons (see the `mipmap-anydpi-v26` row) |
+ | Deleted: `app/src/main/assets/license/project_license.txt` | S0-licences | Copy of LICENSE replaced by the build-generated `assets/licenses/` (see the `ProjectLicenseScreen.kt` row) |
+ | `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-ci | Upstream v0.5.2 imports `org.florisboard.lib.color.schemes.yellow{Light,Dark}Scheme`, which does not exist in `:lib:color` at that tag, so the `:lib:snygg` unit tests did not compile. The two fixed schemes are now built with `:lib:color`'s `neutralDynamicColorScheme` (yellow 500 seed); all assertions are unchanged |
+ | Deleted: `fastlane/`, `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `crowdin.yml`, `ROADMAP.md`, `AI_POLICY.md`, `LANGUAGEPACKS*.md`, `.idea/icon.svg` | S0-branding | Upstream store listings, project-process docs, CI that uses FlorisBoard secrets, and the FlorisBoard logo. `README.md` was rewritten for the fork |
+ | `build.gradle.kts`, `settings.gradle.kts`, `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/res/xml/backup_rules.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/{app/ext/AddonBox,app/settings/about/AboutScreen,app/settings/about/ProjectLicenseScreen,app/settings/typing/TypingScreen,app/setup/SetupScreen,lib/crashutility/CrashDialogActivity,lib/crashutility/CrashUtility}.kt`, `lib/compose/src/main/kotlin/org/florisboard/lib/compose/Resources.kt`, `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-licences, S0-ci | Markers only, for the per-hunk marker check: the "Modified by AI Keyboard contributors, 2026" header line carries `FORK(S0-licences)`; removed imports and removed lines get a one-line `FORK(<ticket>)` comment at the deletion point; `AndroidManifest.xml` moves `android:name` onto the `<application` line and `networkSecurityConfig` next to `dataExtractionRules` so the marker sits within 3 lines of both edits. No behaviour change |
+ | `settings.gradle.kts` | S1-policy | `include(":core:datastore")` |
+ | `gradle/libs.versions.toml` | S1-policy | `androidx-datastore` 1.2.1 (latest stable on Google Maven, 2026-10-18), `robolectric` 4.17 (latest on Maven Central), `junit-vintage-engine` (version from the junit-bom), inside the `# --- AI Keyboard ---` blocks |
+ | `app/build.gradle.kts` | S1-policy | `implementation(projects.core.datastore)`, `implementation(projects.ime.policy)`; Robolectric, JUnit 4, junit-vintage and coroutines-test as test dependencies; applies `gradle/robolectric-offline.gradle.kts` (new file: resolves Robolectric's android-all jar through Gradle so tests need no download into the home directory) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-policy | Lazy `featureSettingsStore`, `Context.featureSettingsStore()` accessor; loading starts in `init()` |
++| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-analytics | Lazy `analytics` (`BatchingRelay`): `LogcatSink` in debug, `NoopSink` in release; opt-out from `featureSettingsStore`, policy from the IME service's controller |
++| `settings.gradle.kts`, `app/build.gradle.kts` | S1-analytics | `include(":core:analytics")`, `implementation(projects.core.analytics)` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy | Creates an `ImePolicyController` in `onCreate` (restriction listener re-applies the decision to `EditorInstance`; keyguard read on every evaluation, no forced packages until S3); calls it from `onStartInput`, `onFinishInputView`, `onFinishInput`, `onDestroy`; companion `policyController()` accessor. `onStartInputView` needs no call: the decision is made in `onStartInput`, which always precedes it |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt` | S1-policy | `isIncognitoMode` is also true when the policy decision does not allow learning; composing is off when it does not allow the suggestion strip |
+ | `app/src/main/AndroidManifest.xml` | S1-policy | `android:directBootAware="false"` on the IME and spell-checker services (was `true` / absent): the policy and settings store live in credential-encrypted storage. Guarded by `ManifestHardeningTest`. The attributes share the `<service` line so the marker sits within 3 lines of each edit (per-hunk marker check); no behaviour change from that |
+ | `settings.gradle.kts` | S1-clipboard | `include(":core:privacy")` |
+ | `app/build.gradle.kts` | S1-clipboard | `implementation(projects.core.privacy)` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt` | S1-clipboard | Takes a `ClipboardCaptureGate` (fail-closed policy gate plus sensitivity classifier): `onPrimaryClipChanged` returns before `fromClipData`/URI clone for blocked or sensitive clips, `insertOrMoveBeginning` re-checks; `enforceExpiryDate` deletes unpinned items older than the TTL through the DAO |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt` | S1-clipboard | `deleteUnpinnedOlderThan` DAO query; `fallbackToDestructiveMigration()` removed from both clipboard databases (schema versions unchanged, so no migration is needed) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt` | S1-clipboard | `historyAutoCleanOldEnabled` default true, `historyAutoCleanOldAfter` default 1440 (minutes, 24 h) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt` | S1-clipboard | Auto-clean slider max 120 -> 1440 minutes so the 24 h default is reachable |
+ | `app/src/main/res/xml/method.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt` | S1-subtypes | `method.xml`: the single placeholder subtype is replaced by the 8 MVP subtypes (en-US, es-ES, fr-FR, pt-BR, ar, ur-PK, id, hi-IN; labels in `strings_fork.xml`). `SubtypeManager.ensureDefaultSubtypes(tags)` adds missing presets by primary locale, in order, idempotently; called from onboarding only, never on IME start |
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+index 8e579209..4e74df72 100644
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -57,13 +57,15 @@ include(":lib:snygg")
+ 
+ // FORK(S0-modules): AI Keyboard modules (TRD §2.2). The upstream IME stays in :app for now.
+ include(":core:common")
+ // FORK(S0-ads): app-process-only ads module (consent, placement registry, caps); never used by the IME
+ include(":core:ads")
+ include(":ime:policy")
+ // FORK(S1-policy): feature settings store (DataStore)
+ include(":core:datastore")
+ // FORK(S1-clipboard): clipboard sensitivity classifier
+ include(":core:privacy")
++// FORK(S1-analytics): event catalog and batched consent-aware relay
++include(":core:analytics")
+ 
+ // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
+ include(":lint-rules")

@@ -1,0 +1,303 @@
+# Review package: c2afee20..HEAD
+
+## Commits
+584c0ecc fix(subtypes): address review for task 4
+
+## Files changed
+ .../manjul/aikeyboard/fork/subtypes/MvpSubtypes.kt | 17 +++++++++++
+ .../manjul/aikeyboard/ime/core/SubtypeManager.kt   | 22 +++++++--------
+ app/src/main/res/xml/method.xml                    |  1 -
+ .../fork/subtypes/DefaultSubtypesTest.kt           | 33 ++++++++++++++++++----
+ .../fork/subtypes/MethodXmlSubtypesTest.kt         | 10 +++++--
+ 5 files changed, 63 insertions(+), 20 deletions(-)
+
+## Diff
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/subtypes/MvpSubtypes.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/subtypes/MvpSubtypes.kt
+index eebc0a4e..7329ab11 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/subtypes/MvpSubtypes.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/subtypes/MvpSubtypes.kt
+@@ -1,20 +1,37 @@
+ /*
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.fork.subtypes
+ 
++import com.manjul.aikeyboard.ime.core.Subtype
++import com.manjul.aikeyboard.ime.core.SubtypePreset
+ import com.manjul.aikeyboard.lib.FlorisLocale
+ 
+ /** Language tags of the eight MVP subtypes, in picker order. Mirrors the entries in `res/xml/method.xml`. */
+ val MVP_LANGUAGE_TAGS = listOf("en-US", "es-ES", "fr-FR", "pt-BR", "ar", "ur-PK", "id", "hi-IN")
+ 
+ /**
+  * Pure decision behind `SubtypeManager.ensureDefaultSubtypes`: the tags from [wanted] (in order, without
+  * duplicates) whose primary locale is not in [existing].
+  */
+ fun missingSubtypeTags(existing: List<FlorisLocale>, wanted: List<String>): List<String> {
+     val taken = existing.toMutableSet()
+     return wanted.filter { taken.add(FlorisLocale.fromTag(it)) }
+ }
++
++/** Preset for [locale]: exact locale match first, then any preset of the same language. */
++fun findPreset(presets: List<SubtypePreset>?, locale: FlorisLocale): SubtypePreset? =
++    presets?.find { it.locale == locale } ?: presets?.find { it.locale.language == locale.language }
++
++/**
++ * [current] plus one subtype per missing tag of [tags], built from [presets] in tag order. Tags without a
++ * preset are skipped. New ids are [baseId], [baseId] + 1, ... Returns [current] when nothing is added.
++ */
++fun buildSeededList(current: List<Subtype>, presets: List<SubtypePreset>?, tags: List<String>, baseId: Long): List<Subtype> {
++    val added = missingSubtypeTags(current.map { it.primaryLocale }, tags)
++        .mapNotNull { findPreset(presets, FlorisLocale.fromTag(it))?.toSubtype() }
++        .mapIndexed { index, subtype -> subtype.copy(id = baseId + index) }
++    return if (added.isEmpty()) current else current + added
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt
+index 30120f23..66de11b6 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt
+@@ -11,29 +11,31 @@
+  * distributed under the License is distributed on an "AS IS" BASIS,
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
+ 
+ package com.manjul.aikeyboard.ime.core
+ 
+ import android.content.Context
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
+-import com.manjul.aikeyboard.fork.subtypes.missingSubtypeTags // FORK(S1-subtypes)
++import com.manjul.aikeyboard.fork.subtypes.buildSeededList // FORK(S1-subtypes)
++import com.manjul.aikeyboard.fork.subtypes.findPreset // FORK(S1-subtypes)
+ import com.manjul.aikeyboard.ime.keyboard.CurrencySet
+ import com.manjul.aikeyboard.keyboardManager
+ import com.manjul.aikeyboard.lib.FlorisLocale
+ import com.manjul.aikeyboard.lib.devtools.flogDebug
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update // FORK(S1-subtypes)
+ import kotlinx.coroutines.launch
+ import kotlinx.serialization.json.Json
+ import org.florisboard.lib.kotlin.collectLatestIn
+ 
+ val SubtypeJsonConfig = Json {
+     encodeDefaults = true
+     ignoreUnknownKeys = true
+     isLenient = false
+ }
+ 
+@@ -110,29 +112,27 @@ class SubtypeManager(context: Context) {
+         return true
+     }
+ 
+     // FORK(S1-subtypes): seeds the MVP subtypes from onboarding; never called on IME start, so it cannot reset user choices
+     /**
+      * Adds a subtype built from each tag's preset unless a subtype with that primary locale exists. Keeps the
+      * order of [languageTags], skips tags without a preset, and is idempotent. The new list is published and
+      * persisted once, so later calls (and [subtypes] readers) see it immediately.
+      */
+     fun ensureDefaultSubtypes(languageTags: List<String>) {
+-        val current = subtypes
++        val presets = keyboardManager.resources.subtypePresets.value
+         val baseId = System.currentTimeMillis()
+-        val added = missingSubtypeTags(current.map { it.primaryLocale }, languageTags)
+-            .mapNotNull { getSubtypePresetForLocale(FlorisLocale.fromTag(it))?.toSubtype() }
+-            .mapIndexed { index, subtype -> subtype.copy(id = baseId + index) }
+-        if (added.isEmpty()) return
+-        val newList = current + added
+-        subtypes = newList
+-        persistNewSubtypeList(newList)
++        var seeded: List<Subtype>? = null
++        _subtypesFlow.update { current ->
++            buildSeededList(current, presets, languageTags, baseId).also { seeded = it.takeIf { l -> l !== current } }
++        }
++        seeded?.let { persistNewSubtypeList(it) }
+     }
+ 
+     /**
+      * Gets the currency set from the given subtype and returns it. Falls back to a default one if the subtype does not
+      * exist.
+      *
+      * @return The currency set or a fallback.
+      */
+     fun getCurrencySet(subtypeToSearch: Subtype): CurrencySet {
+         return keyboardManager.resources.currencySets.value?.get(subtypeToSearch.currencySet) ?: CurrencySet.Fallback
+@@ -150,22 +150,22 @@ class SubtypeManager(context: Context) {
+     }
+ 
+     /**
+      * Gets the default system subtype for a given [locale].
+      *
+      * @param locale The locale of the default system subtype to get.
+      * @return The default system locale or null, if no matching default system subtype could be
+      *  found.
+      */
+     fun getSubtypePresetForLocale(locale: FlorisLocale): SubtypePreset? {
+-        val presets = keyboardManager.resources.subtypePresets.value
+-        return presets?.find { it.locale == locale } ?: presets?.find { it.locale.language == locale.language }
++        // FORK(S1-subtypes): lookup extracted to a pure function so it can be unit tested
++        return findPreset(keyboardManager.resources.subtypePresets.value, locale)
+     }
+ 
+     /**
+      * Modifies an existing subtype with the newly provided details. In order to determine which
+      * subtype should be updated, the id must be the same.
+      *
+      * @param subtypeToModify The subtype with the new details but same id.
+      */
+     fun modifySubtypeWithSameId(subtypeToModify: Subtype) {
+         val subtypeList = subtypes
+diff --git a/app/src/main/res/xml/method.xml b/app/src/main/res/xml/method.xml
+index 394cfecb..a590a6ee 100644
+--- a/app/src/main/res/xml/method.xml
++++ b/app/src/main/res/xml/method.xml
+@@ -1,21 +1,20 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <!-- FORK(S0-settings): settingsActivity points at the exported FlorisAppActivity; the SettingsLauncherAlias is disabled when the user hides the launcher icon, which broke the IME gear -->
+ <input-method xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools"
+     android:settingsActivity="com.manjul.aikeyboard.app.FlorisAppActivity"
+     android:supportsInlineSuggestions="true"
+     android:supportsSwitchingToNextInputMethod="true"
+     tools:targetApi="r">
+ 
+     <!-- FORK(S1-subtypes): the single upstream placeholder subtype is replaced by the 8 MVP subtypes (TRD FR-12) -->
+-    <!-- FORK(S1-subtypes) -->
+     <subtype
+         android:imeSubtypeLocale="en_US"
+         android:languageTag="en-US"
+         android:label="@string/subtype__en_us"
+         android:icon="@mipmap/floris_app_icon"
+         android:imeSubtypeMode="keyboard"
+         android:isAsciiCapable="true"
+         android:imeSubtypeExtraValue="AsciiCapable" />
+     <!-- FORK(S1-subtypes) -->
+     <subtype
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/subtypes/DefaultSubtypesTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/subtypes/DefaultSubtypesTest.kt
+index 6ab8328a..9251ea48 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/subtypes/DefaultSubtypesTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/subtypes/DefaultSubtypesTest.kt
+@@ -1,17 +1,18 @@
+ /*
+  * Copyright (C) 2026 AI Keyboard contributors
+  * Licensed under the Apache License, Version 2.0
+  */
+ 
+ package com.manjul.aikeyboard.fork.subtypes
+ 
++import com.manjul.aikeyboard.ime.core.Subtype
+ import com.manjul.aikeyboard.ime.core.SubtypeJsonConfig
+ import com.manjul.aikeyboard.ime.core.SubtypePreset
+ import com.manjul.aikeyboard.lib.FlorisLocale
+ import kotlinx.serialization.builtins.ListSerializer
+ import kotlinx.serialization.json.Json
+ import kotlinx.serialization.json.jsonArray
+ import kotlinx.serialization.json.jsonObject
+ import org.junit.Test
+ import java.io.File
+ import kotlin.test.assertEquals
+@@ -26,24 +27,22 @@ import kotlin.test.fail
+  */
+ class DefaultSubtypesTest {
+     private val presets: List<SubtypePreset> by lazy {
+         val file = listOf(File("src/main"), File("app/src/main"))
+             .map { File(it, "assets/ime/keyboard/org.florisboard.localization/extension.json") }
+             .firstOrNull { it.isFile } ?: fail("extension.json not found")
+         val array = Json.parseToJsonElement(file.readText()).jsonObject.getValue("subtypePresets").jsonArray
+         SubtypeJsonConfig.decodeFromJsonElement(ListSerializer(SubtypePreset.serializer()), array)
+     }
+ 
+-    private fun presetFor(tag: String): SubtypePreset? {
+-        val locale = FlorisLocale.fromTag(tag)
+-        return presets.find { it.locale == locale } ?: presets.find { it.locale.language == locale.language }
+-    }
++    private fun seed(current: List<Subtype>, vararg tags: String, baseId: Long = 1000) =
++        buildSeededList(current, presets, tags.toList(), baseId)
+ 
+     private fun locales(vararg tags: String) = tags.map { FlorisLocale.fromTag(it) }
+ 
+     @Test
+     fun `empty list gets the requested tags in order`() {
+         assertEquals(listOf("en-US", "ur-PK"), missingSubtypeTags(emptyList(), listOf("en-US", "ur-PK")))
+     }
+ 
+     @Test
+     fun `second call adds nothing`() {
+@@ -58,18 +57,40 @@ class DefaultSubtypesTest {
+         )
+     }
+ 
+     @Test
+     fun `duplicate tags are added once`() {
+         assertEquals(listOf("id"), missingSubtypeTags(emptyList(), listOf("id", "id")))
+     }
+ 
+     @Test
+     fun `every MVP tag has a preset`() {
+-        for (tag in MVP_LANGUAGE_TAGS) assertNotNull(presetFor(tag), "no preset for $tag")
++        for (tag in MVP_LANGUAGE_TAGS) assertNotNull(findPreset(presets, FlorisLocale.fromTag(tag)), "no preset for $tag")
+     }
+ 
+     @Test
+     fun `urdu preset uses the phonetic layout`() {
+-        assertEquals("org.florisboard.layouts:urdu_phonetic", presetFor("ur-PK")!!.preferred.characters.toString())
++        assertEquals("org.florisboard.layouts:urdu_phonetic", seed(emptyList(), "ur-PK").single().layoutMap.characters.toString())
++    }
++
++    @Test
++    fun `seeding twice yields two subtypes with unique ids in tag order`() {
++        val first = seed(emptyList(), "en-US", "ur-PK")
++        val second = seed(first, "en-US", "ur-PK", baseId = 5000)
++        assertEquals(second, first)
++        assertEquals(listOf("en-US", "ur-PK"), first.map { it.primaryLocale.languageTag() })
++        assertEquals(2, first.map { it.id }.toSet().size)
++    }
++
++    @Test
++    fun `seeding keeps existing subtypes and appends only the missing ones`() {
++        val existing = seed(emptyList(), "fr-FR")
++        val result = seed(existing, "en-US", "fr-FR", "id", baseId = 7000)
++        assertEquals(listOf("fr-FR", "en-US", "id"), result.map { it.primaryLocale.languageTag() })
++        assertEquals(existing.single(), result.first())
++    }
++
++    @Test
++    fun `tags without a preset are skipped`() {
++        assertEquals(emptyList(), seed(emptyList(), "xx-YY"))
+     }
+ }
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/subtypes/MethodXmlSubtypesTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/subtypes/MethodXmlSubtypesTest.kt
+index c4834889..9af5f755 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/subtypes/MethodXmlSubtypesTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/subtypes/MethodXmlSubtypesTest.kt
+@@ -50,17 +50,23 @@ class MethodXmlSubtypesTest {
+         val nonLatin = setOf("ar", "ur-PK", "hi-IN")
+         for (subtype in subtypes()) {
+             val tag = subtype.attr("languageTag")
+             val ascii = subtype.attr("isAsciiCapable") == "true"
+             if (tag in nonLatin) assertFalse(ascii, tag) else assertTrue(ascii, tag)
+         }
+     }
+ 
+     @Test
+     fun `label strings exist in strings_fork`() {
+-        val strings = File(mainDir, "res/values/strings_fork.xml").readText()
++        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder()
++            .parse(File(mainDir, "res/values/strings_fork.xml"))
++        val nodes = doc.getElementsByTagName("string")
++        val strings = (0 until nodes.length).associate {
++            val e = nodes.item(it) as Element
++            e.getAttribute("name") to e.textContent
++        }
+         for (subtype in subtypes()) {
+             val name = subtype.attr("label").removePrefix("@string/")
+-            assertTrue(strings.contains("name=\"$name\""), "missing string $name")
++            assertTrue(!strings[name].isNullOrBlank(), "missing or empty string $name")
+         }
+     }
+ }

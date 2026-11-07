@@ -63,4 +63,4 @@ target/
 *.pdb
 
 #plans
-!/.superpowers/sdd/2026-10-18-sprint-1/
+!/.superpowers/sdd/2026-10-18-sprint-1/*

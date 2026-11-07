@@ -1,0 +1,1290 @@
+# Review package: 3bb0d56b..dd4da202
+
+## Commits
+dd4da202 fix: address final review for sprint 1
+
+## Files changed
+ .../com/manjul/aikeyboard/FlorisImeService.kt      |  21 ++-
+ .../fork/analytics/ImeSessionStartReporter.kt      |  25 ++++
+ .../fork/clipboard/ClipboardPanelGate.kt           |  50 +++++++
+ .../aikeyboard/fork/policy/ImePolicyController.kt  |   2 +-
+ .../aikeyboard/fork/smartbar/PolicyQuickActions.kt |   7 +-
+ .../manjul/aikeyboard/fork/voice/ImeTextTarget.kt  |   5 +
+ .../aikeyboard/fork/voice/VoiceImeSession.kt       |  36 ++++-
+ .../aikeyboard/ime/keyboard/KeyboardManager.kt     |   4 +-
+ .../fork/analytics/ImeSessionStartReporterTest.kt  |  72 ++++++++++
+ .../fork/clipboard/ClipboardPanelGateTest.kt       | 157 +++++++++++++++++++++
+ .../fork/policy/PasswordFieldEgressTest.kt         |   2 +-
+ .../fork/smartbar/PolicyQuickActionsTest.kt        |  20 ++-
+ .../aikeyboard/fork/voice/VoiceImeSessionTest.kt   |  63 ++++++++-
+ .../aikeyboard/core/analytics/BatchingRelay.kt     |   7 +-
+ .../aikeyboard/core/analytics/BatchingRelayTest.kt |  17 ++-
+ .../core/voice/whisper/WhisperIdleUnloader.kt      |  13 +-
+ .../core/voice/whisper/WhisperIdleUnloaderTest.kt  |  15 +-
+ docs/FORK_PATCHES.md                               |   2 +
+ docs/sprint-1-device-checklist.md                  |   8 +-
+ 19 files changed, 495 insertions(+), 31 deletions(-)
+
+## Diff
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
+index 8628ebf6..21ebd5c0 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt
+@@ -109,20 +109,22 @@ import com.manjul.aikeyboard.lib.devtools.flogInfo
+ import com.manjul.aikeyboard.lib.devtools.flogWarning
+ import com.manjul.aikeyboard.lib.observeAsTransformingState
+ import com.manjul.aikeyboard.lib.util.ViewUtils
+ import com.manjul.aikeyboard.lib.util.debugSummarize
+ import com.manjul.aikeyboard.lib.util.launchActivity
+ import dev.patrickgold.jetpref.datastore.model.observeAsState
+ // FORK(S1-policy): imports for the policy controller
+ import android.app.KeyguardManager
+ import com.manjul.aikeyboard.fork.policy.ImePolicyController
+ import com.manjul.aikeyboard.fork.voice.VoiceImeSession // FORK(S1-voice)
++import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
++import com.manjul.aikeyboard.fork.analytics.ImeSessionStartReporter // FORK(S1-analytics)
+ import java.lang.ref.WeakReference
+ import kotlinx.coroutines.flow.update
+ import org.florisboard.lib.android.AndroidInternalR
+ import org.florisboard.lib.android.AndroidVersion
+ import org.florisboard.lib.android.isOrientationLandscape
+ import org.florisboard.lib.android.isOrientationPortrait
+ import org.florisboard.lib.android.showShortToastSync
+ import org.florisboard.lib.android.systemServiceOrNull
+ import org.florisboard.lib.compose.ProvideLocalizedResources
+ import org.florisboard.lib.kotlin.collectIn
+@@ -290,50 +292,56 @@ class FlorisImeService : LifecycleInputMethodService() {
+     private var resourcesContext by mutableStateOf(this as Context)
+ 
+     private val wallpaperChangeReceiver = WallpaperChangeReceiver()
+ 
+     // FORK(S1-policy): evaluates SensitiveFieldPolicy on every onStartInput. Created in onCreate so the store
+     // load and the settings collector start with the service. Keyguard state is read on each evaluation, never
+     // cached. Remote-config forced packages arrive in S3.
+     private lateinit var policyController: ImePolicyController
+     // FORK(S1-voice): in-keyboard voice typing; cancelled by every policy restriction and when the keyboard hides
+     private lateinit var voiceSession: VoiceImeSession
++    // FORK(S1-analytics): sampled ime_session_start from onStartInputView (R36)
++    private lateinit var imeSessionReporter: ImeSessionStartReporter
+ 
+     init {
+         setTheme(R.style.FlorisImeTheme)
+     }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         FlorisImeServiceReference = WeakReference(this)
+         // FORK(S1-policy): see the policyController declaration
+         val keyguardManager = getSystemService(KeyguardManager::class.java)
+         policyController = ImePolicyController(
+             store = featureSettingsStore().value,
+             keyguard = { keyguardManager?.isDeviceLocked ?: true },
+             forcedPackages = { emptySet() },
+             scope = lifecycleScope,
+         )
+         // Settings can arrive after the field started: recompute the editor state from the new decision.
+         policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
++        // FORK(S1-policy): an open clipboard history panel closes when the field turns more restrictive
++        ClipboardPanelGate.closeOnRestriction(policyController, { activeState.imeUiMode }) { activeState.imeUiMode = it }
+         // FORK(S1-voice): see the voiceSession declaration
+         voiceSession = VoiceImeSession(
+             context = this,
+             policy = policyController,
+             store = featureSettingsStore().value,
+             analytics = appContext().value.analytics.value::log,
+             connection = { currentInputConnection },
+             isRawInputEditor = { editorInstance.activeInfo.isRawInputEditor },
+             setOwnsComposing = { editorInstance.voiceOwnsComposing = it },
+             lang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
+             scope = lifecycleScope,
+         )
++        // FORK(S1-analytics): see the imeSessionReporter declaration
++        imeSessionReporter = ImeSessionStartReporter(System::currentTimeMillis, appContext().value.analytics.value::log)
+         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
+         subtypeManager.activeSubtypeFlow.collectIn(lifecycleScope) { subtype ->
+             val config = Configuration(resources.configuration)
+             if (prefs.localization.displayKeyboardLabelsInSubtypeLanguage.get()) {
+                 config.setLocale(subtype.primaryLocale.base)
+             }
+             resourcesContext = createConfigurationContext(config)
+         }
+         prefs.localization.displayKeyboardLabelsInSubtypeLanguage.asFlow().collectIn(lifecycleScope) { shouldSync ->
+             val config = Configuration(resources.configuration)
+@@ -393,35 +401,41 @@ class FlorisImeService : LifecycleInputMethodService() {
+         unregisterReceiver(wallpaperChangeReceiver)
+         policyController.onFinishInput() // FORK(S1-policy): drop in-flight work for the closed field
+         voiceSession.destroy() // FORK(S1-voice)
+         FlorisImeServiceReference = WeakReference(null)
+         inputWindowView = null
+     }
+ 
+     override fun onStartInput(info: EditorInfo?, restarting: Boolean) {
+         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
+         super.onStartInput(info, restarting)
++        voiceSession.onStartInput(restarting) // FORK(S1-voice): a new field's connection holds no region of ours
+         policyController.onStartInput(info, restarting) // FORK(S1-policy): decide before any feature sees the field
+         if (info == null) return
+         val editorInfo = FlorisEditorInfo.wrap(info)
+         editorInstance.handleStartInput(editorInfo)
+     }
+ 
+     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
+         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
+         super.onStartInputView(info, restarting)
+         if (info == null) return
+         val editorInfo = FlorisEditorInfo.wrap(info)
++        // FORK(S1-analytics): the decision for this field is already set by onStartInput
++        imeSessionReporter.onStartInputView(policyController.decision.value, subtypeManager.activeSubtype.primaryLocale.languageTag())
+         activeState.batchEdit {
+-            if (activeState.imeUiMode != ImeUiMode.CLIPBOARD || prefs.clipboard.historyHideOnNextTextField.get()) {
+-                activeState.imeUiMode = ImeUiMode.TEXT
+-            }
++            // FORK(S1-policy): a restart never keeps the clipboard panel open where history is denied
++            activeState.imeUiMode = ClipboardPanelGate.onStartInputView(
++                activeState.imeUiMode,
++                prefs.clipboard.historyHideOnNextTextField.get(),
++                policyController.decision.value,
++            )
+             activeState.isSelectionMode = editorInfo.initialSelection.isSelectionMode
+             editorInstance.handleStartInputView(editorInfo, isRestart = restarting)
+         }
+     }
+ 
+     override fun onEvaluateInputViewShown(): Boolean {
+         val config = resources.configuration
+         return super.onEvaluateInputViewShown()
+             || config.keyboard == Configuration.KEYBOARD_NOKEYS
+             || prefs.physicalKeyboard.showOnScreenKeyboard.get()
+@@ -451,20 +465,21 @@ class FlorisImeService : LifecycleInputMethodService() {
+     override fun onFinishInputView(finishingInput: Boolean) {
+         flogInfo { "finishing=$finishingInput" }
+         super.onFinishInputView(finishingInput)
+         policyController.onFinishInputView() // FORK(S1-policy)
+         voiceSession.onFinishInputView() // FORK(S1-voice): hiding the keyboard ends dictation
+         editorInstance.handleFinishInputView()
+     }
+ 
+     override fun onFinishInput() {
+         flogInfo { "(no args)" }
++        voiceSession.onFinishInput() // FORK(S1-voice): discard the partial before super finishes composing (R39)
+         super.onFinishInput()
+         policyController.onFinishInput() // FORK(S1-policy)
+         editorInstance.handleFinishInput()
+         NlpInlineAutofill.clearInlineSuggestions()
+     }
+ 
+     override fun onWindowShown() {
+         super.onWindowShown()
+         if (isWindowShown) {
+             flogWarning(LogTopic.IMS_EVENTS) { "Ignoring (is already shown)" }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/analytics/ImeSessionStartReporter.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/analytics/ImeSessionStartReporter.kt
+new file mode 100644
+index 00000000..df1b285f
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/analytics/ImeSessionStartReporter.kt
+@@ -0,0 +1,25 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.analytics
++
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.analytics.EventCatalog
++import com.manjul.aikeyboard.core.analytics.SessionSampler
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++
++/**
++ * Sends `ime_session_start` (PRD §12, R36) when the keyboard is shown in a field, sampled 1 per 10 min. A
++ * sensitive field reports `is_sensitive=true`, the one event the minimal analytics policy lets through.
++ * One per IME service instance; main thread.
++ */
++class ImeSessionStartReporter(clock: () -> Long, private val log: (AnalyticsEvent) -> Unit) {
++    private val sampler = SessionSampler(clock)
++
++    /** [subtype] is the active subtype's primary language tag. */
++    fun onStartInputView(decision: PolicyDecision, subtype: String) {
++        if (sampler.shouldLogImeSession()) log(EventCatalog.imeSessionStart(subtype, decision.sensitive))
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardPanelGate.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardPanelGate.kt
+new file mode 100644
+index 00000000..9506c3bf
+--- /dev/null
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardPanelGate.kt
+@@ -0,0 +1,50 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.clipboard
++
++import com.manjul.aikeyboard.fork.policy.ImePolicyController
++import com.manjul.aikeyboard.ime.ImeUiMode
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++
++/**
++ * Keeps the clipboard history panel closed where the policy denies clipboard history (password fields, private
++ * apps, locked device). Every route into the panel (smartbar chip, Enter long-press popup, swipe action) ends in
++ * the `IME_UI_MODE_CLIPBOARD` key handler, which asks [onClipboardKey]; an open panel closes as soon as a more
++ * restrictive decision arrives ([closeOnRestriction]) and again in onStartInputView ([onStartInputView]).
++ */
++object ClipboardPanelGate {
++    /** The UI mode after the clipboard key: the panel opens only if the decision allows clipboard history. */
++    fun onClipboardKey(mode: ImeUiMode, decision: PolicyDecision): ImeUiMode =
++        if (decision.allowClipboardHistory) ImeUiMode.CLIPBOARD else mode
++
++    /**
++     * The UI mode after the policy controller reported [decision]. "No field" (between onFinishInput and the next
++     * onStartInput) leaves the panel to upstream's "hide on next text field" rule; the next field's decision
++     * closes it if needed.
++     */
++    fun afterRestriction(mode: ImeUiMode, decision: PolicyDecision): ImeUiMode = when {
++        decision == ImePolicyController.NoField -> mode
++        mode == ImeUiMode.CLIPBOARD && !decision.allowClipboardHistory -> ImeUiMode.TEXT
++        else -> mode
++    }
++
++    /** Upstream's onStartInputView rule (keep only an open clipboard panel, if the pref says so) plus the policy. */
++    fun onStartInputView(mode: ImeUiMode, hideOnNextTextField: Boolean, decision: PolicyDecision): ImeUiMode =
++        if (mode != ImeUiMode.CLIPBOARD || hideOnNextTextField || !decision.allowClipboardHistory) {
++            ImeUiMode.TEXT
++        } else {
++            mode
++        }
++
++    /** Closes the panel on every restriction [policy] reports, including restarts and late settings (R7). */
++    fun closeOnRestriction(policy: ImePolicyController, mode: () -> ImeUiMode, setMode: (ImeUiMode) -> Unit) {
++        policy.addRestrictionListener { decision ->
++            val current = mode()
++            val next = afterRestriction(current, decision)
++            if (next != current) setMode(next)
++        }
++    }
++}
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyController.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyController.kt
+index 6eeca53a..8b2cd16b 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyController.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/policy/ImePolicyController.kt
+@@ -91,15 +91,15 @@ class ImePolicyController(
+                 incognitoManual = settings.incognitoManual,
+                 privatePackages = settings.privatePackages,
+                 forceSensitivePackages = forcedPackages(),
+             ),
+         )
+ 
+     private fun notifyListeners(decision: PolicyDecision) {
+         listeners.forEach { it(decision) }
+     }
+ 
+-    private companion object {
++    companion object {
+         /** Everything denied and no reasons: used before the first and after the last field. */
+         val NoField: PolicyDecision = PolicyDecision.Locked.copy(reasons = emptySet())
+     }
+ }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActions.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActions.kt
+index b9eb1aaa..13a9c1c4 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActions.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActions.kt
+@@ -25,23 +25,28 @@ private val FailClosed: StateFlow<PolicyDecision> = MutableStateFlow(PolicyDecis
+ fun decisionOrLocked(current: PolicyDecision?): PolicyDecision = current ?: PolicyDecision.Locked
+ 
+ /** The live policy decision for UI code. Without a running IME service it is [PolicyDecision.Locked]. */
+ @Composable
+ fun rememberPolicyDecision(): PolicyDecision {
+     val flow = remember { FlorisImeService.policyControllerOrNull()?.decision ?: FailClosed }
+     val decision by flow.collectAsState()
+     return decision
+ }
+ 
++/** Quick actions a sensitive field may show (R37): they read no field content. Every other action is hidden. */
++private val SensitiveAllowList = setOf(KeyCode.IME_UI_MODE_MEDIA, KeyCode.SETTINGS, KeyCode.TOGGLE_PRIVATE_APP)
++
+ /** True if [action] may be shown under [decision]. Chip-backed actions follow [ChipArrangement.allowed]. */
+ fun QuickAction.isAllowedBy(decision: PolicyDecision, clipboardHistoryOn: Boolean): Boolean {
+-    val code = (this as? QuickAction.InsertKey)?.data?.code ?: return true
++    val code = (this as? QuickAction.InsertKey)?.data?.code
++    if (decision.sensitive && (code == null || code !in SensitiveAllowList)) return false
++    if (code == null) return true
+     if (code == KeyCode.TOGGLE_PRIVATE_APP) return SensitivityReason.PRIVATE_APP !in decision.reasons
+     val chip = ChipId.forKeyCode(code) ?: return true
+     return ChipArrangement.allowed(chip, decision, clipboardHistoryOn)
+ }
+ 
+ /** Actions the current decision disallows are removed, not greyed out. */
+ @Composable
+ fun List<QuickAction>.policyFiltered(): List<QuickAction> {
+     val decision = rememberPolicyDecision()
+     val prefs by FlorisPreferenceStore
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt
+index eeabdf96..15accf72 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/ImeTextTarget.kt
+@@ -69,16 +69,21 @@ class ImeTextTarget(
+         ic.beginBatchEdit()
+         try {
+             ic.setComposingText("", 1)
+             ic.finishComposingText()
+             return true
+         } finally {
+             ic.endBatchEdit()
+         }
+     }
+ 
++    /** The input connection changed (new field): nothing on it is ours, so later edits never act as if it were. */
++    fun forgetOwnedRegion() {
++        own(false)
++    }
++
+     private fun own(value: Boolean) {
+         if (owned == value) return
+         owned = value
+         setOwnsComposing(value)
+     }
+ }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt
+index 9f473ebc..37b09588 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSession.kt
+@@ -49,49 +49,52 @@ class VoiceImeSession(
+     private val context: Context,
+     private val policy: ImePolicyController,
+     private val store: FeatureSettingsStore,
+     analytics: (AnalyticsEvent) -> Unit,
+     connection: () -> InputConnection?,
+     isRawInputEditor: () -> Boolean,
+     setOwnsComposing: (Boolean) -> Unit,
+     private val lang: () -> String,
+     private val scope: CoroutineScope,
+     private val clock: () -> Long = System::currentTimeMillis,
+-    caps: RecognizerCapabilities = context.whisperVoice().value.capabilities(context),
++    /** Resolved on first voice use, so the IME's onCreate does not create the app's Whisper pieces. */
++    caps: () -> RecognizerCapabilities = { context.whisperVoice().value.capabilities(context) },
+     private val engineFactory: (EngineKind, segmented: Boolean) -> SpeechEngine = { kind, segmented ->
+         when (kind) {
+             EngineKind.WHISPER -> context.whisperVoice().value.engine(scope)
+             else -> PlatformSpeechEngine(context, onDevice = kind == EngineKind.SYSTEM_ON_DEVICE, segmented = segmented)
+         }
+     },
+     private val online: () -> Boolean = { isOnline(context) },
+ ) {
+-    val span = ComposingSpanController(ImeTextTarget(connection, isRawInputEditor, setOwnsComposing))
++    private val target = ImeTextTarget(connection, isRawInputEditor, setOwnsComposing)
++
++    val span = ComposingSpanController(target)
+ 
+     val controller = VoiceController(
+         scope = scope,
+         sessionFactory = { factory ->
+             val settings = store.current
+             SpeechSession(
+                 engineFactory = factory,
+                 scope = scope,
+                 timings = VoiceTimings(silenceMs = settings.voiceSilenceMs.toLong()),
+                 punctuation = SpokenPunctuation,
+                 clock = clock,
+                 punctuationEnabled = settings.spokenPunctuation,
+             )
+         },
+         engines = object : VoiceEngines {
+             override fun supports(kind: EngineKind) = true
+             override fun create(kind: EngineKind, segmented: Boolean) = engineFactory(kind, segmented)
+         },
+-        selector = SpeechEngineSelector(caps),
++        selector = SpeechEngineSelector(LazyCapabilities(caps)),
+         request = {
+             VoiceRequest(
+                 lang = lang(),
+                 preference = store.current.voiceEnginePreference,
+                 online = online(),
+             )
+         },
+         permission = {
+             context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+         },
+@@ -116,20 +119,36 @@ class VoiceImeSession(
+             { tag -> triggerSystemModelDownload(context, tag) }
+         } else {
+             null
+         },
+     )
+ 
+     init {
+         policy.addRestrictionListener { controller.cancel(EndReason.FIELD_CHANGE.value) }
+     }
+ 
++    /**
++     * A new field (not a restart) has a new input connection: a region we owned belonged to the old one. Call
++     * before the policy controller's onStartInput, whose restriction cancels the session.
++     */
++    fun onStartInput(restarting: Boolean) {
++        if (!restarting) target.forgetOwnedRegion()
++    }
++
++    /**
++     * Field change (R39): call before `InputMethodService.onFinishInput`, which finishes the composing region, so
++     * the partial is discarded as on hide (R25) instead of being committed into the old field.
++     */
++    fun onFinishInput() {
++        controller.cancel(EndReason.FIELD_CHANGE.value)
++    }
++
+     fun onFinishInputView() {
+         controller.cancel(EndReason.FIELD_CHANGE.value)
+     }
+ 
+     fun onSelectionUpdate(newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {
+         span.onSelectionUpdate(newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+     }
+ 
+     fun destroy() {
+         controller.destroy()
+@@ -145,16 +164,27 @@ class VoiceImeSession(
+                 recognizer.triggerModelDownload(
+                     Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag),
+                 )
+             } finally {
+                 recognizer.destroy()
+             }
+         }
+     }
+ }
+ 
++/** Resolves [provider] on the first capability question and keeps the answer. */
++private class LazyCapabilities(provider: () -> RecognizerCapabilities) : RecognizerCapabilities {
++    private val caps by lazy(provider)
++    override val sdkInt: Int get() = caps.sdkInt
++    override fun isRecognitionAvailable() = caps.isRecognitionAvailable()
++    override fun isOnDeviceAvailable() = caps.isOnDeviceAvailable()
++    override suspend fun onDeviceSupports(lang: String): Boolean? = caps.onDeviceSupports(lang)
++    override fun whisperModelReady(lang: String) = caps.whisperModelReady(lang)
++    override fun whisperLangEnabled(lang: String) = caps.whisperLangEnabled(lang)
++}
++
+ /** Whether a network is up, for the engine choice (a server recognizer needs one). */
+ internal fun isOnline(context: Context): Boolean {
+     val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
+     val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+     return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+ }
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt b/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
+index 87c6556b..31bb3ab2 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt
+@@ -19,20 +19,21 @@ package com.manjul.aikeyboard.ime.keyboard
+ import android.content.Context
+ import android.icu.lang.UCharacter
+ import android.view.KeyEvent
+ import android.widget.Toast
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableIntStateOf
+ import androidx.compose.runtime.setValue
+ import androidx.lifecycle.MutableLiveData
+ import com.manjul.aikeyboard.FlorisImeService
+ import com.manjul.aikeyboard.fork.privacy.makeAppPrivate // FORK(S1-smartbar)
++import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy)
+ import com.manjul.aikeyboard.fork.smartbar.decisionOrLocked // FORK(S1-smartbar)
+ import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
+ import com.manjul.aikeyboard.R
+ import com.manjul.aikeyboard.app.FlorisPreferenceStore
+ import com.manjul.aikeyboard.appContext
+ import com.manjul.aikeyboard.clipboardManager
+ import com.manjul.aikeyboard.editorInstance
+ import com.manjul.aikeyboard.extensionManager
+ import com.manjul.aikeyboard.ime.ImeUiMode
+ import com.manjul.aikeyboard.ime.core.DisplayLanguageNamesIn
+@@ -745,21 +746,22 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
+             KeyCode.DELETE_WORD -> handleBackwardDelete(OperationUnit.WORDS)
+             KeyCode.ENTER -> handleEnter()
+             KeyCode.FORWARD_DELETE -> handleForwardDelete(OperationUnit.CHARACTERS)
+             KeyCode.FORWARD_DELETE_WORD -> handleForwardDelete(OperationUnit.WORDS)
+             KeyCode.IME_SHOW_UI -> FlorisImeService.showUi()
+             KeyCode.IME_HIDE_UI -> FlorisImeService.hideUi()
+             KeyCode.IME_PREV_SUBTYPE -> subtypeManager.switchToPrevSubtype()
+             KeyCode.IME_NEXT_SUBTYPE -> subtypeManager.switchToNextSubtype()
+             KeyCode.IME_UI_MODE_TEXT -> activeState.imeUiMode = ImeUiMode.TEXT
+             KeyCode.IME_UI_MODE_MEDIA -> activeState.imeUiMode = ImeUiMode.MEDIA
+-            KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ImeUiMode.CLIPBOARD
++            // FORK(S1-policy): every route (chip, Enter popup, swipe) lands here; no history where the policy denies it
++            KeyCode.IME_UI_MODE_CLIPBOARD -> activeState.imeUiMode = ClipboardPanelGate.onClipboardKey(activeState.imeUiMode, policyDecision())
+             // FORK(S1-smartbar): voice is blocked by the policy even if a stale button fires
+             // FORK(S1-voice): in-keyboard voice typing instead of switching to another voice IME
+             KeyCode.VOICE_INPUT -> if (policyDecision().allowVoice) FlorisImeService.voiceSessionOrNull()?.controller?.toggle()
+             KeyCode.KANA_SWITCHER -> handleKanaSwitch()
+             KeyCode.KANA_HIRA -> handleKanaHira()
+             KeyCode.KANA_KATA -> handleKanaKata()
+             KeyCode.KANA_HALF_KATA -> handleKanaHalfKata()
+             KeyCode.LANGUAGE_SWITCH -> handleLanguageSwitch()
+             KeyCode.REDO -> editorInstance.performRedo()
+             KeyCode.SETTINGS -> FlorisImeService.launchSettings()
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/analytics/ImeSessionStartReporterTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/analytics/ImeSessionStartReporterTest.kt
+new file mode 100644
+index 00000000..bea5a590
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/analytics/ImeSessionStartReporterTest.kt
+@@ -0,0 +1,72 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.analytics
++
++import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
++import com.manjul.aikeyboard.core.analytics.AnalyticsSink
++import com.manjul.aikeyboard.core.analytics.BatchingRelay
++import com.manjul.aikeyboard.core.analytics.EventCatalog
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import com.manjul.aikeyboard.ime.policy.SensitivityReason
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.currentTime
++import kotlinx.coroutines.test.runTest
++import org.junit.Test
++import kotlin.test.assertEquals
++
++/** R36: `ime_session_start` is sent from onStartInputView, sampled 1 per 10 min, and passes a minimal policy. */
++@OptIn(ExperimentalCoroutinesApi::class)
++class ImeSessionStartReporterTest {
++    private val password = PolicyDecision.Locked.copy(reasons = setOf(SensitivityReason.PASSWORD))
++
++    private class Recorder : AnalyticsSink {
++        val flushed = mutableListOf<AnalyticsEvent>()
++        override fun log(event: AnalyticsEvent) { flushed += event }
++    }
++
++    /** The service's wiring: the reporter logs into the real relay, which reads the same live decision. */
++    private class Rig(scope: TestScope) {
++        var decision: PolicyDecision = PolicyDecision.Unrestricted
++        val sink = Recorder()
++        val relay = BatchingRelay(sink, { scope.currentTime }, scope, optOut = { false }, policy = { decision })
++        val reporter = ImeSessionStartReporter(clock = { scope.currentTime }, log = relay::log)
++
++        fun show(next: PolicyDecision, subtype: String = "en-US") {
++            decision = next
++            reporter.onStartInputView(next, subtype)
++        }
++    }
++
++    @Test fun normalFieldLogsANonSensitiveSessionStart() = runTest {
++        val r = Rig(this)
++        r.show(PolicyDecision.Unrestricted)
++        advanceTimeBy(61_000)
++        assertEquals(listOf(EventCatalog.imeSessionStart("en-US", false)), r.sink.flushed)
++    }
++
++    @Test fun sensitiveFieldSessionStartPassesTheMinimalPolicy() = runTest {
++        val r = Rig(this)
++        r.show(password, subtype = "hi-IN")
++        advanceTimeBy(61_000)
++        assertEquals(listOf(EventCatalog.imeSessionStart("hi-IN", true)), r.sink.flushed)
++    }
++
++    @Test fun sampledOncePerTenMinutes() = runTest {
++        val r = Rig(this)
++        r.show(PolicyDecision.Unrestricted)
++        advanceTimeBy(9 * 60_000L)
++        r.show(password)
++        advanceTimeBy(60_000L) // t = 10 min
++        r.show(PolicyDecision.Unrestricted)
++        advanceTimeBy(61_000)
++        assertEquals(
++            listOf(EventCatalog.imeSessionStart("en-US", false), EventCatalog.imeSessionStart("en-US", false)),
++            r.sink.flushed,
++        )
++    }
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardPanelGateTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardPanelGateTest.kt
+new file mode 100644
+index 00000000..4d2db339
+--- /dev/null
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/clipboard/ClipboardPanelGateTest.kt
+@@ -0,0 +1,157 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.fork.clipboard
++
++import android.text.InputType
++import android.view.inputmethod.EditorInfo
++import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
++import com.manjul.aikeyboard.fork.policy.ImePolicyController
++import com.manjul.aikeyboard.ime.ImeUiMode
++import com.manjul.aikeyboard.ime.policy.PolicyDecision
++import com.manjul.aikeyboard.ime.text.key.KeyCode
++import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.int
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import org.junit.After
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import java.io.File
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++import kotlin.test.fail
++
++/**
++ * Important 1 of the final review: no route opens clipboard history where the policy denies it, and an open panel
++ * closes when the field becomes more restrictive. FlorisImeService and KeyboardManager cannot run under Robolectric,
++ * so this drives the gate the way they do: the key handler asks [ClipboardPanelGate.onClipboardKey], the service
++ * installs [ClipboardPanelGate.closeOnRestriction] on the real policy controller and applies
++ * [ClipboardPanelGate.onStartInputView] in onStartInputView.
++ */
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], application = android.app.Application::class)
++class ClipboardPanelGateTest {
++    private val dispatcher = UnconfinedTestDispatcher()
++    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
++    private val store = FeatureSettingsStore(RuntimeEnvironment.getApplication(), dispatcher)
++    private val policy = ImePolicyController(store, keyguard = { false }, forcedPackages = { emptySet() }, scope = scope)
++    private var mode = ImeUiMode.TEXT
++
++    init {
++        ClipboardPanelGate.closeOnRestriction(policy, { mode }) { mode = it }
++    }
++
++    @After
++    fun tearDown() {
++        scope.cancel()
++    }
++
++    private fun text() = EditorInfo().apply {
++        packageName = "some.app"
++        inputType = InputType.TYPE_CLASS_TEXT
++    }
++
++    private fun password() = EditorInfo().apply {
++        packageName = "some.app"
++        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
++    }
++
++    /** What KeyboardManager does for a key event with [code]. */
++    private fun press(code: Int) {
++        assertEquals(KeyCode.IME_UI_MODE_CLIPBOARD, code, "route does not reach the clipboard key handler")
++        mode = ClipboardPanelGate.onClipboardKey(mode, policy.decision.value)
++    }
++
++    /** What FlorisImeService.onStartInputView does with upstream's "hide on next text field" pref. */
++    private fun startInputView(hideOnNextTextField: Boolean) {
++        mode = ClipboardPanelGate.onStartInputView(mode, hideOnNextTextField, policy.decision.value)
++    }
++
++    /** The code of the Enter key's long-press popup entry that opens clipboard history. */
++    private fun enterPopupClipboardCode(): Int {
++        val file = listOf(File("src/main"), File("app/src/main"))
++            .map { File(it, "assets/ime/keyboard/org.florisboard.localization/popupMappings/default.json") }
++            .firstOrNull { it.isFile } ?: fail("popup mapping not found")
++        val enter = Json.parseToJsonElement(file.readText()).jsonObject.getValue("all").jsonObject.getValue("~enter")
++        return enter.jsonObject.getValue("relevant").jsonArray
++            .map { it.jsonObject }
++            .single { it.getValue("label").jsonPrimitive.content == "ime_ui_mode_clipboard" }
++            .getValue("code").jsonPrimitive.int
++    }
++
++    @Test fun `enter popup and swipe leave a password field in text mode`() {
++        policy.onStartInput(password(), false)
++        startInputView(hideOnNextTextField = true)
++
++        press(enterPopupClipboardCode()) // -213
++        assertEquals(ImeUiMode.TEXT, mode)
++        press(TextKeyData.IME_UI_MODE_CLIPBOARD.code) // SwipeAction.SWITCH_TO_CLIPBOARD_CONTEXT
++        assertEquals(ImeUiMode.TEXT, mode)
++    }
++
++    @Test fun `normal field still opens the panel`() {
++        policy.onStartInput(text(), false)
++        startInputView(hideOnNextTextField = true)
++        press(enterPopupClipboardCode())
++        assertEquals(ImeUiMode.CLIPBOARD, mode)
++    }
++
++    @Test fun `open panel closes on a restrictive restart`() {
++        policy.onStartInput(text(), false)
++        startInputView(hideOnNextTextField = false)
++        press(TextKeyData.IME_UI_MODE_CLIPBOARD.code)
++        assertEquals(ImeUiMode.CLIPBOARD, mode)
++
++        policy.onStartInput(password(), restarting = true)
++        assertEquals(ImeUiMode.TEXT, mode)
++        startInputView(hideOnNextTextField = false)
++        assertEquals(ImeUiMode.TEXT, mode)
++    }
++
++    @Test fun `start input view closes a panel the decision denies even without a restriction callback`() {
++        policy.onStartInput(password(), false)
++        mode = ImeUiMode.CLIPBOARD // e.g. a stale state; restriction listeners only fire on changes
++        startInputView(hideOnNextTextField = false)
++        assertEquals(ImeUiMode.TEXT, mode)
++    }
++
++    @Test fun `open panel closes when the app is made private after settings load`() {
++        policy.onStartInput(text(), false)
++        press(TextKeyData.IME_UI_MODE_CLIPBOARD.code)
++        assertEquals(ImeUiMode.CLIPBOARD, mode)
++
++        runBlocking { store.update { it.copy(privatePackages = setOf("some.app")) } }
++        assertTrue(!policy.decision.value.allowClipboardHistory)
++        assertEquals(ImeUiMode.TEXT, mode)
++    }
++
++    @Test fun `upstream keep-open pref still holds across a normal field change`() {
++        policy.onStartInput(text(), false)
++        press(TextKeyData.IME_UI_MODE_CLIPBOARD.code)
++        // onFinishInput reports "no field" between the two fields; that alone must not close the panel.
++        policy.onFinishInput()
++        policy.onStartInput(text(), false)
++        startInputView(hideOnNextTextField = false)
++        assertEquals(ImeUiMode.CLIPBOARD, mode)
++        startInputView(hideOnNextTextField = true)
++        assertEquals(ImeUiMode.TEXT, mode)
++    }
++
++    @Test fun `media mode is left alone by restrictions`() {
++        assertEquals(ImeUiMode.MEDIA, ClipboardPanelGate.afterRestriction(ImeUiMode.MEDIA, PolicyDecision.Locked))
++        assertEquals(ImeUiMode.TEXT, ClipboardPanelGate.afterRestriction(ImeUiMode.CLIPBOARD, PolicyDecision.Locked))
++    }
++}
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PasswordFieldEgressTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PasswordFieldEgressTest.kt
+index 30016d2d..dfae0f50 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PasswordFieldEgressTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PasswordFieldEgressTest.kt
+@@ -151,21 +151,21 @@ class PasswordFieldEgressTest {
+             context = app,
+             policy = policy,
+             store = store,
+             analytics = { },
+             connection = { EditText(app).onCreateInputConnection(EditorInfo()) },
+             isRawInputEditor = { false },
+             setOwnsComposing = { },
+             lang = { "en-US" },
+             scope = backgroundScope,
+             clock = { 0L },
+-            caps = Caps,
++            caps = { Caps },
+             engineFactory = { kind, _ -> Engine(kind).also { engines += it } },
+             online = { true },
+         )
+ 
+     @Test fun scriptedPasswordSessionMakesNoNetworkCallAndNoRoomWrite() = run {
+         val store = FeatureSettingsStore(app, StandardTestDispatcher(testScheduler))
+         val policy = ImePolicyController(store, keyguard = { false }, forcedPackages = { emptySet() }, scope = backgroundScope)
+         val engines = mutableListOf<Engine>()
+         val voice = session(policy, store, engines)
+         val gate = ClipboardCaptureGate { policy.decision.value }
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActionsTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActionsTest.kt
+index 19dc41de..8c6630b0 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActionsTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyQuickActionsTest.kt
+@@ -57,23 +57,37 @@ class PolicyQuickActionsTest {
+     }
+ 
+     @Test
+     fun `make private action is hidden only when the app is already private`() {
+         assertTrue(makePrivate.isAllowedBy(PolicyDecision.Unrestricted, true))
+         assertTrue(makePrivate.isAllowedBy(PolicyDecision.Locked, true))
+         assertFalse(makePrivate.isAllowedBy(privateApp, true))
+     }
+ 
+     @Test
+-    fun `non chip actions are never filtered`() {
+-        assertTrue(undo.isAllowedBy(PolicyDecision.Locked, false))
+-        assertTrue(QuickAction.InsertText("x").isAllowedBy(PolicyDecision.Locked, false))
++    fun `sensitive fields show only emoji, settings and the private-app action`() {
++        val password = PolicyDecision.Locked.copy(reasons = setOf(SensitivityReason.PASSWORD))
++        for (d in listOf(PolicyDecision.Locked, password)) {
++            assertTrue(emoji.isAllowedBy(d, true))
++            assertTrue(settings.isAllowedBy(d, true))
++            assertTrue(makePrivate.isAllowedBy(d, true))
++            assertFalse(undo.isAllowedBy(d, true))
++            assertFalse(key(TextKeyData.REDO).isAllowedBy(d, true))
++            assertFalse(key(TextKeyData.CLIPBOARD_PASTE).isAllowedBy(d, true))
++            assertFalse(QuickAction.InsertText("x").isAllowedBy(d, true))
++        }
++    }
++
++    @Test
++    fun `non chip actions stay in normal fields`() {
++        assertTrue(undo.isAllowedBy(PolicyDecision.Unrestricted, false))
++        assertTrue(QuickAction.InsertText("x").isAllowedBy(PolicyDecision.Unrestricted, false))
+     }
+ 
+     @Test
+     fun `forKeyCode maps chip keys and ignores others`() {
+         assertEquals(ChipId.MIC, ChipId.forKeyCode(KeyCode.VOICE_INPUT))
+         assertEquals(ChipId.EMOJI, ChipId.forKeyCode(KeyCode.IME_UI_MODE_MEDIA))
+         assertEquals(ChipId.CLIPBOARD, ChipId.forKeyCode(KeyCode.IME_UI_MODE_CLIPBOARD))
+         assertEquals(ChipId.SETTINGS, ChipId.forKeyCode(KeyCode.SETTINGS))
+         assertNull(ChipId.forKeyCode(KeyCode.UNDO))
+         assertNull(ChipId.forKeyCode(KeyCode.TOGGLE_PRIVATE_APP))
+diff --git a/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt
+index 17b91adc..11806453 100644
+--- a/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt
++++ b/app/src/test/kotlin/com/manjul/aikeyboard/fork/voice/VoiceImeSessionTest.kt
+@@ -63,50 +63,52 @@ class VoiceImeSessionTest {
+ 
+     private class Caps(val onDevice: Boolean = true) : RecognizerCapabilities {
+         override val sdkInt = 34
+         override fun isRecognitionAvailable() = true
+         override fun isOnDeviceAvailable() = onDevice
+         override suspend fun onDeviceSupports(lang: String): Boolean? = true
+         override fun whisperModelReady(lang: String) = false
+         override fun whisperLangEnabled(lang: String) = false
+     }
+ 
+-    private inner class Rig(scope: TestScope, initial: String = "", caps: RecognizerCapabilities = Caps()) {
++    private inner class Rig(scope: TestScope, initial: String = "", caps: () -> RecognizerCapabilities = { Caps() }) {
+         val edit = EditText(app).apply {
+             setText(initial)
+             setSelection(initial.length)
+         }
+         val commits = mutableListOf<String>()
+         var deletes = 0
+         val ic: InputConnection = object : InputConnectionWrapper(edit.onCreateInputConnection(EditorInfo()), false) {
+             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+                 commits += text.toString()
+                 return super.commitText(text, newCursorPosition)
+             }
+ 
+             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+                 deletes++
+                 return super.deleteSurroundingText(beforeLength, afterLength)
+             }
+         }
++        /** The connection the session sees; a field change hands it a new one. */
++        var current: InputConnection = ic
+         val engines = mutableListOf<Engine>()
+         val events = mutableListOf<AnalyticsEvent>()
+         val store = FeatureSettingsStore(app, StandardTestDispatcher(scope.testScheduler))
+         val policy = ImePolicyController(store, keyguard = { false }, forcedPackages = { emptySet() }, scope = scope.backgroundScope)
+         var ownsComposing = false
+         val audioManager: AudioManager = app.getSystemService(AudioManager::class.java)
+         val session = VoiceImeSession(
+             context = app,
+             policy = policy,
+             store = store,
+             analytics = { events += it },
+-            connection = { ic },
++            connection = { current },
+             isRawInputEditor = { false },
+             setOwnsComposing = { ownsComposing = it },
+             lang = { "en-US" },
+             scope = scope.backgroundScope,
+             clock = { NOW },
+             caps = caps,
+             engineFactory = { kind, _ -> Engine(kind).also { engines += it } },
+             online = { true },
+         )
+         val engine get() = engines.last()
+@@ -143,21 +145,21 @@ class VoiceImeSessionTest {
+         r.policy.onStartInput(textField(), false)
+         r.session.controller.toggle()
+         runCurrent()
+         r.engine.listener!!.onReady()
+         r.engine.listener!!.onPartial(partial)
+         runCurrent()
+         r.report()
+     }
+ 
+     @Test fun onDeviceOnlyNeverStartsTheServerRecognizer() = run {
+-        val r = Rig(this, caps = Caps(onDevice = false))
++        val r = Rig(this, caps = { Caps(onDevice = false) })
+         r.store.update { it.copy(voiceEnginePreference = VoiceEnginePreference.ON_DEVICE) }
+         runCurrent()
+         r.policy.onStartInput(textField(), false)
+         r.session.controller.toggle()
+         runCurrent()
+         // Online with a speech service, yet no server engine is created.
+         assertTrue(r.engines.isEmpty(), "${r.engines.map { it.kind }}")
+         assertEquals(VoiceUiState.Message(MessageKind.NO_LOCAL_ENGINE), r.session.controller.ui.value)
+     }
+ 
+@@ -278,20 +280,75 @@ class VoiceImeSessionTest {
+ 
+         assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
+         assertTrue(r.engine.destroyed)
+         assertNotNull(shadowOf(r.audioManager).lastAbandonedAudioFocusRequest)
+         // A cancel, like a field change: the unfinished partial is ours and is removed (R24).
+         assertEquals("", r.text)
+         assertEquals(-1, BaseInputConnection.getComposingSpanStart(r.edit.text))
+         assertEquals(0, r.deletes)
+     }
+ 
++    @Test fun capabilitiesAreResolvedOnFirstVoiceUseNotAtCreation() = run {
++        var resolved = 0
++        val r = Rig(this, caps = { resolved++; Caps() })
++        assertEquals(0, resolved, "the IME's onCreate must not create the Whisper pieces")
++        listen(r, "hi")
++        r.session.controller.toggle()
++        runCurrent()
++        r.session.controller.toggle()
++        runCurrent()
++        assertEquals(1, resolved)
++    }
++
++    @Test fun fieldChangeDiscardsThePartialBeforeTheFrameworkFinishesComposing() = run {
++        val r = Rig(this, initial = "abc ")
++        listen(r, "hel")
++        assertEquals("abc hel", r.text)
++
++        // FlorisImeService.onFinishInput (R39): our cancel first, then InputMethodService.onFinishInput, which
++        // finishes whatever composing region is left, then the policy controller's "no field".
++        r.session.onFinishInput()
++        r.ic.finishComposingText()
++        r.policy.onFinishInput()
++        runCurrent()
++
++        assertEquals("abc ", r.text)
++        assertTrue(r.commits.isEmpty())
++        assertEquals(0, r.deletes)
++        assertFalse(r.ownsComposing)
++        assertEquals(VoiceUiState.Hidden, r.session.controller.ui.value)
++        assertEquals("field_change", r.events.single { it.name == "voice_session_end" }.params["end_reason"])
++    }
++
++    @Test fun newFieldConnectionIsNeverTreatedAsOurs() = run {
++        val r = Rig(this)
++        listen(r, "hel")
++        assertTrue(r.ownsComposing)
++        // A different field whose own text happens to end with our partial, with the editor's composing region.
++        val other = EditText(app).apply {
++            setText("hel")
++            setSelection(3)
++        }
++        val otherIc = other.onCreateInputConnection(EditorInfo())
++        otherIc.setComposingRegion(0, 3)
++        r.current = otherIc
++
++        // onStartInput for the new field (not a restart): the region we owned belonged to the old connection.
++        r.session.onStartInput(restarting = false)
++        assertFalse(r.ownsComposing)
++        r.policy.onStartInput(textField(), false)
++        runCurrent()
++
++        assertEquals("hel", other.text.toString())
++        assertEquals(0, BaseInputConnection.getComposingSpanStart(other.text))
++    }
++
+     @Test fun firstDictationIsPersisted() = run {
+         val r = Rig(this)
+         listen(r, "hi")
+         r.session.controller.toggle()
+         r.engine.listener!!.onFinal("hi")
+         runCurrent()
+         assertEquals(1, r.events.count { it.name == "first_dictation" })
+         assertEquals(NOW, r.store.flow.first().firstDictationAt)
+     }
+ 
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt
+index aee3d3b3..de6664a6 100644
+--- a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt
+@@ -7,22 +7,23 @@ package com.manjul.aikeyboard.core.analytics
+ 
+ import com.manjul.aikeyboard.ime.policy.PolicyDecision
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.launch
+ 
+ /**
+  * Batches events and flushes to [sink] at most once per 60 s (PRD FR-35 AC2). A batch flushes at
+  * max(first event + 60 s, last flush + 60 s); later events join it. Opt-out drops everything; under a
+- * minimal policy only `ime_session_start` with `is_sensitive=true` passes. Both are re-checked at flush.
+- * A null policy means "no IME field context" and is not minimal.
++ * minimal policy only `ime_session_start` with `is_sensitive=true` passes. The policy is applied when the event
++ * is logged, against the decision current then, so a later field does not decide for an earlier one. Opt-out is
++ * re-checked at flush. A null policy means "no IME field context" and is not minimal.
+  */
+ class BatchingRelay(
+     private val sink: AnalyticsSink,
+     private val clock: () -> Long,
+     private val scope: CoroutineScope,
+     private val optOut: () -> Boolean,
+     private val policy: () -> PolicyDecision?,
+ ) {
+     private val lock = Any()
+     private val pending = ArrayList<AnalyticsEvent>()
+@@ -55,21 +56,21 @@ class BatchingRelay(
+     private fun flush(manual: Boolean) {
+         val batch: List<AnalyticsEvent>
+         synchronized(lock) {
+             batch = ArrayList(pending)
+             pending.clear()
+             if (manual) flushJob?.cancel() // the scheduled job itself must not cancel the flush it is running
+             flushJob = null
+             if (batch.isNotEmpty()) lastFlushAt = clock()
+         }
+         if (optOut()) return
+-        batch.filter(::passesPolicy).forEach(sink::log)
++        batch.forEach(sink::log)
+     }
+ 
+     private fun passesPolicy(e: AnalyticsEvent) =
+         policy()?.analyticsMinimal != true ||
+             (e.name == EventCatalog.IME_SESSION_START && e.params["is_sensitive"] == true)
+ 
+     private companion object {
+         const val FLUSH_INTERVAL_MS = 60_000L
+     }
+ }
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt
+index 33ef2a77..6f34fce3 100644
+--- a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt
+@@ -95,20 +95,31 @@ class BatchingRelayTest {
+         relay.log(EventCatalog.privacyPrivateAppAdd())
+         relay.flushNow() // t = 0
+         advanceTimeBy(10_000)
+         relay.log(EventCatalog.privacyPrivateAppAdd())
+         advanceTimeBy(59_000) // t = 69 s
+         assertEquals(1, sink.flushed.size)
+         advanceTimeBy(1_100)
+         assertEquals(2, sink.flushed.size)
+     }
+ 
+-    @Test fun policyIsReappliedAtFlush() = runTest {
++    @Test fun normalFieldEventSurvivesAFlushInASensitiveField() = runTest {
+         val sink = Recorder()
+         var minimal = false
+         val relay = relay(sink, policy = { if (minimal) PolicyDecision.Locked else null })
+         relay.log(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER))
+-        minimal = true
++        minimal = true // the user moved into a password field before the flush
+         advanceTimeBy(61_000)
+-        assertEquals(0, sink.flushed.size)
++        assertEquals(listOf(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER)), sink.flushed)
++    }
++
++    @Test fun sensitiveFieldEventStaysFilteredAfterLeavingTheField() = runTest {
++        val sink = Recorder()
++        var minimal = true
++        val relay = relay(sink, policy = { if (minimal) PolicyDecision.Locked else null })
++        relay.log(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER))
++        minimal = false // back in a normal field before the flush
++        relay.log(EventCatalog.privacyPrivateAppAdd())
++        advanceTimeBy(61_000)
++        assertEquals(listOf(EventCatalog.privacyPrivateAppAdd()), sink.flushed)
+     }
+ }
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloader.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloader.kt
+index 147df5ea..fbd0b350 100644
+--- a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloader.kt
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloader.kt
+@@ -6,42 +6,49 @@
+ package com.manjul.aikeyboard.core.voice.whisper
+ 
+ import android.content.ComponentCallbacks2
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.launch
+ 
+ /**
+  * Frees the loaded Whisper model [IDLE_MS] after the last [touch], or at once when the system reports
+- * memory pressure ([onTrimMemory] with a level of at least TRIM_MEMORY_RUNNING_LOW). [free] must not block:
++ * memory pressure ([onTrimMemory], see there for the levels). [free] must not block:
+  * it runs on the main thread from onTrimMemory. The model is loaded again on next use.
+  */
+ class WhisperIdleUnloader(
+     private val clock: () -> Long,
+     private val scope: CoroutineScope,
+     private val free: () -> Unit,
+ ) {
+     private val lock = Any()
+     private var lastUse = 0L
+     private var job: Job? = null
+ 
+     fun touch() {
+         synchronized(lock) {
+             lastUse = clock()
+             if (job?.isActive != true) job = scope.launch { freeWhenIdle() }
+         }
+     }
+ 
+-    @Suppress("DEPRECATION") // TRIM_MEMORY_RUNNING_LOW is still delivered below API 34.
++    /**
++     * Frees on RUNNING_LOW, RUNNING_CRITICAL and BACKGROUND or above (R38). UI_HIDDEN only means our settings UI
++     * went to the background; freeing then would force a reload on the next dictation.
++     */
++    @Suppress("DEPRECATION") // The RUNNING_* levels are still delivered below API 34.
+     fun onTrimMemory(level: Int) {
+-        if (level < ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) return
++        val free = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
++            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
++            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
++        if (!free) return
+         synchronized(lock) {
+             job?.cancel()
+             job = null
+         }
+         free()
+     }
+ 
+     private suspend fun freeWhenIdle() {
+         while (true) {
+             val wait = synchronized(lock) { lastUse + IDLE_MS - clock() }
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloaderTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloaderTest.kt
+index 5fa54904..dc62f677 100644
+--- a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloaderTest.kt
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/whisper/WhisperIdleUnloaderTest.kt
+@@ -52,26 +52,35 @@ class WhisperIdleUnloaderTest {
+     @Test fun trimMemoryRunningLowFreesImmediately() = runTest {
+         val u = unloader()
+         u.touch()
+         u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
+         assertEquals(1, frees)
+         // The pending idle free was cancelled: nothing is loaded any more.
+         advanceTimeBy(120_000)
+         assertEquals(1, frees)
+     }
+ 
+-    @Test fun onlyRunningLowAndAboveFree() = runTest {
++    /** R38: RUNNING_LOW, RUNNING_CRITICAL and BACKGROUND or above free; UI_HIDDEN (settings backgrounded) does not. */
++    @Suppress("DEPRECATION")
++    @Test fun onlyRunningLowCriticalAndBackgroundOrAboveFree() = runTest {
+         val u = unloader()
+         u.touch()
+-        @Suppress("DEPRECATION")
+         u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE)
+-        assertEquals(0, frees)
+         u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
++        assertEquals(0, frees)
++        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
+         assertEquals(1, frees)
++        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)
++        assertEquals(2, frees)
++        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_BACKGROUND)
++        assertEquals(3, frees)
++        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_MODERATE)
++        u.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
++        assertEquals(5, frees)
+     }
+ 
+     @Test fun noFreeWithoutATouch() = runTest {
+         unloader()
+         advanceTimeBy(120_000)
+         assertEquals(0, frees)
+     }
+ }
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index e7450480..f101e56f 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -84,20 +84,22 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-voice | Creates a `fork.voice.VoiceImeSession` in `onCreate` (after the policy controller); forwards `onUpdateSelection`, `onFinishInputView` (hiding the keyboard ends dictation) and `onDestroy`; companion `voiceSessionOrNull()` accessor |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-voice | `VOICE_INPUT` toggles in-keyboard voice typing instead of switching to another voice IME; the S1-smartbar policy gate is kept |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/AbstractEditorInstance.kt` | S1-voice | `voiceOwnsComposing` flag: while voice owns the composing region, `handleSelectionUpdate` does not treat the region as a word the editor must re-sync |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/Smartbar.kt` | S1-voice | After `PrivateLockIndicator`, `smartbarVoicePanel()` replaces the rest of the main row while the voice panel is open |
+ | `settings.gradle.kts`, `app/build.gradle.kts` | S1-whisper | `include(":lib:whisper")` (vendored whisper.cpp v1.9.5 + JNI bridge `libaikb_whisper.so`); `implementation(projects.lib.whisper)` |
+ | `gradle/libs.versions.toml` | S1-whisper | `androidx-work` 2.12.0 (`work-runtime`, `work-testing`) and `mockwebserver` 4.12.0 (5.x pulls `okhttp-android`, which needs compileSdk 37) inside the `# --- AI Keyboard ---` blocks |
+ | `app/build.gradle.kts` | S1-whisper | `WHISPER_MODEL_BASE_URL` build config field (placeholder `https://example.com/models/`, TODO(OD-01); every file is SHA-256 pinned in `WhisperModelSpec`) and `WHISPER_ENABLED_LANGS` (`"*"` = all languages in debug and beta, `""` = none in release); `implementation(libs.androidx.work.runtime)` |
+ | `app/src/main/AndroidManifest.xml` | S1-whisper | `INTERNET` permission, used only by the Whisper model download worker (the app had no network access before); `androidx.work.WorkManagerInitializer` removed from the startup provider, so WorkManager initialises on demand through `FlorisApplication`'s `Configuration.Provider` and never on the IME cold start. WorkManager's exported `SystemJobService` (`BIND_JOB_SERVICE`) and `DiagnosticsReceiver` (`DUMP`) are on the `ExportedComponentRules` allow-list |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-whisper | Lazy `whisperVoice` (`fork.voice.WhisperVoice`: shared whisper.cpp context, idle unloader, model manager) and `Context.whisperVoice()` accessor; `Configuration.Provider` with `ModelDownloadWorkerFactory`; `onTrimMemory` frees the loaded model (non-blocking) when Whisper was ever used |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S1-whisper | `Settings.Voice` route (`settings/voice`) rendering `fork/settings/VoiceSettingsScreen` and a home entry for it after Private apps |
++| `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S1-policy | Final review Important 1: the `IME_UI_MODE_CLIPBOARD` key handler asks `fork.clipboard.ClipboardPanelGate.onClipboardKey`, so no route (smartbar chip, Enter long-press popup `-213`, `SWITCH_TO_CLIPBOARD_CONTEXT` swipe) opens clipboard history where the policy decision denies it |
++| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy, S1-voice, S1-analytics | Final review fixes. S1-policy: `ClipboardPanelGate.closeOnRestriction` on the policy controller closes an open clipboard panel on every more restrictive decision (new field, restart, late settings, R7), and `onStartInputView` keeps the panel on a restart only if the decision allows clipboard history (upstream "hide on next text field" pref still applies). S1-voice: `onStartInput` tells the voice session a new field's connection holds no region of ours (before the policy call); `onFinishInput` cancels voice before `super.onFinishInput()` so the partial is discarded, not committed (R39). S1-analytics: `onStartInputView` sends the sampled `ime_session_start` through `fork.analytics.ImeSessionStartReporter` (R36) |
+ 
+ ## Marker-exempt files
+ 
+ `scripts/check-fork-markers.sh` (run in CI, `.github/workflows/pr.yml`) fails when an upstream file is
+ modified but not listed above, when a deleted upstream file is not listed, or when any changed hunk lacks a
+ `FORK(` marker. Hunks come from a zero-context diff of the rename-normalised upstream file against HEAD: a
+ hunk that adds or changes lines needs the marker on one of those lines or on one of the 3 lines before it;
+ a hunk that only deletes lines needs the marker within 3 lines of the deletion point. Only the line containing
+ `FORK(` counts, so in a multi-line comment put the marker on the line nearest the edit.
+ Files whose only change is the global package rename (content and path normalised
+diff --git a/docs/sprint-1-device-checklist.md b/docs/sprint-1-device-checklist.md
+index ddd31a7b..14f5979f 100644
+--- a/docs/sprint-1-device-checklist.md
++++ b/docs/sprint-1-device-checklist.md
+@@ -20,30 +20,32 @@ Tick a box only after running it on a device. Record device, Android version and
+ | [ ] 1.5 | Switch to Urdu (ur-PK), Arabic and Hindi layouts. Press shift and long-press keys. | Shift key renders correctly in the RTL character row; RTL key order is right to left (K1 rightmost); the Urdu aspirate and the heh forms are reachable; digits follow the numeric-row choice (R11: ur-PK defaults to Urdu digits U+06F0, western on long-press). | T5, R11, R12 |
+ | [ ] 1.6 | Type with the Urdu phonetic layout: the h key. | Known issue: the base key types Arabic heh U+0647 and Urdu heh U+06C1 is on long-press. Confirm the linguist accepts this or flag it. | T5 (linguist flag) |
+ | [ ] 1.7 | Smartbar: pin up to 3 chips, try a 4th, try to pin or reorder the mic chip. | Fourth pin rejected, mic is never pinned or reordered, order survives a keyboard restart. Translate and AI chips are not shown at all. | T7 |
+ | [ ] 1.8 | Check the visuals of the smartbar lock indicator in a private field and its long-press toggle. After changing the private flag, move to another field. | Lock indicator is legible in light and dark themes. Known: the long-press state is not refreshed until the next `onStartInput`. | T7 |
+ | [ ] 1.9 | Predictive back gesture while the voice panel is open (IME window). | Panel closes, keyboard stays. | T11 |
+ 
+ ## 2. Privacy and policy
+ 
+ | # | Steps | Expected | From |
+ |---|---|---|---|
+-| [ ] 2.1 | Open a password field (browser login, app login). Look at the smartbar. | Only emoji and settings chips remain: no mic, translate, AI, clipboard or stickers. No suggestions, no learning. | TRD exit; T7, T1 |
++| [ ] 2.1 | Open a password field (browser login, app login). Look at the smartbar. | The smartbar shows only emoji, settings and the privacy lock (with its "make this app private" action): no mic, translate, AI, clipboard or stickers, and no other quick action (undo, redo, paste, ... are hidden even if the user added them, R37). No suggestions, no learning. | TRD exit; T7, T1, R37 |
+ | [ ] 2.2 | Copy a normal text, then a password from a password manager (flagged sensitive), then an OTP text. Open clipboard history (enabled). | Normal text is stored. The sensitive and OTP clips are not stored. The blocked clip is not left on the primary clip for us to read (R9). History is off by default. | T3, R9 |
+ | [ ] 2.3 | Leave a stored clip for more than 24 h (or move the device clock forward), then open the clipboard panel. | Unpinned clips older than the TTL are removed; pinned ones stay. | T3 |
+ | [ ] 2.4 | Private apps screen (Settings, Privacy, home entry): add an app from the picker, open that app. | Picker lists launcher apps, the added app is treated as private (lock indicator, no voice, no learning). The suggestion list is empty (curated banking list is empty until RN-05). Screen visuals are acceptable. | T7, R15 |
+ | [ ] 2.5 | Switch into a password field while voice partials are composing (dictate, then tap a password field in the host app, or change the field with the keyboard open). | Voice stops. Our partial is removed from the password field and nothing is committed. No later recognizer text reaches the field. | T11, Review Focus 1, R24 |
+ | [ ] 2.6 | Dictate partials, then move the host cursor or edit host text mid-partial. | Our span is dropped. No host text is deleted. | T11, Review Focus 2 |
+ | [ ] 2.7 | Run the R24 scenario in several host apps; the input method manager may already finish composing before `restarting=true`. | The clear is a harmless no-op and no partial text remains in the field. | R24, T11 |
+ | [ ] 2.8 | Logcat (debug build), exercise typing, voice, clipboard and onboarding. Filter on `AiKbAnalytics` and the app package. | No typed text, transcript, clipboard text or host package name appears in any log line or event. | Global constraints, PC-10 |
+ | [ ] 2.9 | **Password-field egress, on a device.** The JVM version is `PasswordFieldEgressTest` (R34, runs in `./gradlew test`): it scripts a password-field session with a `ProxySelector` guard, an empty WorkManager and a Room statement log. Still do it on hardware, because the test cannot run `FlorisImeService`: with a password field focused, type, backspace, paste and tap the mic, and check the app opens no connection (per-UID counters in `NetworkStatsManager`, or a proxy). Repeat as an instrumented test when Sprint 3 adds INTERNET-using features (translation cloud, AI); that is the Sprint 3 gate. Today the only INTERNET user is the Whisper model download worker (R29), which is never started from a password field. | Zero bytes sent by the app while a sensitive field is focused. | Brief; R29, R34 |
+ | [ ] 2.10 | Clipboard settings: the auto-clean slider. | Range is 0 to 1440 minutes (widened from upstream's 120) in steps of 5; the 24 h default is reachable. Check it is usable and the label reads sensibly. Release note: auto-clean is on by default. | T3 |
++| [ ] 2.11 | In a password field and in a private app: long-press Enter and pick the clipboard entry; use a swipe bound to "switch to clipboard". Then open clipboard history in a normal field, turn off "hide on next text field", and move to a password field (and make the app private from the lock indicator while the panel is open). | Clipboard history never opens in the sensitive field; an open panel closes when the field becomes sensitive. In normal fields the panel still opens and stays open across fields as the upstream pref says. | Final review Important 1 |
++| [ ] 2.12 | Dictate partials in one field, then tap another (normal) field in the same app. | The partial is removed from the first field, nothing is committed there (same as hiding the keyboard, R25). | R39 |
+ 
+ ## 3. Onboarding
+ 
+ | # | Steps | Expected | From |
+ |---|---|---|---|
+ | [ ] 3.1 | Fresh install, launch the app. | Start destination is onboarding. Splash is gone within 1 s on a cold start (cap), with no bare window if the prefs store is slow. | T8 |
+ | [ ] 3.2 | Walk O1 to O5: enable keyboard, select keyboard (polling picks up the change), languages, try-it field. | Each step advances on its own when the system state changes; the try-it field shows our keyboard. Process death mid-flow resumes at the right step. | T8 |
+ | [ ] 3.3 | Tap the mic in the try-it step and deny, then allow, the microphone permission. Also try "Only this time". | The permission sheet shows. Denial keeps the user in try-it. Disclosure copy names the active recogniser kind. | T8, T11 |
+ | [ ] 3.4 | **Onboarding funnel in Logcat.** On a debug build run `adb logcat -s AiKbAnalytics` and complete onboarding. | Funnel events appear in order (`onboarding_start`, `onboarding_step_view`, `ime_enabled`, `ime_selected`, `languages_set`, `onboarding_complete`), `ime_*` timings counted from `onboarding_start` (R16). Re-entering onboarding logs no funnel events. Release builds use the no-op sink and log nothing. Firebase DebugView is not available until Firebase is set up. | Brief; T6, T8, R16 |
+ | [ ] 3.5 | Finish onboarding, reopen the app. | A returning user with the keyboard ready starts at the final step, no onboarding flash (known minor: `remainingMs=0`). | T8 |
+@@ -71,21 +73,21 @@ All Whisper download items depend on OD-01 (model host and hashes). Until then d
+ | # | Steps | Expected | From |
+ |---|---|---|---|
+ | [ ] 5.1 | **Whisper base on a 3 GB phone.** Debug build, load the base model and dictate for 30 and 60 s. Record peak PSS (`adb shell dumpsys meminfo <pkg>`) and decode time. | Stays within the memory budget with no low-memory kill of the IME. Record latency. | Brief; T12, T13 |
+ | [ ] 5.2 | `WhisperNative.load` with the base model. | Returns a non-zero handle. On an x86 device load returns 0 and the UI reports unavailable. | T12 |
+ | [ ] 5.3 | Transcribe a known en clip and a known hi clip. Include a clip producing Devanagari and one producing an emoji. | Expected text; UTF-8 is intact (no mojibake). | T12 |
+ | [ ] 5.4 | Request an unknown language code. | `WhisperException`, surfaced as an error, not a crash. | T12 (R26) |
+ | [ ] 5.5 | Free the engine while a transcribe is running (cancel dictation mid-decode). | Returns at once (R27), decode aborts at the next encoder or decoder step, no crash, no late text. Measure the abort latency. | T12, R27, T13 |
+ | [ ] 5.6 | Decode speed on a Cortex-A53 or A73 class phone. | Plain armv8-a build does not SIGILL and decode speed is acceptable. | T12 |
+ | [ ] 5.7 | Transcription latency for small on an 8 GB device and base on a 4 GB device, with 60 s of audio. | Completes inside the Whisper transcribe timeout of 120 s (R33); the spinner never exceeds it. | R33, T13 |
+ | [ ] 5.8 | Dictate with Offline (Whisper) in en-US and hi-IN on a debug build. Stop and start the mic quickly. | RMS animation works, silence auto-stops, one final text is inserted. Quick stop and start does not give `ERROR_AUDIO` (known: AudioRecord release can take about 100 ms). | T13 |
+-| [ ] 5.9 | Idle 60 s, then `adb shell am send-trim-memory <pkg> RUNNING_LOW`. | The model is freed. The next dictation reloads it. | T13 |
++| [ ] 5.9 | Idle 60 s, then `adb shell am send-trim-memory <pkg> RUNNING_LOW`. Repeat after loading the model with `UI_HIDDEN` (open and leave the voice settings screen). | `RUNNING_LOW` frees the model and the next dictation reloads it. `UI_HIDDEN` does not free it (R38). | T13, R38 |
+ | [ ] 5.10 | Download and resume (after OD-01 hashes are pinned): download base on Wi-Fi, check `no_backup/models/ggml-base-q5_1.bin` and that no `.part` is left. Test Wi-Fi-only versus mobile data, kill the app or drop the network mid-download (Range resume, hash still verifies), and delete during a download. | File verifies by SHA-256; unmetered-only waits for Wi-Fi; resume works; delete cancels the work and removes the `.part`. WorkManager retry window (10 min, 3 attempts) is enough for the small model. | T13, R28, R30 |
+ | [ ] 5.11 | The "Get offline model" chip in the IME. | Deep-links to the voice settings screen. | T11, T13 |
+ | [ ] 5.12 | Release build. | The Offline (Whisper) option and the model section are hidden and the engine never picks Whisper (gate is empty). | Decision 5 |
+ | [ ] 5.13 | IME cold start. Check `adb shell dumpsys jobscheduler` and `/proc/<pid>/maps`. | WorkManager is not initialised and `libaikb_whisper.so` is not loaded just by starting the keyboard. | T13 |
+ | [ ] 5.14 | Rename versus delete of the model while a download finishes (rare race). | No installed file is left with state ABSENT. | T13 (parked) |
+ | [ ] 5.15 | Start a Whisper model download from settings and watch the screen. | Known gap: settings show no download percentage, only a state. Decide if that is acceptable. | T13 |
+ 
+ ## 6. Packaging and permissions
+ 
+ | # | Steps | Expected | From |
+@@ -132,15 +134,15 @@ These are not code tasks. They need an owner outside engineering.
+   (R32).
+ 
+ ## TRD section 8 Sprint 1 exit criteria mapped to tests
+ 
+ TRD section 8 Sprint 1 says: "in a password field no smartbar action appears and the Robolectric
+ no-network test passes; voice shows live partials; onboarding funnel events visible in DebugView."
+ The plan narrows it to four checks. Each test file below was confirmed to exist at the Sprint 1 head.
+ 
+ | Criterion | Covered by | Notes |
+ |---|---|---|
+-| Password field: no smartbar action | `app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyChipFilterTest.kt` (`password field keeps only emoji and settings`, `locked decision hides everything but emoji and settings`); decision source `ime/policy/.../SensitiveFieldPolicyMatrixTest.kt` (about 400 cases); `app/.../fork/policy/ImePolicyControllerTest.kt` | Emoji and settings stay by design (they take no field content). The on-screen result is device item 2.1. |
++| Password field: no smartbar action | `app/src/test/kotlin/com/manjul/aikeyboard/fork/smartbar/PolicyChipFilterTest.kt` (`password field keeps only emoji and settings`, `locked decision hides everything but emoji and settings`) and `PolicyQuickActionsTest.kt` (`sensitive fields show only emoji, settings and the private-app action`, R37); decision source `ime/policy/.../SensitiveFieldPolicyMatrixTest.kt` (about 400 cases); `app/.../fork/policy/ImePolicyControllerTest.kt` | Emoji, settings and the privacy lock / private-app action stay by design (they take no field content); every other quick action is hidden (R37). The on-screen result is device item 2.1. |
+ | Password field: no Room write | `app/src/test/kotlin/com/manjul/aikeyboard/fork/policy/PasswordFieldEgressTest.kt` (`scriptedPasswordSessionMakesNoNetworkCallAndNoRoomWrite`): a Room `QueryCallback` records every INSERT/UPDATE/DELETE on the clipboard database during the scripted session; plus `app/.../ime/clipboard/ClipboardCaptureGateTest.kt` (gate unit cases) | R34. The paste step mirrors `ClipboardManager.onPrimaryClipChanged` (real gate in front of the real DAO); `ClipboardManager` itself needs `FlorisApplication` and is not instantiated. Device item 2.2. |
+ | Robolectric no-network test (TRD wording) | `PasswordFieldEgressTest` (R34): scripted password-field session (onStartInput, restart from a normal field, key presses, backspace, paste, mic action) with a `ProxySelector` guard that records any connection attempt and an empty WorkManager (no Whisper download queued). `positiveControlsProveTheDetectorsFire` shows the network, Room and WorkManager detectors fire. | Covers java.net and OkHttp URL connections (the Whisper worker's path) but not raw native sockets. Sprint 1 has no suggestion engine, so there is no suggestion tap to script. `FlorisImeService` itself cannot run under Robolectric, so the script drives the same policy controller, voice session and gate it wires. Device item 2.9. |
+ | Voice shows live partials | `core/voice/.../SpeechSessionTest.kt` (`partialsEmitComposingAndFinalCommitsWithTrailingSpace`); `ime/voice-ui/.../ComposingSpanControllerTest.kt` and `VoiceControllerTest.kt`; `app/.../fork/voice/VoiceImeSessionTest.kt` (`ownPartialUpdatesKeepReplacingTheRegion`, the password and host-edit cases) | Fakes only. A real `SpeechRecognizer` showing partials is device item 4.1. |
+ | Onboarding funnel events | `app/.../fork/onboarding/OnboardingViewModelTest.kt` (start, step, languages, skip, re-entry logs nothing, mic denial); `core/analytics/.../EventCatalogLimitsTest.kt` (names and limits) | The Logcat sink (`LogcatSink`, tag `AiKbAnalytics`, wired only when `BuildConfig.DEBUG`) replaces DebugView because Firebase is not set up. `LogcatSink` itself has no unit test. Device item 3.4. |

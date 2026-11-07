@@ -1,0 +1,438 @@
+# Review package: ad72ee81..HEAD
+
+## Commits
+f9dd1b74 fix(analytics): address review for task 6
+
+## Files changed
+ .../com/manjul/aikeyboard/FlorisApplication.kt     |  1 +
+ .../aikeyboard/core/analytics/AnalyticsEnums.kt    | 23 ++++++++++
+ .../aikeyboard/core/analytics/BatchingRelay.kt     | 33 +++++++++------
+ .../aikeyboard/core/analytics/EventCatalog.kt      | 44 ++++++++++---------
+ .../aikeyboard/core/analytics/BatchingRelayTest.kt | 31 ++++++++++++--
+ .../core/analytics/EventCatalogLimitsTest.kt       | 49 +++++++++++++++-------
+ 6 files changed, 129 insertions(+), 52 deletions(-)
+
+## Diff
+diff --git a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+index 11328af1..a15f0c08 100644
+--- a/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
++++ b/app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt
+@@ -90,20 +90,21 @@ class FlorisApplication : Application() {
+     val themeManager = lazy { ThemeManager(this) }
+     // FORK(S1-policy): fork-owned settings (DataStore), read by the policy controller
+     val featureSettingsStore = lazy { FeatureSettingsStore(this) }
+     // FORK(S1-analytics): batched, consent-aware analytics relay (Logcat in debug, no-op in release)
+     val analytics = lazy {
+         BatchingRelay(
+             sink = if (BuildConfig.DEBUG) LogcatSink else NoopSink,
+             clock = System::currentTimeMillis,
+             scope = scope,
+             optOut = { featureSettingsStore.value.current.analyticsOptOut },
++            // null policy = no IME field context (app-side events): not minimal, by design
+             policy = { FlorisImeService.policyControllerOrNull()?.decision?.value },
+         )
+     }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         FlorisApplicationReference = WeakReference(this)
+         try {
+             Flog.install(
+                 context = this,
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEnums.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEnums.kt
+new file mode 100644
+index 00000000..9d4fb431
+--- /dev/null
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/AnalyticsEnums.kt
+@@ -0,0 +1,23 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.analytics
++
++/** Closed value sets for catalog params: only these strings can reach an event (PRD §12). */
++enum class OnboardingSource(val value: String) { LAUNCHER("launcher"), PROCESS_TEXT("process_text"), DEEPLINK("deeplink") }
++
++enum class OnboardingStep(val value: String) { ONE("1"), TWO("2"), THREE("3"), TRY("try") }
++
++enum class VoiceEngine(val value: String) {
++    SYSTEM_ON_DEVICE("system_on_device"), SYSTEM_DEFAULT("system_default"), WHISPER("whisper")
++}
++
++enum class EndReason(val value: String) {
++    USER("user"), SILENCE("silence"), ERROR("error"), CAP("cap"), FIELD_CHANGE("field_change")
++}
++
++enum class UnavailableReason(val value: String) {
++    NO_SERVICE("no_service"), LANG_UNSUPPORTED("lang_unsupported"), OFFLINE_NO_MODEL("offline_no_model")
++}
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt
+index 2a933e24..aee3d3b3 100644
+--- a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelay.kt
+@@ -5,64 +5,71 @@
+ 
+ package com.manjul.aikeyboard.core.analytics
+ 
+ import com.manjul.aikeyboard.ime.policy.PolicyDecision
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.launch
+ 
+ /**
+- * Batches events and flushes to [sink] at most once per 60 s (PRD FR-35 AC2). The first event of a batch
+- * schedules the flush at its time + 60 s; later events join that batch. Opt-out drops everything; under a
+- * minimal policy only `ime_session_start` with `is_sensitive=true` passes.
++ * Batches events and flushes to [sink] at most once per 60 s (PRD FR-35 AC2). A batch flushes at
++ * max(first event + 60 s, last flush + 60 s); later events join it. Opt-out drops everything; under a
++ * minimal policy only `ime_session_start` with `is_sensitive=true` passes. Both are re-checked at flush.
++ * A null policy means "no IME field context" and is not minimal.
+  */
+ class BatchingRelay(
+     private val sink: AnalyticsSink,
+     private val clock: () -> Long,
+     private val scope: CoroutineScope,
+     private val optOut: () -> Boolean,
+     private val policy: () -> PolicyDecision?,
+ ) {
+     private val lock = Any()
+     private val pending = ArrayList<AnalyticsEvent>()
+     private var flushJob: Job? = null
++    private var lastFlushAt: Long? = null
+ 
+     fun log(event: AnalyticsEvent) {
+-        if (optOut()) return
+-        if (policy()?.analyticsMinimal == true && !isSensitiveSessionStart(event)) return
++        if (optOut() || !passesPolicy(event)) return
+         synchronized(lock) {
+             pending += event
+             if (flushJob == null) {
+-                val deadline = clock() + FLUSH_INTERVAL_MS
++                val now = clock()
++                val last = lastFlushAt
++                val deadline = maxOf(now + FLUSH_INTERVAL_MS, if (last == null) 0L else last + FLUSH_INTERVAL_MS)
+                 flushJob = scope.launch {
+                     while (true) {
+                         val remaining = deadline - clock()
+                         if (remaining <= 0) break
+                         delay(remaining)
+                     }
+-                    flushNow()
++                    flush(manual = false)
+                 }
+             }
+         }
+     }
+ 
+-    /** Sends the pending batch now (e.g. on background). Re-checks opt-out. */
+-    fun flushNow() {
++    /** Sends the pending batch now (e.g. on background). The next batch still waits 60 s after this. */
++    fun flushNow() = flush(manual = true)
++
++    private fun flush(manual: Boolean) {
+         val batch: List<AnalyticsEvent>
+         synchronized(lock) {
+             batch = ArrayList(pending)
+             pending.clear()
+-            flushJob?.cancel()
++            if (manual) flushJob?.cancel() // the scheduled job itself must not cancel the flush it is running
+             flushJob = null
++            if (batch.isNotEmpty()) lastFlushAt = clock()
+         }
+         if (optOut()) return
+-        batch.forEach(sink::log)
++        batch.filter(::passesPolicy).forEach(sink::log)
+     }
+ 
+-    private fun isSensitiveSessionStart(e: AnalyticsEvent) =
+-        e.name == EventCatalog.IME_SESSION_START && e.params["is_sensitive"] == true
++    private fun passesPolicy(e: AnalyticsEvent) =
++        policy()?.analyticsMinimal != true ||
++            (e.name == EventCatalog.IME_SESSION_START && e.params["is_sensitive"] == true)
+ 
+     private companion object {
+         const val FLUSH_INTERVAL_MS = 60_000L
+     }
+ }
+diff --git a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt
+index 4b9932fd..ccc2bdf8 100644
+--- a/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt
++++ b/core/analytics/src/main/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalog.kt
+@@ -8,20 +8,25 @@ package com.manjul.aikeyboard.core.analytics
+ /**
+  * PRD §12 events used so far. Factories take enums, buckets, language tags and booleans only, so no
+  * event can carry text, package names or keystroke counts.
+  */
+ object EventCatalog {
+     const val MAX_NAME = 40
+     const val MAX_PARAMS = 25
+     const val MAX_KEY = 40
+     const val MAX_VALUE = 100
+ 
++    private val LANG_TAG = Regex("^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8}){0,3}\$")
++
++    /** Free strings never reach an event: anything that is not a BCP-47-shaped tag becomes "other". */
++    private fun tag(s: String) = if (LANG_TAG.matches(s)) s else "other"
++
+     const val ONBOARDING_START = "onboarding_start"
+     const val ONBOARDING_STEP_VIEW = "onboarding_step_view"
+     const val IME_ENABLED = "ime_enabled"
+     const val IME_SELECTED = "ime_selected"
+     const val LANGUAGES_SET = "languages_set"
+     const val ONBOARDING_COMPLETE = "onboarding_complete"
+     const val IME_SESSION_START = "ime_session_start"
+     const val FIRST_DICTATION = "first_dictation"
+     const val VOICE_SESSION_START = "voice_session_start"
+     const val VOICE_SESSION_END = "voice_session_end"
+@@ -50,49 +55,50 @@ object EventCatalog {
+     private fun event(name: String, vararg params: Pair<String, Any>): AnalyticsEvent {
+         val allowed = paramRegistry.getValue(name)
+         val map = LinkedHashMap<String, Any>()
+         for ((k, v) in params) {
+             require(k in allowed && k.length <= MAX_KEY) { "param not registered for $name" }
+             map[k] = if (v is String) v.take(MAX_VALUE) else v
+         }
+         return AnalyticsEvent(name, map)
+     }
+ 
+-    fun onboardingStart(source: String) = event(ONBOARDING_START, "source" to source)
++    fun onboardingStart(source: OnboardingSource) = event(ONBOARDING_START, "source" to source.value)
+ 
+-    /** [step] is "1", "2", "3" or "try". */
+-    fun onboardingStepView(step: String) = event(ONBOARDING_STEP_VIEW, "step" to step)
++    fun onboardingStepView(step: OnboardingStep) = event(ONBOARDING_STEP_VIEW, "step" to step.value)
+ 
+-    fun imeEnabled(secondsBucket: String) = event(IME_ENABLED, "seconds_since_start_bucket" to secondsBucket)
++    fun imeEnabled(secondsSinceStart: Long) =
++        event(IME_ENABLED, "seconds_since_start_bucket" to Buckets.seconds(secondsSinceStart))
+ 
+-    fun imeSelected(secondsBucket: String) = event(IME_SELECTED, "seconds_since_start_bucket" to secondsBucket)
++    fun imeSelected(secondsSinceStart: Long) =
++        event(IME_SELECTED, "seconds_since_start_bucket" to Buckets.seconds(secondsSinceStart))
+ 
+     fun languagesSet(count: Int, hasRtl: Boolean) = event(LANGUAGES_SET, "count" to count, "has_rtl" to hasRtl)
+ 
+     fun onboardingComplete(skipped: Boolean) = event(ONBOARDING_COMPLETE, "skipped" to skipped)
+ 
++    /** [subtype] is the subtype's primary language tag (e.g. "en-US"), never a display or layout name. */
+     fun imeSessionStart(subtype: String, isSensitive: Boolean) =
+-        event(IME_SESSION_START, "subtype" to subtype, "is_sensitive" to isSensitive)
++        event(IME_SESSION_START, "subtype" to tag(subtype), "is_sensitive" to isSensitive)
+ 
+-    fun firstDictation(lang: String) = event(FIRST_DICTATION, "lang" to lang)
++    /** [lang] is a BCP-47 language tag. */
++    fun firstDictation(lang: String) = event(FIRST_DICTATION, "lang" to tag(lang))
+ 
+-    /** [engine] is system_on_device, system_default or whisper. */
+-    fun voiceSessionStart(lang: String, engine: String) =
+-        event(VOICE_SESSION_START, "lang" to lang, "engine" to engine)
++    fun voiceSessionStart(lang: String, engine: VoiceEngine) =
++        event(VOICE_SESSION_START, "lang" to tag(lang), "engine" to engine.value)
+ 
+-    /** [endReason] is user, silence, error, cap or field_change. */
+-    fun voiceSessionEnd(durationBucket: String, wordsBucket: String, endReason: String, errorCode: Int?): AnalyticsEvent {
+-        val base = arrayListOf<Pair<String, Any>>(
+-            "duration_bucket" to durationBucket,
+-            "words_bucket" to wordsBucket,
+-            "end_reason" to endReason,
++    fun voiceSessionEnd(durationMs: Long, words: Int, endReason: EndReason, errorCode: Int?): AnalyticsEvent {
++        val params = arrayListOf<Pair<String, Any>>(
++            "duration_bucket" to Buckets.duration(durationMs),
++            "words_bucket" to Buckets.words(words),
++            "end_reason" to endReason.value,
+         )
+-        if (errorCode != null) base += "error_code" to errorCode
+-        return event(VOICE_SESSION_END, *base.toTypedArray())
++        if (errorCode != null) params += "error_code" to errorCode
++        return event(VOICE_SESSION_END, *params.toTypedArray())
+     }
+ 
+     fun voicePermissionResult(granted: Boolean) = event(VOICE_PERMISSION_RESULT, "granted" to granted)
+ 
+-    fun voiceUnavailable(reason: String) = event(VOICE_UNAVAILABLE, "reason" to reason)
++    fun voiceUnavailable(reason: UnavailableReason) = event(VOICE_UNAVAILABLE, "reason" to reason.value)
+ 
+     fun privacyPrivateAppAdd() = event(PRIVACY_PRIVATE_APP_ADD)
+ }
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt
+index 19099345..33ef2a77 100644
+--- a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/BatchingRelayTest.kt
+@@ -23,25 +23,25 @@ class BatchingRelayTest {
+ 
+     private fun TestScope.relay(
+         sink: AnalyticsSink,
+         optOut: () -> Boolean = { false },
+         policy: () -> PolicyDecision? = { null },
+     ) = BatchingRelay(sink, { currentTime }, this, optOut, policy)
+ 
+     @Test fun batchesIntoOneFlushAtSixtySeconds() = runTest {
+         val sink = Recorder()
+         val relay = relay(sink)
+-        relay.log(EventCatalog.onboardingStart("launcher"))
++        relay.log(EventCatalog.onboardingStart(OnboardingSource.LAUNCHER))
+         advanceTimeBy(5_000)
+-        relay.log(EventCatalog.onboardingStepView("1"))
++        relay.log(EventCatalog.onboardingStepView(OnboardingStep.ONE))
+         advanceTimeBy(5_000)
+-        relay.log(EventCatalog.onboardingStepView("2"))
++        relay.log(EventCatalog.onboardingStepView(OnboardingStep.TWO))
+         advanceTimeBy(49_000) // t = 59 s
+         assertEquals(0, sink.flushed.size)
+         advanceTimeBy(1_001)
+         assertEquals(3, sink.flushed.size)
+         advanceTimeBy(120_000)
+         assertEquals(3, sink.flushed.size)
+     }
+ 
+     @Test fun nextEventAfterFlushStartsNewBatch() = runTest {
+         val sink = Recorder()
+@@ -66,26 +66,49 @@ class BatchingRelayTest {
+         relay.log(EventCatalog.privacyPrivateAppAdd())
+         out = true // opts out before the flush
+         advanceTimeBy(61_000)
+         assertEquals(0, sink.flushed.size)
+     }
+ 
+     @Test fun minimalPolicyOnlyPassesSensitiveSessionStart() = runTest {
+         val sink = Recorder()
+         val relay = relay(sink, policy = { PolicyDecision.Locked })
+         relay.log(EventCatalog.imeSessionStart("en", false))
+-        relay.log(EventCatalog.voiceSessionStart("en", "whisper"))
++        relay.log(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER))
+         relay.log(EventCatalog.imeSessionStart("en", true))
+         advanceTimeBy(61_000)
+         assertEquals(listOf(EventCatalog.imeSessionStart("en", true)), sink.flushed)
+     }
+ 
+     @Test fun flushNowSendsImmediatelyAndCancelsSchedule() = runTest {
+         val sink = Recorder()
+         val relay = relay(sink)
+         relay.log(EventCatalog.privacyPrivateAppAdd())
+         relay.flushNow()
+         assertEquals(1, sink.flushed.size)
+         advanceTimeBy(61_000)
+         assertEquals(1, sink.flushed.size)
+     }
++
++    @Test fun manualFlushDoesNotOpenSubMinuteWindow() = runTest {
++        val sink = Recorder()
++        val relay = relay(sink)
++        relay.log(EventCatalog.privacyPrivateAppAdd())
++        relay.flushNow() // t = 0
++        advanceTimeBy(10_000)
++        relay.log(EventCatalog.privacyPrivateAppAdd())
++        advanceTimeBy(59_000) // t = 69 s
++        assertEquals(1, sink.flushed.size)
++        advanceTimeBy(1_100)
++        assertEquals(2, sink.flushed.size)
++    }
++
++    @Test fun policyIsReappliedAtFlush() = runTest {
++        val sink = Recorder()
++        var minimal = false
++        val relay = relay(sink, policy = { if (minimal) PolicyDecision.Locked else null })
++        relay.log(EventCatalog.voiceSessionStart("en", VoiceEngine.WHISPER))
++        minimal = true
++        advanceTimeBy(61_000)
++        assertEquals(0, sink.flushed.size)
++    }
+ }
+diff --git a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt
+index 6aaaf783..5082ba4d 100644
+--- a/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt
++++ b/core/analytics/src/test/kotlin/com/manjul/aikeyboard/core/analytics/EventCatalogLimitsTest.kt
+@@ -4,57 +4,74 @@
+  */
+ 
+ package com.manjul.aikeyboard.core.analytics
+ 
+ import kotlin.test.Test
+ import kotlin.test.assertEquals
+ import kotlin.test.assertFalse
+ import kotlin.test.assertTrue
+ 
+ class EventCatalogLimitsTest {
++    private val big = "x".repeat(500)
++
+     private val all = listOf(
+-        EventCatalog.onboardingStart("launcher"),
+-        EventCatalog.onboardingStepView("try"),
+-        EventCatalog.imeEnabled("5-15"),
+-        EventCatalog.imeSelected("60-300"),
+-        EventCatalog.languagesSet(3, true),
++        EventCatalog.onboardingStart(OnboardingSource.LAUNCHER),
++        EventCatalog.onboardingStepView(OnboardingStep.TRY),
++        EventCatalog.imeEnabled(Long.MAX_VALUE),
++        EventCatalog.imeSelected(-5),
++        EventCatalog.languagesSet(Int.MAX_VALUE, true),
+         EventCatalog.onboardingComplete(false),
+-        EventCatalog.imeSessionStart("en-US", false),
+-        EventCatalog.firstDictation("ur"),
+-        EventCatalog.voiceSessionStart("hi", "whisper"),
+-        EventCatalog.voiceSessionEnd("5-15", "6-20", "error", 7),
+-        EventCatalog.voiceSessionEnd("5-15", "6-20", "user", null),
++        EventCatalog.imeSessionStart(big, false),
++        EventCatalog.imeSessionStart("en-US", true),
++        EventCatalog.firstDictation(big),
++        EventCatalog.voiceSessionStart(big, VoiceEngine.WHISPER),
++        EventCatalog.voiceSessionEnd(Long.MAX_VALUE, Int.MAX_VALUE, EndReason.FIELD_CHANGE, Int.MAX_VALUE),
++        EventCatalog.voiceSessionEnd(0, 0, EndReason.USER, null),
+         EventCatalog.voicePermissionResult(true),
+-        EventCatalog.voiceUnavailable("no_recognizer"),
++        EventCatalog.voiceUnavailable(UnavailableReason.OFFLINE_NO_MODEL),
+         EventCatalog.privacyPrivateAppAdd(),
+     )
+ 
++    @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
++        for ((name, keys) in EventCatalog.paramRegistry) {
++            val produced = all.filter { it.name == name }.flatMap { it.params.keys }.toSet()
++            assertEquals(keys, produced, name)
++        }
++    }
++
++    @Test fun nonLanguageStringsBecomeOther() {
++        for (bad in listOf("com.bank.app", "hello world", "", big, "QWERTY layout", "en-US; DROP")) {
++            assertEquals("other", EventCatalog.imeSessionStart(bad, false).params["subtype"], bad)
++            assertEquals("other", EventCatalog.firstDictation(bad).params["lang"], bad)
++            assertEquals("other", EventCatalog.voiceSessionStart(bad, VoiceEngine.WHISPER).params["lang"], bad)
++        }
++        assertEquals("ur", EventCatalog.firstDictation("ur").params["lang"])
++        assertEquals("en-US", EventCatalog.imeSessionStart("en-US", false).params["subtype"])
++        assertEquals("zh_Hans_CN", EventCatalog.firstDictation("zh_Hans_CN").params["lang"])
++    }
++
+     @Test fun limitsHold() {
+         val nameRe = Regex("^[a-z][a-z0-9_]{0,39}$")
+         for (e in all) {
+             assertTrue(nameRe.matches(e.name), e.name)
+             assertTrue(e.params.size <= 25)
+             val registry = EventCatalog.paramRegistry.getValue(e.name)
+             for ((k, v) in e.params) {
+                 assertTrue(k.length <= 40, k)
+                 assertTrue(k in registry, "${e.name}.$k")
+                 if (v is String) assertTrue(v.length <= 100)
+             }
+         }
+     }
+ 
+-    @Test fun longStringValuesAreClamped() {
+-        assertEquals(100, EventCatalog.firstDictation("x".repeat(500)).params["lang"].toString().length)
+-    }
+-
+     @Test fun nullErrorCodeIsOmitted() {
+-        assertFalse("error_code" in EventCatalog.voiceSessionEnd("0-5", "0", "user", null).params)
++        assertFalse("error_code" in EventCatalog.voiceSessionEnd(0, 0, EndReason.USER, null).params)
+     }
+ 
+     @Test fun namesMatchPrd() {
+         val expected = setOf(
+             "onboarding_start", "onboarding_step_view", "ime_enabled", "ime_selected", "languages_set",
+             "onboarding_complete", "ime_session_start", "first_dictation", "voice_session_start",
+             "voice_session_end", "voice_permission_result", "voice_unavailable", "privacy_private_app_add",
+         )
+         assertEquals(expected, EventCatalog.allNames.toSet())
+         assertFalse("first_keystroke" in EventCatalog.allNames)

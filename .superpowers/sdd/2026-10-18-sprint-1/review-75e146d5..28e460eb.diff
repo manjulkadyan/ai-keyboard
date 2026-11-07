@@ -1,0 +1,947 @@
+# Review package: 75e146d5..28e460eb
+
+## Commits
+28e460eb feat(voice): speech session state machine and error policy
+
+## Files changed
+ core/voice/build.gradle.kts                        |  24 ++
+ .../manjul/aikeyboard/core/voice/SpeechEngine.kt   |  35 +++
+ .../manjul/aikeyboard/core/voice/SpeechSession.kt  | 291 +++++++++++++++++++
+ .../aikeyboard/core/voice/SpokenPunctuation.kt     |  47 ++++
+ .../com/manjul/aikeyboard/core/voice/VoiceEvent.kt |  13 +
+ .../com/manjul/aikeyboard/core/voice/VoiceState.kt |  19 ++
+ .../manjul/aikeyboard/core/voice/VoiceTimings.kt   |  15 +
+ .../aikeyboard/core/voice/FakeSpeechEngine.kt      |  28 ++
+ .../aikeyboard/core/voice/SpeechSessionTest.kt     | 309 +++++++++++++++++++++
+ .../aikeyboard/core/voice/SpokenPunctuationTest.kt |  39 +++
+ docs/FORK_PATCHES.md                               |   1 +
+ settings.gradle.kts                                |   2 +
+ 12 files changed, 823 insertions(+)
+
+## Diff
+diff --git a/core/voice/build.gradle.kts b/core/voice/build.gradle.kts
+new file mode 100644
+index 00000000..c20e4df8
+--- /dev/null
++++ b/core/voice/build.gradle.kts
+@@ -0,0 +1,24 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++// :core:voice: speech session state machine, error policy and spoken punctuation. Engines (platform, Whisper)
++// plug in through SpeechEngine. No transcript text is ever logged.
++
++plugins {
++    alias(libs.plugins.aikeyboard.android.library)
++}
++
++android {
++    namespace = "com.manjul.aikeyboard.core.voice"
++}
++
++dependencies {
++    api(libs.kotlinx.coroutines)
++
++    testImplementation(libs.kotlinx.coroutines.test)
++    testImplementation(libs.junit4)
++    testImplementation(libs.turbine)
++    testRuntimeOnly(libs.junit.vintage.engine)
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechEngine.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechEngine.kt
+new file mode 100644
+index 00000000..843d0c97
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechEngine.kt
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++enum class EngineKind(val analytics: String) {
++    SYSTEM_ON_DEVICE("system_on_device"),
++    SYSTEM_DEFAULT("system_default"),
++    WHISPER("whisper"),
++}
++
++/** A speech recognizer. Listener callbacks must arrive on the thread the owning [SpeechSession] scope runs on. */
++interface SpeechEngine {
++    val kind: EngineKind
++    val supportsPartials: Boolean
++
++    fun start(lang: String, listener: Listener)
++    fun stop()
++    fun cancel()
++    fun destroy()
++
++    interface Listener {
++        fun onReady()
++        fun onRms(db: Float)
++        fun onPartial(text: String)
++        fun onSegment(text: String)
++        fun onFinal(text: String)
++        fun onEndOfSpeech()
++
++        /** [code] is an android.speech.SpeechRecognizer.ERROR_* value. */
++        fun onError(code: Int)
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
+new file mode 100644
+index 00000000..b40c24ac
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpeechSession.kt
+@@ -0,0 +1,291 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.channels.BufferOverflow
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.launch
++
++/**
++ * Speech session state machine and error policy. All calls and engine callbacks must happen on the thread
++ * [scope] runs on (the main thread in the IME). Transcript text is never logged.
++ *
++ * [endReason] values match the analytics EndReason values: "user", "silence", "error", "cap", "field_change".
++ */
++class SpeechSession(
++    private val engineFactory: () -> SpeechEngine,
++    private val scope: CoroutineScope,
++    private val timings: VoiceTimings,
++    private val punctuation: SpokenPunctuation,
++    private val clock: () -> Long,
++) {
++    private val _state = MutableStateFlow<VoiceState>(VoiceState.Idle)
++    val state: StateFlow<VoiceState> = _state.asStateFlow()
++
++    private val _output = MutableSharedFlow<VoiceOutput>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
++    val output: Flow<VoiceOutput> = _output
++
++    private val _tapToResume = MutableStateFlow(false)
++
++    /** True after repeated no-speech restarts stopped the session; the UI offers "tap to resume". */
++    val tapToResume: StateFlow<Boolean> = _tapToResume.asStateFlow()
++
++    var endReason: String? = null
++        private set
++
++    /** Clock reading when the current (or last) session started. */
++    var startedAtMs: Long = 0
++        private set
++
++    private var active = false
++    private var lang = ""
++    private var continuous = false
++    private var engine: SpeechEngine? = null
++    private var generation = 0
++    private var stopping = false
++    private var pendingPartial: String? = null
++    private var sawSegment = false
++    private var restarts = 0
++    private var busyRetries = 0
++
++    private var capJob: Job? = null
++    private var silenceJob: Job? = null
++    private var restartJob: Job? = null
++    private var finalizeJob: Job? = null
++
++    private val segmentedSupported = mutableMapOf<String, Boolean>()
++
++    /** False once an engine of [kind] ended a session on onFinal without ever delivering onSegment. */
++    fun isSegmentedSupported(kind: EngineKind, lang: String): Boolean = segmentedSupported[segKey(kind, lang)] ?: true
++
++    fun start(lang: String, continuous: Boolean) {
++        if (active) return
++        this.lang = lang
++        this.continuous = continuous
++        active = true
++        stopping = false
++        endReason = null
++        startedAtMs = clock()
++        pendingPartial = null
++        restarts = 0
++        busyRetries = 0
++        _tapToResume.value = false
++        _state.value = VoiceState.Starting
++        capJob = scope.launch {
++            delay(timings.sessionCapMs)
++            finish("cap", commitPending = true)
++        }
++        startEngine()
++    }
++
++    fun stopByUser() {
++        if (!active || stopping) return
++        stopping = true
++        capJob?.cancel()
++        silenceJob?.cancel()
++        restartJob?.cancel()
++        val e = engine
++        if (e == null) {
++            // Between restarts: nothing is recording.
++            finish("user", commitPending = true)
++            return
++        }
++        _state.value = if (e.supportsPartials) VoiceState.Finalizing else VoiceState.Transcribing
++        e.stop()
++        if (e.supportsPartials) {
++            finalizeJob = scope.launch {
++                delay(FINALIZE_TIMEOUT_MS)
++                finish("user", commitPending = true)
++            }
++        }
++    }
++
++    /** Field change, keyboard hidden or sensitive field: drop everything, commit nothing. */
++    fun cancel() {
++        if (!active) return
++        finish("field_change", commitPending = false, clearComposing = true)
++    }
++
++    private fun startEngine() {
++        val gen = ++generation
++        val e = engineFactory()
++        engine = e
++        sawSegment = false
++        e.start(lang, listenerFor(gen))
++    }
++
++    private fun destroyEngine() {
++        generation++
++        engine?.destroy()
++        engine = null
++    }
++
++    private fun finish(reason: String, commitPending: Boolean, clearComposing: Boolean = false) {
++        if (!active) return
++        active = false
++        capJob?.cancel()
++        silenceJob?.cancel()
++        restartJob?.cancel()
++        finalizeJob?.cancel()
++        val pending = pendingPartial
++        pendingPartial = null
++        destroyEngine()
++        endReason = reason
++        if (commitPending && pending != null) {
++            commit(pending)
++        } else if (clearComposing) {
++            _output.tryEmit(VoiceOutput.ClearComposing)
++        }
++        _state.value = VoiceState.Idle
++    }
++
++    private fun fail(kind: VoiceErrorKind) {
++        finish("error", commitPending = false, clearComposing = true)
++        _state.value = VoiceState.Error(kind)
++    }
++
++    private fun commit(raw: String) {
++        val text = punctuation.apply(raw, lang).trim(' ', '\t')
++        if (text.isEmpty()) {
++            _output.tryEmit(VoiceOutput.ClearComposing)
++            return
++        }
++        _output.tryEmit(VoiceOutput.Commit(if (text.endsWith("\n")) text else "$text "))
++    }
++
++    private fun scheduleRestart(delayMs: Long) {
++        // Keep what was heard so far instead of dropping it with the dead engine.
++        pendingPartial?.let { commit(it) }
++        pendingPartial = null
++        destroyEngine()
++        _state.value = VoiceState.Starting
++        restartJob?.cancel()
++        restartJob = scope.launch {
++            delay(delayMs)
++            if (active && !stopping) startEngine()
++        }
++    }
++
++    private fun listenerFor(gen: Int) = object : SpeechEngine.Listener {
++        private fun current() = active && gen == generation
++
++        override fun onReady() {
++            if (!current()) return
++            busyRetries = 0
++            if (!stopping) _state.value = VoiceState.Listening(0f)
++        }
++
++        override fun onRms(db: Float) {
++            if (!current() || stopping) return
++            _state.value = VoiceState.Listening(db)
++        }
++
++        override fun onPartial(text: String) {
++            if (!current()) return
++            silenceJob?.cancel()
++            pendingPartial = text
++            _output.tryEmit(VoiceOutput.Composing(punctuation.apply(text, lang)))
++        }
++
++        override fun onSegment(text: String) {
++            if (!current()) return
++            silenceJob?.cancel()
++            sawSegment = true
++            pendingPartial = null
++            commit(text)
++        }
++
++        override fun onFinal(text: String) {
++            if (!current()) return
++            val kind = engine?.kind
++            if (kind != null && !sawSegment) segmentedSupported[segKey(kind, lang)] = false
++            pendingPartial = null
++            restarts = 0
++            commit(text)
++            if (stopping) {
++                finish("user", commitPending = false)
++            } else if (continuous) {
++                restartAfterFinal()
++            } else {
++                finish("silence", commitPending = false)
++            }
++        }
++
++        override fun onEndOfSpeech() {
++            // No-op: the final result (or an error) that follows drives the state machine.
++        }
++
++        override fun onError(code: Int) {
++            if (!current()) return
++            handleError(code)
++        }
++    }
++
++    private fun restartAfterFinal() {
++        silenceJob?.cancel()
++        silenceJob = scope.launch {
++            delay(timings.silenceMs)
++            finish("silence", commitPending = true)
++        }
++        scheduleRestart(timings.restartDelayMs)
++    }
++
++    private fun handleError(code: Int) {
++        when (code) {
++            ERROR_SPEECH_TIMEOUT, ERROR_NO_MATCH -> {
++                if (stopping) {
++                    finish("user", commitPending = true)
++                } else if (restarts >= timings.maxRestarts) {
++                    finish("error", commitPending = true)
++                    _tapToResume.value = true
++                } else {
++                    restarts++
++                    scheduleRestart(timings.restartDelayMs)
++                }
++            }
++            ERROR_RECOGNIZER_BUSY -> {
++                if (busyRetries >= timings.maxBusyRetries) {
++                    fail(VoiceErrorKind.BUSY)
++                } else {
++                    busyRetries++
++                    scheduleRestart(timings.busyDelayMs)
++                }
++            }
++            ERROR_INSUFFICIENT_PERMISSIONS -> fail(VoiceErrorKind.NO_PERMISSION)
++            ERROR_NETWORK_TIMEOUT, ERROR_NETWORK, ERROR_SERVER, ERROR_TOO_MANY_REQUESTS, ERROR_SERVER_DISCONNECTED ->
++                fail(VoiceErrorKind.NETWORK)
++            ERROR_LANGUAGE_NOT_SUPPORTED, ERROR_LANGUAGE_UNAVAILABLE -> fail(VoiceErrorKind.LANGUAGE_UNAVAILABLE)
++            else -> fail(VoiceErrorKind.OTHER)
++        }
++    }
++
++    private fun segKey(kind: EngineKind, lang: String) = "${kind.analytics}|$lang"
++
++    // android.speech.SpeechRecognizer.ERROR_* values, kept as raw ints so this logic has no Android dependency.
++    private companion object {
++        const val ERROR_NETWORK_TIMEOUT = 1
++        const val ERROR_NETWORK = 2
++        const val ERROR_SERVER = 4
++        const val ERROR_SPEECH_TIMEOUT = 6
++        const val ERROR_NO_MATCH = 7
++        const val ERROR_RECOGNIZER_BUSY = 8
++        const val ERROR_INSUFFICIENT_PERMISSIONS = 9
++        const val ERROR_TOO_MANY_REQUESTS = 10
++        const val ERROR_SERVER_DISCONNECTED = 11
++        const val ERROR_LANGUAGE_NOT_SUPPORTED = 12
++        const val ERROR_LANGUAGE_UNAVAILABLE = 13
++
++        /** Upper bound for waiting on the final result after the user stops a partial-capable engine. */
++        const val FINALIZE_TIMEOUT_MS = 3000L
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpokenPunctuation.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpokenPunctuation.kt
+new file mode 100644
+index 00000000..906e1f62
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/SpokenPunctuation.kt
+@@ -0,0 +1,47 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++/** Replaces spoken punctuation words ("comma") with the symbol. Whole words only, Unicode aware. */
++object SpokenPunctuation {
++    private const val NL = "\n"
++
++    private val table: Map<String, List<Pair<String, String>>> = mapOf(
++        "en" to listOf("comma" to ",", "full stop" to ".", "period" to ".", "question mark" to "?", "new line" to NL),
++        "ur" to listOf("کاما" to "،", "سوالیہ نشان" to "؟", "نئی لائن" to NL),
++        "hi" to listOf("अल्पविराम" to ",", "पूर्ण विराम" to "।", "नई लाइन" to NL),
++        "ar" to listOf("فاصلة" to "،", "علامة استفهام" to "؟", "سطر جديد" to NL),
++        "es" to listOf("coma" to ",", "punto" to ".", "nueva línea" to NL),
++        "pt" to listOf("vírgula" to ",", "ponto final" to ".", "nova linha" to NL),
++        "fr" to listOf("virgule" to ",", "point" to ".", "à la ligne" to NL),
++        "id" to listOf("koma" to ",", "titik" to ".", "baris baru" to NL),
++    )
++
++    private class Rule(val regex: Regex, val replacement: String)
++
++    // Longest phrase first so "ponto final" wins over a shorter overlapping entry.
++    private val rules: Map<String, List<Rule>> = table.mapValues { (_, entries) ->
++        entries.sortedByDescending { it.first.length }.map { (word, symbol) ->
++            val phrase = word.split(' ').joinToString("""\s+""") { Regex.escape(it) }
++            // Lookarounds on letters/marks/digits instead of \b, which is ASCII-centric for Urdu, Hindi, Arabic.
++            val trailing = if (symbol == NL) """[ \t]*""" else ""
++            Rule(
++                Regex("""[ \t]*(?<![\p{L}\p{M}\p{N}])$phrase(?![\p{L}\p{M}\p{N}])$trailing""", setOf(RegexOption.IGNORE_CASE)),
++                symbol,
++            )
++        }
++    }
++
++    fun apply(text: String, lang: String): String {
++        val key = lang.substringBefore('-').substringBefore('_').lowercase()
++        val langRules = rules[key] ?: return text
++        var out = text
++        for (rule in langRules) {
++            out = rule.regex.replace(out) { rule.replacement }
++        }
++        return out
++    }
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceEvent.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceEvent.kt
+new file mode 100644
+index 00000000..12a212f6
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceEvent.kt
+@@ -0,0 +1,13 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++/** What the IME should do with the host text field. The text is user content: never log it. */
++sealed interface VoiceOutput {
++    data class Composing(val text: String) : VoiceOutput
++    data class Commit(val text: String) : VoiceOutput
++    data object ClearComposing : VoiceOutput
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceState.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceState.kt
+new file mode 100644
+index 00000000..3d5bd238
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceState.kt
+@@ -0,0 +1,19 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++enum class VoiceErrorKind { NO_PERMISSION, NETWORK, LANGUAGE_UNAVAILABLE, BUSY, NO_ENGINE, OTHER }
++
++sealed interface VoiceState {
++    data object Idle : VoiceState
++    data object Starting : VoiceState
++    data class Listening(val rmsDb: Float) : VoiceState
++
++    /** Whisper only: audio captured, waiting for the transcript. */
++    data object Transcribing : VoiceState
++    data object Finalizing : VoiceState
++    data class Error(val kind: VoiceErrorKind) : VoiceState
++}
+diff --git a/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceTimings.kt b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceTimings.kt
+new file mode 100644
+index 00000000..f26c6af1
+--- /dev/null
++++ b/core/voice/src/main/kotlin/com/manjul/aikeyboard/core/voice/VoiceTimings.kt
+@@ -0,0 +1,15 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++data class VoiceTimings(
++    val silenceMs: Long = 2000,
++    val restartDelayMs: Long = 250,
++    val maxRestarts: Int = 3,
++    val busyDelayMs: Long = 400,
++    val maxBusyRetries: Int = 2,
++    val sessionCapMs: Long = 60_000,
++)
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/FakeSpeechEngine.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/FakeSpeechEngine.kt
+new file mode 100644
+index 00000000..df1a008e
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/FakeSpeechEngine.kt
+@@ -0,0 +1,28 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++class FakeSpeechEngine(
++    override val kind: EngineKind = EngineKind.SYSTEM_DEFAULT,
++    override val supportsPartials: Boolean = true,
++) : SpeechEngine {
++    var listener: SpeechEngine.Listener? = null
++    var startCount = 0
++    var stopCount = 0
++    var cancelCount = 0
++    var destroyed = false
++    var startedLang: String? = null
++
++    override fun start(lang: String, listener: SpeechEngine.Listener) {
++        startCount++
++        startedLang = lang
++        this.listener = listener
++    }
++
++    override fun stop() { stopCount++ }
++    override fun cancel() { cancelCount++ }
++    override fun destroy() { destroyed = true }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
+new file mode 100644
+index 00000000..39a35e8c
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpeechSessionTest.kt
+@@ -0,0 +1,309 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++import app.cash.turbine.test
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.test.TestScope
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.currentTime
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class SpeechSessionTest {
++    private class Rig(
++        val scope: TestScope,
++        timings: VoiceTimings = VoiceTimings(),
++        private val make: () -> FakeSpeechEngine = { FakeSpeechEngine() },
++    ) {
++        val engines = mutableListOf<FakeSpeechEngine>()
++        val session = SpeechSession(
++            engineFactory = { make().also { engines += it } },
++            scope = scope,
++            timings = timings,
++            punctuation = SpokenPunctuation,
++            clock = { scope.currentTime },
++        )
++        val engine get() = engines.last()
++        val l get() = engine.listener!!
++    }
++
++    private fun TestScope.rig(timings: VoiceTimings = VoiceTimings(), make: () -> FakeSpeechEngine = { FakeSpeechEngine() }) =
++        Rig(this, timings, make)
++
++    private fun runSession(block: suspend TestScope.() -> Unit) =
++        runTest(StandardTestDispatcher()) { block() }
++
++    @Test fun partialsEmitComposingAndFinalCommitsWithTrailingSpace() = runSession {
++        val r = rig()
++        r.session.output.test {
++            r.session.start("en-US", continuous = false)
++            runCurrent()
++            r.l.onReady()
++            r.l.onPartial("hel")
++            r.l.onPartial("hello")
++            assertEquals(VoiceOutput.Composing("hel"), awaitItem())
++            assertEquals(VoiceOutput.Composing("hello"), awaitItem())
++            r.l.onFinal("hello")
++            assertEquals(VoiceOutput.Commit("hello "), awaitItem())
++            assertEquals(VoiceState.Idle, r.session.state.value)
++        }
++    }
++
++    @Test fun finalEndingInNewlineGetsNoTrailingSpace() = runSession {
++        val r = rig()
++        r.session.output.test {
++            r.session.start("en", continuous = false)
++            runCurrent()
++            r.l.onFinal("hi new line")
++            assertEquals(VoiceOutput.Commit("hi\n"), awaitItem())
++        }
++    }
++
++    @Test fun listeningStateTracksReadyAndRms() = runSession {
++        val r = rig()
++        r.session.start("en", true)
++        runCurrent()
++        assertEquals(VoiceState.Starting, r.session.state.value)
++        r.l.onReady()
++        assertEquals(VoiceState.Listening(0f), r.session.state.value)
++        r.l.onRms(-3f)
++        assertEquals(VoiceState.Listening(-3f), r.session.state.value)
++    }
++
++    @Test fun continuousEndsAfterSilenceMsFollowingFinal() = runSession {
++        val r = rig()
++        r.session.start("en", true)
++        runCurrent()
++        r.l.onFinal("hello")
++        advanceTimeBy(1999)
++        assertNull(r.session.endReason)
++        advanceTimeBy(2)
++        assertEquals("silence", r.session.endReason)
++        assertEquals(VoiceState.Idle, r.session.state.value)
++    }
++
++    @Test fun silenceMsIsConfigurable() = runSession {
++        val r = rig(VoiceTimings(silenceMs = 5000))
++        r.session.start("en", true)
++        runCurrent()
++        r.l.onFinal("hello")
++        advanceTimeBy(4999)
++        assertNull(r.session.endReason)
++        advanceTimeBy(2)
++        assertEquals("silence", r.session.endReason)
++    }
++
++    @Test fun speechAfterFinalCancelsSilenceTimer() = runSession {
++        val r = rig()
++        r.session.start("en", true)
++        runCurrent()
++        r.l.onFinal("hello")
++        advanceTimeBy(300)
++        assertEquals(2, r.engines.size)
++        r.l.onPartial("more")
++        advanceTimeBy(5000)
++        assertNull(r.session.endReason)
++    }
++
++    @Test fun noSpeechErrorsRestartThreeTimesThenStopWithTapToResume() = runSession {
++        val r = rig()
++        r.session.start("en", true)
++        runCurrent()
++        for ((i, code) in listOf(6, 7, 6).withIndex()) {
++            r.l.onError(code)
++            assertTrue(r.engines[i].destroyed)
++            advanceTimeBy(249)
++            assertEquals(i + 1, r.engines.size)
++            advanceTimeBy(2)
++            assertEquals(i + 2, r.engines.size)
++        }
++        r.l.onError(7)
++        assertEquals("error", r.session.endReason)
++        assertEquals(VoiceState.Idle, r.session.state.value)
++        assertTrue(r.session.tapToResume.value)
++        advanceTimeBy(1000)
++        assertEquals(4, r.engines.size)
++    }
++
++    @Test fun finalResetsRestartCounter() = runSession {
++        val r = rig(VoiceTimings(silenceMs = 60_000, sessionCapMs = 600_000))
++        r.session.start("en", true)
++        runCurrent()
++        repeat(2) { r.l.onError(6); advanceTimeBy(251) }
++        r.l.onFinal("x")
++        advanceTimeBy(251)
++        repeat(3) { r.l.onError(6); advanceTimeBy(251) }
++        assertNull(r.session.endReason)
++        r.l.onError(6)
++        assertEquals("error", r.session.endReason)
++    }
++
++    @Test fun busyDestroysAndRetriesThenFailsOnThird() = runSession {
++        val r = rig()
++        r.session.start("en", true)
++        runCurrent()
++        r.l.onError(8)
++        assertTrue(r.engines[0].destroyed)
++        advanceTimeBy(399)
++        assertEquals(1, r.engines.size)
++        advanceTimeBy(2)
++        assertEquals(2, r.engines.size)
++        r.l.onError(8)
++        advanceTimeBy(401)
++        assertEquals(3, r.engines.size)
++        r.l.onError(8)
++        assertEquals(VoiceState.Error(VoiceErrorKind.BUSY), r.session.state.value)
++        advanceTimeBy(1000)
++        assertEquals(3, r.engines.size)
++    }
++
++    @Test fun permissionErrorDoesNotRestart() = runSession {
++        val r = rig()
++        r.session.start("en", true)
++        runCurrent()
++        r.l.onError(9)
++        assertEquals(VoiceState.Error(VoiceErrorKind.NO_PERMISSION), r.session.state.value)
++        advanceTimeBy(5000)
++        assertEquals(1, r.engines.size)
++    }
++
++    @Test fun networkAndLanguageErrorsMap() = runSession {
++        for ((code, kind) in listOf(
++            2 to VoiceErrorKind.NETWORK, 1 to VoiceErrorKind.NETWORK, 4 to VoiceErrorKind.NETWORK,
++            12 to VoiceErrorKind.LANGUAGE_UNAVAILABLE, 13 to VoiceErrorKind.LANGUAGE_UNAVAILABLE,
++            3 to VoiceErrorKind.OTHER,
++        )) {
++            val r = rig()
++            r.session.start("en", true)
++            runCurrent()
++            r.l.onError(code)
++            assertEquals(VoiceState.Error(kind), r.session.state.value, "code $code")
++            assertEquals("error", r.session.endReason)
++        }
++    }
++
++    @Test fun sessionCapCommitsPendingPartial() = runSession {
++        val r = rig()
++        r.session.output.test {
++            r.session.start("en", true)
++            runCurrent()
++            r.l.onPartial("almost")
++            assertEquals(VoiceOutput.Composing("almost"), awaitItem())
++            advanceTimeBy(59_999)
++            assertNull(r.session.endReason)
++            advanceTimeBy(2)
++            assertEquals(VoiceOutput.Commit("almost "), awaitItem())
++            assertEquals("cap", r.session.endReason)
++            assertEquals(VoiceState.Idle, r.session.state.value)
++            assertTrue(r.engine.destroyed)
++        }
++    }
++
++    @Test fun cancelClearsComposingWithoutCommit() = runSession {
++        val r = rig()
++        r.session.output.test {
++            r.session.start("en", true)
++            runCurrent()
++            r.l.onPartial("draft")
++            assertEquals(VoiceOutput.Composing("draft"), awaitItem())
++            r.session.cancel()
++            assertEquals(VoiceOutput.ClearComposing, awaitItem())
++            assertTrue(r.engine.destroyed)
++            assertEquals(VoiceState.Idle, r.session.state.value)
++            assertEquals("field_change", r.session.endReason)
++            advanceTimeBy(70_000)
++            expectNoEvents()
++        }
++    }
++
++    @Test fun staleEngineCallbacksAreIgnoredAfterCancel() = runSession {
++        val r = rig()
++        r.session.start("en", true)
++        runCurrent()
++        val old = r.l
++        r.session.cancel()
++        r.session.output.test {
++            old.onFinal("late")
++            expectNoEvents()
++        }
++    }
++
++    @Test fun userStopWaitsForFinalOnPartialEngine() = runSession {
++        val r = rig()
++        r.session.output.test {
++            r.session.start("en", true)
++            runCurrent()
++            r.l.onPartial("bye")
++            awaitItem()
++            r.session.stopByUser()
++            assertEquals(VoiceState.Finalizing, r.session.state.value)
++            assertEquals(1, r.engine.stopCount)
++            r.l.onFinal("bye")
++            assertEquals(VoiceOutput.Commit("bye "), awaitItem())
++            assertEquals("user", r.session.endReason)
++            assertEquals(VoiceState.Idle, r.session.state.value)
++        }
++    }
++
++    @Test fun whisperStopShowsTranscribingUntilFinal() = runSession {
++        val r = rig { FakeSpeechEngine(EngineKind.WHISPER, supportsPartials = false) }
++        r.session.output.test {
++            r.session.start("en", false)
++            runCurrent()
++            r.l.onReady()
++            r.session.stopByUser()
++            assertEquals(VoiceState.Transcribing, r.session.state.value)
++            advanceTimeBy(30_000)
++            assertEquals(VoiceState.Transcribing, r.session.state.value)
++            r.l.onFinal("transcribed")
++            assertEquals(VoiceOutput.Commit("transcribed "), awaitItem())
++            assertEquals(VoiceState.Idle, r.session.state.value)
++            assertEquals("user", r.session.endReason)
++        }
++    }
++
++    @Test fun finalWithoutSegmentsMarksSegmentedUnsupported() = runSession {
++        val r = rig()
++        assertTrue(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
++        r.session.start("en", false)
++        runCurrent()
++        r.l.onFinal("hello")
++        assertFalse(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
++        assertTrue(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "ur"))
++        assertTrue(r.session.isSegmentedSupported(EngineKind.WHISPER, "en"))
++    }
++
++    @Test fun segmentsCommitAndKeepSegmentedSupported() = runSession {
++        val r = rig()
++        r.session.output.test {
++            r.session.start("en", true)
++            runCurrent()
++            r.l.onSegment("one")
++            assertEquals(VoiceOutput.Commit("one "), awaitItem())
++            r.l.onFinal("two")
++            assertEquals(VoiceOutput.Commit("two "), awaitItem())
++        }
++        assertTrue(r.session.isSegmentedSupported(EngineKind.SYSTEM_DEFAULT, "en"))
++    }
++
++    @Test fun spokenPunctuationAppliesToCommit() = runSession {
++        val r = rig()
++        r.session.output.test {
++            r.session.start("en", false)
++            runCurrent()
++            r.l.onFinal("hello comma world")
++            assertEquals(VoiceOutput.Commit("hello, world "), awaitItem())
++        }
++    }
++}
+diff --git a/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpokenPunctuationTest.kt b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpokenPunctuationTest.kt
+new file mode 100644
+index 00000000..8de5f344
+--- /dev/null
++++ b/core/voice/src/test/kotlin/com/manjul/aikeyboard/core/voice/SpokenPunctuationTest.kt
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (C) 2026 AI Keyboard contributors
++ * Licensed under the Apache License, Version 2.0
++ */
++
++package com.manjul.aikeyboard.core.voice
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class SpokenPunctuationTest {
++    private fun sym(lang: String, spoken: String, symbol: String) {
++        val out = SpokenPunctuation.apply("a $spoken b", lang)
++        val expected = if (symbol == "\n") "a\nb" else "a$symbol b"
++        assertEquals(expected, out, "$lang $spoken")
++    }
++
++    @Test fun english() {
++        sym("en", "comma", ","); sym("en-US", "full stop", "."); sym("en", "period", ".")
++        sym("en", "question mark", "?"); sym("en", "new line", "\n"); sym("en", "COMMA", ",")
++    }
++
++    @Test fun urdu() { sym("ur", "کاما", "،"); sym("ur", "سوالیہ نشان", "؟"); sym("ur", "نئی لائن", "\n") }
++    @Test fun hindi() { sym("hi", "अल्पविराम", ","); sym("hi", "पूर्ण विराम", "।"); sym("hi", "नई लाइन", "\n") }
++    @Test fun arabic() { sym("ar", "فاصلة", "،"); sym("ar", "علامة استفهام", "؟"); sym("ar", "سطر جديد", "\n") }
++    @Test fun spanish() { sym("es", "coma", ","); sym("es", "punto", "."); sym("es", "nueva línea", "\n") }
++    @Test fun portuguese() { sym("pt-BR", "vírgula", ","); sym("pt", "ponto final", "."); sym("pt", "nova linha", "\n") }
++    @Test fun french() { sym("fr", "virgule", ","); sym("fr", "point", "."); sym("fr", "à la ligne", "\n") }
++    @Test fun indonesian() { sym("id", "koma", ","); sym("id", "titik", "."); sym("id", "baris baru", "\n") }
++
++    @Test fun wordsInsideOtherWordsAreUntouched() {
++        assertEquals("commander", SpokenPunctuation.apply("commander", "en"))
++        assertEquals("the periodic table", SpokenPunctuation.apply("the periodic table", "en"))
++        assertEquals("comando", SpokenPunctuation.apply("comando", "es"))
++        assertEquals("کاماتی", SpokenPunctuation.apply("کاماتی", "ur"))
++    }
++
++    @Test fun unknownLanguageIsUnchanged() = assertEquals("a comma b", SpokenPunctuation.apply("a comma b", "de"))
++}
+diff --git a/docs/FORK_PATCHES.md b/docs/FORK_PATCHES.md
+index b6ac4862..341a1499 100644
+--- a/docs/FORK_PATCHES.md
++++ b/docs/FORK_PATCHES.md
+@@ -44,20 +44,21 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited
+ | Deleted: `app/src/main/assets/license/project_license.txt` | S0-licences | Copy of LICENSE replaced by the build-generated `assets/licenses/` (see the `ProjectLicenseScreen.kt` row) |
+ | `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-ci | Upstream v0.5.2 imports `org.florisboard.lib.color.schemes.yellow{Light,Dark}Scheme`, which does not exist in `:lib:color` at that tag, so the `:lib:snygg` unit tests did not compile. The two fixed schemes are now built with `:lib:color`'s `neutralDynamicColorScheme` (yellow 500 seed); all assertions are unchanged |
+ | Deleted: `fastlane/`, `.github/`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `crowdin.yml`, `ROADMAP.md`, `AI_POLICY.md`, `LANGUAGEPACKS*.md`, `.idea/icon.svg` | S0-branding | Upstream store listings, project-process docs, CI that uses FlorisBoard secrets, and the FlorisBoard logo. `README.md` was rewritten for the fork |
+ | `build.gradle.kts`, `settings.gradle.kts`, `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/res/xml/backup_rules.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/{app/ext/AddonBox,app/settings/about/AboutScreen,app/settings/about/ProjectLicenseScreen,app/settings/typing/TypingScreen,app/setup/SetupScreen,lib/crashutility/CrashDialogActivity,lib/crashutility/CrashUtility}.kt`, `lib/compose/src/main/kotlin/org/florisboard/lib/compose/Resources.kt`, `lib/snygg/src/test/kotlin/org/florisboard/lib/snygg/SnyggThemeTest.kt` | S0-licences, S0-ci | Markers only, for the per-hunk marker check: the "Modified by AI Keyboard contributors, 2026" header line carries `FORK(S0-licences)`; removed imports and removed lines get a one-line `FORK(<ticket>)` comment at the deletion point; `AndroidManifest.xml` moves `android:name` onto the `<application` line and `networkSecurityConfig` next to `dataExtractionRules` so the marker sits within 3 lines of both edits. No behaviour change |
+ | `settings.gradle.kts` | S1-policy | `include(":core:datastore")` |
+ | `gradle/libs.versions.toml` | S1-policy | `androidx-datastore` 1.2.1 (latest stable on Google Maven, 2026-10-18), `robolectric` 4.17 (latest on Maven Central), `junit-vintage-engine` (version from the junit-bom), inside the `# --- AI Keyboard ---` blocks |
+ | `app/build.gradle.kts` | S1-policy | `implementation(projects.core.datastore)`, `implementation(projects.ime.policy)`; Robolectric, JUnit 4, junit-vintage and coroutines-test as test dependencies; applies `gradle/robolectric-offline.gradle.kts` (new file: resolves Robolectric's android-all jar through Gradle so tests need no download into the home directory) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-policy | Lazy `featureSettingsStore`, `Context.featureSettingsStore()` accessor; loading starts in `init()` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S1-analytics | Lazy `analytics` (`BatchingRelay`): `LogcatSink` in debug, `NoopSink` in release; opt-out from `featureSettingsStore`, policy from the IME service's controller |
+ | `settings.gradle.kts`, `app/build.gradle.kts` | S1-analytics | `include(":core:analytics")`, `implementation(projects.core.analytics)` |
++| `settings.gradle.kts` | S1-voice | `include(":core:voice")` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-policy | Creates an `ImePolicyController` in `onCreate` (restriction listener re-applies the decision to `EditorInstance`; keyguard read on every evaluation, no forced packages until S3); calls it from `onStartInput`, `onFinishInputView`, `onFinishInput`, `onDestroy`; companion `policyController()` accessor. `onStartInputView` needs no call: the decision is made in `onStartInput`, which always precedes it |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt` | S1-policy | `isIncognitoMode` is also true when the policy decision does not allow learning; composing is off when it does not allow the suggestion strip |
+ | `app/src/main/AndroidManifest.xml` | S1-policy | `android:directBootAware="false"` on the IME and spell-checker services (was `true` / absent): the policy and settings store live in credential-encrypted storage. Guarded by `ManifestHardeningTest`. The attributes share the `<service` line so the marker sits within 3 lines of each edit (per-hunk marker check); no behaviour change from that |
+ | `settings.gradle.kts` | S1-clipboard | `include(":core:privacy")` |
+ | `app/build.gradle.kts` | S1-clipboard | `implementation(projects.core.privacy)` |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardManager.kt` | S1-clipboard | Takes a `ClipboardCaptureGate` (fail-closed policy gate plus sensitivity classifier): `onPrimaryClipChanged` returns before `fromClipData`/URI clone for blocked or sensitive clips, `insertOrMoveBeginning` re-checks; `enforceExpiryDate` deletes unpinned items older than the TTL through the DAO |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt` | S1-clipboard | `deleteUnpinnedOlderThan` DAO query; `fallbackToDestructiveMigration()` removed from both clipboard databases (schema versions unchanged, so no migration is needed) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt` | S1-clipboard | `historyAutoCleanOldEnabled` default true, `historyAutoCleanOldAfter` default 1440 (minutes, 24 h) |
+ | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/clipboard/ClipboardScreen.kt` | S1-clipboard | Auto-clean slider max 120 -> 1440 minutes so the 24 h default is reachable |
+ | `app/src/main/res/xml/method.xml`, `app/src/main/kotlin/com/manjul/aikeyboard/ime/core/SubtypeManager.kt` | S1-subtypes | `method.xml`: the single placeholder subtype is replaced by the 8 MVP subtypes (en-US, es-ES, fr-FR, pt-BR, ar, ur-PK, id, hi-IN; labels in `strings_fork.xml`). `SubtypeManager.ensureDefaultSubtypes(tags)` adds missing presets by primary locale, in order, idempotently; called from onboarding only, never on IME start |
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+index 4e74df72..95d3a862 100644
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -59,13 +59,15 @@ include(":lib:snygg")
+ include(":core:common")
+ // FORK(S0-ads): app-process-only ads module (consent, placement registry, caps); never used by the IME
+ include(":core:ads")
+ include(":ime:policy")
+ // FORK(S1-policy): feature settings store (DataStore)
+ include(":core:datastore")
+ // FORK(S1-clipboard): clipboard sensitivity classifier
+ include(":core:privacy")
+ // FORK(S1-analytics): event catalog and batched consent-aware relay
+ include(":core:analytics")
++// FORK(S1-voice): speech session state machine, error policy, spoken punctuation
++include(":core:voice")
+ 
+ // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
+ include(":lint-rules")
