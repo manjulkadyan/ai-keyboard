@@ -92,6 +92,8 @@ include(":core:config")
 include(":core:ai")
 include(":core:network")
 include(":core:firebase")
+// FORK(S4-billing): Play Billing gateway and the server-verified entitlement cache (app process only)
+include(":core:billing")
 // FORK(S3-ai): in-keyboard AI rewrite sheet (controller, preview, safe replace, undo, quota card, report)
 include(":ime:ai-ui")
 

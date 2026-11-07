@@ -60,6 +60,8 @@ okhttp = "4.12.0"
 firebase-bom = "34.8.0"
 # FORK(S4-rc): Crashlytics Gradle plugin (build id and mapping file; latest on Google Maven, checked 2026-11-07)
 firebase-crashlytics-plugin = "3.0.8"
+# FORK(S4-billing): Play Billing Library (TRD §2: 9.x when stable; 9.1.0 is the current release, checked 2026-11-07)
+billing = "9.1.0"
 
 
 
@@ -154,6 +156,8 @@ firebase-auth = { module = "com.google.firebase:firebase-auth" }
 firebase-config = { module = "com.google.firebase:firebase-config" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
+# FORK(S4-billing): :core:billing (Play Billing with the Kotlin extensions)
+billing-ktx = { module = "com.android.billingclient:billing-ktx", version.ref = "billing" }
 
 
 

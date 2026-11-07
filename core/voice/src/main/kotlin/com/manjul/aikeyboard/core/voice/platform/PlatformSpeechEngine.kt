@@ -14,6 +14,7 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.annotation.RequiresApi
 import com.manjul.aikeyboard.core.voice.EngineKind
 import com.manjul.aikeyboard.core.voice.SpeechEngine
 
@@ -59,8 +60,10 @@ class PlatformSpeechEngine(
     override fun start(lang: String, listener: SpeechEngine.Listener) = onMain {
         if (destroyed) return@onMain
         recognizer?.destroy()
-        val r = if (useOnDeviceFactory(onDevice, Build.VERSION.SDK_INT)) {
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        // useOnDeviceFactory is the tested rule. The inline SDK_INT check is the API 31 guard that lint can see.
+        val onDeviceFactory = useOnDeviceFactory(onDevice, Build.VERSION.SDK_INT)
+        val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && onDeviceFactory) {
+            createOnDeviceRecognizer()
         } else {
             SpeechRecognizer.createSpeechRecognizer(context)
         }
@@ -68,6 +71,9 @@ class PlatformSpeechEngine(
         recognizer = r
         r.startListening(buildRecognizerIntent(lang, Build.VERSION.SDK_INT, segmented))
     }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun createOnDeviceRecognizer(): SpeechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
 
     override fun stop() = onMain { recognizer?.stopListening() }
 

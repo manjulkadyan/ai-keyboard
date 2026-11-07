@@ -39,6 +39,12 @@ class ImeAdIsolationTest {
             "com.google.android.ump",
         )
 
+        /** S4: purchases live in the app process only. The IME gets the Pro gate as `() -> Boolean`. */
+        val BILLING_PACKAGES = listOf(
+            "com.android.billingclient",
+            "com.manjul.aikeyboard.core.billing",
+        )
+
         /**
          * `:app` packages allowed to use the ads stack (Activity-only code). Empty in Sprint 0: nothing
          * calls `:core:ads` yet. Adding one needs a reason and must keep it out of IME reach.
@@ -217,5 +223,24 @@ class ImeAdIsolationTest {
             import org.com.google.android.ump.Qux
         """.trimIndent()
         assertEquals(emptySet<String>(), findReferences(source, AD_PACKAGES + AD_HOST_PACKAGES))
+    }
+
+    @Test
+    fun `ime code does not reference play billing or core billing`() {
+        val found = violations(imeScopeFiles(), BILLING_PACKAGES)
+        assertEquals(emptyList<String>(), found, "IME code must not use billing code (S4 plan, TRD §2.2)")
+    }
+
+    @Test
+    fun `billing rule catches an ime source that imports the play billing client`() {
+        val source = """
+            package com.manjul.aikeyboard.ime.smartbar
+            import com.android.billingclient.api.BillingClient
+            fun f() = com.manjul.aikeyboard.core.billing.ProCatalog.PRODUCT_ID
+        """.trimIndent()
+        assertEquals(
+            setOf("com.android.billingclient", "com.manjul.aikeyboard.core.billing"),
+            findReferences(source, BILLING_PACKAGES),
+        )
     }
 }

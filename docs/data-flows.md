@@ -54,6 +54,14 @@ shipped build yet (`docs/sprint-3-device-checklist.md` A.1).
 | Firebase Analytics | Catalog events and params only (`EventCatalog`), Firebase app instance id, device and app metadata | Yes, only when Firebase is configured and the user did not opt out | Google (Firebase Analytics) | Each batched event from the analytics relay | Collection and ad id collection are off in the manifest. Code turns them on only without the opt-out, and off at once on opt-out. Consent Mode is not wired until Task 6 |
 | Crashlytics | Crash and non-fatal stack traces with exception class names, area tag, device and app metadata | Yes, only when Firebase is configured and the user did not opt out | Google (Firebase Crashlytics) | Crashes and `NonFatalReporter.report` | Every exception message is dropped (`CrashlyticsReporter.scrub`). Collection is off in the manifest until the app starts it |
 
+## Play Billing and Pro entitlement (Sprint 4)
+
+| Flow | Data | Leaves the device? | Where to | When | Notes |
+|---|---|---|---|---|---|
+| Play Billing (`:core:billing`, PBL 9.1.0) | Product id `pro`, the chosen base plan and offer token; Google account and payment data stay inside Play | Yes | Google Play | Paywall open (product details), purchase sheet, app start and resume (purchase list) | App process only, never the IME (`ImeAdIsolationTest`). The client never acknowledges: kb-api does. Purchase tokens and order ids are never logged, put in analytics, exceptions or `toString` |
+| Entitlement verify and read (`POST /v1/entitlement/verify`, `GET /v1/entitlement`) | The Play purchase token and product id (verify only), plus the kb-api auth headers | Yes | kb-api, which checks the token with the Play Developer API | After a purchase, app start, resume (at most once per 5 min), paywall open and restore. Offline retries at 2, 4 and 8 s, then a unique `VerifyPurchaseWorker` with no input data | kb-api is the only Pro authority (ARCH-006). The answer is ECDSA P-256 signed |
+| Pro cache (`FeatureSettings.pro*`) | `proActive`, `proState`, `proExpiresAt`, `proIssuedAt`, `proSignature`, `proCheckedAt` | No | `FeatureSettings` on the device | Each verified kb-api answer | Written only after the signature check. Pro holds until `expires_at` plus 3 days offline. No token is stored |
+
 ## Suggestions and the user dictionary (Sprint 3)
 
 | Flow | Data | Leaves the device? | Where to | When | Notes |

@@ -66,6 +66,18 @@ data class FeatureSettings(
      * this module does not depend on `:core:ai`; [FeatureSettingsStore] clamps unknown values to the default.
      */
     val polishOutputScript: String = DEFAULT_OUTPUT_SCRIPT,
+    /**
+     * The last kb-api entitlement verdict (S4 Task 2), written by `EntitlementRepository` only after its signature
+     * checks out. kb-api is the Pro authority (ARCH-006); the IME reads Pro through [isProAt]. [proState] is the
+     * kb-api `SubState` wire name. No purchase token or order id is ever stored here.
+     */
+    val proActive: Boolean = false,
+    val proState: String = "none",
+    val proExpiresAt: Long = 0L,
+    val proIssuedAt: Long = 0L,
+    val proSignature: String = "",
+    /** When kb-api last answered (epoch ms); 0 = never. */
+    val proCheckedAt: Long = 0L,
 ) {
     /** True while any AI consent is on record, so Settings can offer to withdraw it. */
     val hasAnyAiConsent: Boolean get() = consentAiAt > 0L || consentAutoPolishAt > 0L
@@ -87,5 +99,12 @@ data class FeatureSettings(
         val MVP_LANGUAGES: List<String> = listOf("en", "es", "fr", "pt", "id", "ar", "ur", "hi")
 
         val DEFAULT_AUTOCORRECT_LOCALES: Set<String> = setOf("en", "es", "fr", "pt", "id")
+
+        /** The cached verdict stays valid this long after `expires_at` (TRD §4.12, plan decision 2). */
+        const val PRO_CACHE_GRACE_MS: Long = 3L * 24 * 60 * 60 * 1000
     }
 }
+
+/** Pro at [nowMs] from the cached kb-api verdict: active, and not past `expires_at` plus the 3-day grace. */
+fun FeatureSettings.isProAt(nowMs: Long): Boolean =
+    proActive && nowMs < proExpiresAt + FeatureSettings.PRO_CACHE_GRACE_MS

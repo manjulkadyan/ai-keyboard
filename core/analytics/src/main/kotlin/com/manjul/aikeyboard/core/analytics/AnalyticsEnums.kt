@@ -72,3 +72,33 @@ enum class AiErrorReason(val value: String) {
 
 /** PRD §10.6 consent classes that have an Agree screen this sprint. */
 enum class ConsentKind(val value: String) { AI("ai"), AUTO_POLISH("auto_polish") }
+
+/** The Pro plan (`purchase_start`, `trial_start`, `purchase_success`). */
+enum class ProPlanParam(val value: String) { MONTHLY("monthly"), ANNUAL("annual") }
+
+/**
+ * `purchase_fail{code}`: the Play `BillingResponseCode` constant name in lower case, plus [INVALID_TOKEN] when kb-api
+ * rejects the purchase. Never the Play debug message.
+ */
+enum class PurchaseFailCode(val value: String) {
+    USER_CANCELED("user_canceled"), SERVICE_TIMEOUT("service_timeout"), FEATURE_NOT_SUPPORTED("feature_not_supported"),
+    SERVICE_DISCONNECTED("service_disconnected"), SERVICE_UNAVAILABLE("service_unavailable"),
+    BILLING_UNAVAILABLE("billing_unavailable"), ITEM_UNAVAILABLE("item_unavailable"),
+    DEVELOPER_ERROR("developer_error"), ERROR("error"), ITEM_ALREADY_OWNED("item_already_owned"),
+    ITEM_NOT_OWNED("item_not_owned"), NETWORK_ERROR("network_error"), INVALID_TOKEN("invalid_token"),
+    ;
+
+    companion object {
+        /** [name] is a `BillingResponseCode` constant name; an unknown one is [ERROR]. */
+        fun fromResponseCodeName(name: String): PurchaseFailCode = entries.firstOrNull { it.name == name } ?: ERROR
+    }
+}
+
+/** `subscription_state{state}`: the kb-api `SubState` wire strings. */
+enum class SubscriptionStateParam(val value: String) {
+    NONE("none"), PENDING("pending"), ACTIVE("active"), GRACE("grace"), ON_HOLD("hold"), PAUSED("paused"),
+    EXPIRED("expired"), REVOKED("revoked"),
+}
+
+/** The `pro_status` user property. */
+enum class ProStatus(val value: String) { FREE("free"), TRIAL("trial"), PRO("pro"), GRACE("grace") }

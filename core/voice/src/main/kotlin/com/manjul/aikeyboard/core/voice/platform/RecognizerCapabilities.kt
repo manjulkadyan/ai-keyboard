@@ -13,6 +13,7 @@ import android.speech.RecognitionSupport
 import android.speech.RecognitionSupportCallback
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -63,58 +64,60 @@ class PlatformRecognizerCapabilities(
     override fun isRecognitionAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
     override fun isOnDeviceAvailable(): Boolean =
-        sdkInt >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
 
     override suspend fun onDeviceSupports(lang: String): Boolean? {
-        if (sdkInt < Build.VERSION_CODES.TIRAMISU) return null
+        // Below API 33 there is no support check: the answer is unknown.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
         if (synchronized(supported) { lang in supported }) return true
-        val result = withTimeoutOrNull(SUPPORT_CHECK_TIMEOUT_MS) {
-            suspendCancellableCoroutine { cont ->
-                // The recognizer must be created and used on the main thread.
-                mainHandler.post {
-                    if (!cont.isActive) return@post // timed out before the main thread got here
-                    var recognizer: SpeechRecognizer? = null
-                    runCatching {
-                        val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-                        recognizer = r
-                        // Every way out (answer, error, timeout) releases it late, and only once: a timeout is
-                        // followed by a session on this same service, and the answer may still arrive after it.
-                        var released = false
-                        val release = Runnable {
-                            if (!released) {
-                                released = true
-                                runCatching { r.destroy() }
-                            }
-                        }
-                        cont.invokeOnCancellation { mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS) }
-                        val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
-                        r.checkRecognitionSupport(
-                            intent,
-                            context.mainExecutor,
-                            object : RecognitionSupportCallback {
-                                override fun onSupportResult(recognitionSupport: RecognitionSupport) {
-                                    val ok = languageInstalled(lang, recognitionSupport.installedOnDeviceLanguages)
-                                    if (cont.isActive) cont.resume(ok)
-                                    mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS)
-                                }
-
-                                override fun onError(error: Int) {
-                                    if (cont.isActive) cont.resume(null)
-                                    mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS)
-                                }
-                            },
-                        )
-                    }.onFailure {
-                        runCatching { recognizer?.destroy() }
-                        if (cont.isActive) cont.resume(null)
-                    }
-                }
-            }
-        }
+        val result = withTimeoutOrNull(SUPPORT_CHECK_TIMEOUT_MS) { probeSupport(lang) }
         if (result == true) synchronized(supported) { supported += lang }
         return result
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private suspend fun probeSupport(lang: String): Boolean? = suspendCancellableCoroutine { cont ->
+        // The recognizer must be created and used on the main thread.
+        mainHandler.post {
+            if (!cont.isActive) return@post // timed out before the main thread got here
+            var recognizer: SpeechRecognizer? = null
+            runCatching {
+                val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                recognizer = r
+                // Every way out (answer, error, timeout) releases it late, and only once: a timeout is
+                // followed by a session on this same service, and the answer may still arrive after it.
+                var released = false
+                val release = Runnable {
+                    if (!released) {
+                        released = true
+                        runCatching { r.destroy() }
+                    }
+                }
+                cont.invokeOnCancellation { mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS) }
+                val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+                r.checkRecognitionSupport(
+                    intent,
+                    context.mainExecutor,
+                    object : RecognitionSupportCallback {
+                        override fun onSupportResult(recognitionSupport: RecognitionSupport) {
+                            val ok = languageInstalled(lang, recognitionSupport.installedOnDeviceLanguages)
+                            if (cont.isActive) cont.resume(ok)
+                            mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS)
+                        }
+
+                        override fun onError(error: Int) {
+                            if (cont.isActive) cont.resume(null)
+                            mainHandler.postDelayed(release, PROBE_RELEASE_DELAY_MS)
+                        }
+                    },
+                )
+            }.onFailure {
+                runCatching { recognizer?.destroy() }
+                if (cont.isActive) cont.resume(null)
+            }
+        }
     }
 
     override fun whisperModelReady(lang: String): Boolean = whisperReady(lang)

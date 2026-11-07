@@ -50,6 +50,17 @@ object EventCatalog {
     const val AI_OUTPUT_REPORTED = "ai_output_reported"
     const val CONSENT_RESULT = "consent_result"
     const val CONSENT_WITHDRAWN = "consent_withdrawn"
+    const val PURCHASE_START = "purchase_start"
+    const val TRIAL_START = "trial_start"
+    const val PURCHASE_SUCCESS = "purchase_success"
+    const val PURCHASE_FAIL = "purchase_fail"
+    const val SUBSCRIPTION_STATE = "subscription_state"
+    const val RESTORE_PURCHASES = "restore_purchases"
+
+    /** User property: one of [ProStatus]. */
+    const val USER_PROPERTY_PRO_STATUS = "pro_status"
+
+    private val CURRENCY = Regex("^[A-Z]{3}\$")
 
     val paramRegistry: Map<String, Set<String>> = mapOf(
         ONBOARDING_START to setOf("source"),
@@ -82,6 +93,12 @@ object EventCatalog {
         AI_OUTPUT_REPORTED to setOf("tone"),
         CONSENT_RESULT to setOf("kind", "agreed"),
         CONSENT_WITHDRAWN to setOf("kind"),
+        PURCHASE_START to setOf("plan"),
+        TRIAL_START to setOf("plan"),
+        PURCHASE_SUCCESS to setOf("plan", "price_tier"),
+        PURCHASE_FAIL to setOf("code"),
+        SUBSCRIPTION_STATE to setOf("state"),
+        RESTORE_PURCHASES to setOf("found"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -220,4 +237,28 @@ object EventCatalog {
 
     /** The user withdrew a consent in Settings. */
     fun consentWithdrawn(kind: ConsentKind) = event(CONSENT_WITHDRAWN, "kind" to kind.value)
+
+    // Billing events (PRD §12). Never a purchase token, order id or price: only the plan, an ISO currency code
+    // (plan decision 24) and closed codes.
+
+    /** The billing flow opened for [plan]. */
+    fun purchaseStart(plan: ProPlanParam) = event(PURCHASE_START, "plan" to plan.value)
+
+    /** kb-api verified a purchase that used the free-trial offer. */
+    fun trialStart(plan: ProPlanParam) = event(TRIAL_START, "plan" to plan.value)
+
+    /** kb-api verified a paid purchase. [currency] must be an ISO 4217 code, anything else becomes "other". */
+    fun purchaseSuccess(plan: ProPlanParam, currency: String) = event(
+        PURCHASE_SUCCESS,
+        "plan" to plan.value,
+        "price_tier" to if (CURRENCY.matches(currency)) currency else "other",
+    )
+
+    fun purchaseFail(code: PurchaseFailCode) = event(PURCHASE_FAIL, "code" to code.value)
+
+    /** The verified subscription state changed. */
+    fun subscriptionState(state: SubscriptionStateParam) = event(SUBSCRIPTION_STATE, "state" to state.value)
+
+    /** "Restore purchases" finished; [found] is true when kb-api returned Pro. */
+    fun restorePurchases(found: Boolean) = event(RESTORE_PURCHASES, "found" to found)
 }

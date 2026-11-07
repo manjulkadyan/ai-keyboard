@@ -99,6 +99,9 @@ android {
         buildConfigField("String", "FIREBASE_APP_ID", "\"${aikbProperty("aikb.firebase.appId")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${aikbProperty("aikb.firebase.apiKey")}\"")
         buildConfigField("String", "FIREBASE_PROJECT_NUMBER", "\"${aikbProperty("aikb.firebase.projectNumber")}\"")
+        // FORK(S4-billing): kb-api's entitlement public key (base64 X.509, ECDSA P-256), aikb.entitlement.publicKey.
+        // Empty by default. Debug accepts an unsigned cache, a release package fails below when it is empty.
+        buildConfigField("String", "ENTITLEMENT_PUBLIC_KEY", "\"${aikbProperty("aikb.entitlement.publicKey")}\"")
 
         sourceSets {
             maybeCreate("main").apply {
@@ -341,6 +344,15 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.espresso.core)
+}
+
+// FORK(S4-billing): a release package without the entitlement public key would trust no Pro cache at all, so packaging
+// fails early. Only the release packaging tasks check it, so assembleDebug, test, lint and CI run without the key.
+tasks.matching { it.name == "packageRelease" || it.name == "bundleRelease" }.configureEach {
+    val key = aikbProperty("aikb.entitlement.publicKey")
+    doFirst {
+        check(key.isNotEmpty()) { "Set the Gradle property aikb.entitlement.publicKey for a release build" }
+    }
 }
 
 // FORK(S3-net): a Gradle property as a BuildConfig string value (empty when unset; quotes and backslashes rejected)

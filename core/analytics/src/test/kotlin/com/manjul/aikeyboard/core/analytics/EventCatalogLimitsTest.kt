@@ -49,6 +49,12 @@ class EventCatalogLimitsTest {
         EventCatalog.aiOutputReported(AiTone.POLISH),
         EventCatalog.consentResult(ConsentKind.AUTO_POLISH, false),
         EventCatalog.consentWithdrawn(ConsentKind.AI),
+        EventCatalog.purchaseStart(ProPlanParam.MONTHLY),
+        EventCatalog.trialStart(ProPlanParam.ANNUAL),
+        EventCatalog.purchaseSuccess(ProPlanParam.ANNUAL, big),
+        EventCatalog.purchaseFail(PurchaseFailCode.NETWORK_ERROR),
+        EventCatalog.subscriptionState(SubscriptionStateParam.REVOKED),
+        EventCatalog.restorePurchases(false),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -153,6 +159,8 @@ class EventCatalogLimitsTest {
             "translate_preview", "process_text_open", "process_text_replace", "deeplink_unknown",
             "ai_request", "ai_rewrite_done", "ai_polish_done", "ai_quota_hit", "ai_error", "ai_output_reported",
             "consent_result", "consent_withdrawn",
+            "purchase_start", "trial_start", "purchase_success", "purchase_fail", "subscription_state",
+            "restore_purchases",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)
