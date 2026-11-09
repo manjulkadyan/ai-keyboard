@@ -190,6 +190,7 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `gradle/libs.versions.toml` | S4-update | `app-update` version (2.1.0) and `play-app-update-ktx` library, inside the `# --- AI Keyboard ---` blocks |
 | `app/build.gradle.kts` | S4-update | `implementation(libs.play.app.update.ktx)`: Play in-app update, used by `fork/update` |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S4-update | Home composes `fork/update/HomeUpdatePrompt`: the update check on resume (with the ad entry source from `AdsAppGraph.currentEntry`) and the "Restart" snackbar. Already on the `ImeAdIsolationTest.AD_HOST_CALLERS` list |
+| `app/build.gradle.kts` | S4-rc | Exit check fix: `firebaseCrashlytics.mappingFileUploadEnabled = false` on every build type. The upload task needs the Google-Services plugin, so every minified build (`bundleRelease`) failed at configuration. The mapping file is uploaded with the Firebase CLI |
 | `README.md` | Rewritten from scratch for the fork (S0-branding); no upstream hunk is left to annotate |
 
 ## Decisions

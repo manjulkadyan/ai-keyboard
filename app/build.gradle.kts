@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension // FORK(S4-rc): mapping upload off
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -198,6 +199,12 @@ android {
             initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
+        }
+
+        // FORK(S4-rc): no R8 mapping upload. It needs the Google-Services plugin, but Firebase options come from
+        // aikb.firebase.*, so every minified build failed. Upload mapping.txt with the Firebase CLI instead.
+        configureEach {
+            extensions.configure<CrashlyticsExtension> { mappingFileUploadEnabled = false }
         }
     }
 
