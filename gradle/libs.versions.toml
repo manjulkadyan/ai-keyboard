@@ -40,6 +40,8 @@ android-lint = "31.12.0"
 junit4 = "4.13.2"
 # :core:ads consent (Google UMP). 4.0.0 is the latest release on Google Maven (checked 2026-10-18)
 google-ump = "4.0.0"
+# FORK(S4-ads): Google Mobile Ads (legacy GMA SDK, OD-09). 25.5.0 per the Sprint 4 plan
+play-services-ads = "25.5.0"
 # FORK(S1-policy): :core:datastore (latest stable on Google Maven / Maven Central, checked 2026-10-18)
 androidx-datastore = "1.2.1"
 # Moving this version means re-checking the android-all pin (14-robolectric-...) in gradle/robolectric-offline.gradle.kts
@@ -128,6 +130,8 @@ android-lint-tests = { module = "com.android.tools.lint:lint-tests", version.ref
 junit4 = { module = "junit:junit", version.ref = "junit4" }
 # :core:ads
 google-ump = { module = "com.google.android.ump:user-messaging-platform", version.ref = "google-ump" }
+# FORK(S4-ads): :core:ads GMA SDK
+play-services-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "play-services-ads" }
 # FORK(S1-policy): :core:datastore and Robolectric tests (junit-vintage runs JUnit4 tests on the JUnit 5 platform; version from the junit-bom)
 androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "androidx-datastore" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }

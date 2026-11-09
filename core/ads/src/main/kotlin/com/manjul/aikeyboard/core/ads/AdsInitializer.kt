@@ -9,24 +9,27 @@ import android.app.Activity
 import androidx.annotation.MainThread
 import com.manjul.aikeyboard.core.ads.consent.ConsentError
 import com.manjul.aikeyboard.core.ads.consent.ConsentManager
+import com.manjul.aikeyboard.core.ads.consent.ConsentResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * The ad SDK behind the consent gate. Sprint 0 ships [NoAdSdk]; the Google Mobile Ads implementation
- * (`MobileAds.initialize`) arrives with the placements in Sprint 4.
+ * The ad SDK behind the consent gate: [com.manjul.aikeyboard.core.ads.gma.GmaAdSdk] in the app, [NoAdSdk] in tests.
  */
 interface AdSdk {
-    /** Called at most once per process, only after consent allows ad requests. */
+    /**
+     * Called at most once per process, only after consent allows ad requests. Exactly one of [onComplete] and
+     * [onFailure] runs later, on the main thread. A synchronous throw counts as a failure too.
+     */
     @MainThread
-    fun initialize(activity: Activity, onComplete: () -> Unit)
+    fun initialize(activity: Activity, onComplete: () -> Unit, onFailure: () -> Unit)
 }
 
-/** No ad SDK linked yet: initialisation completes immediately and loads nothing. */
+/** No ad SDK: initialisation completes immediately and loads nothing. */
 object NoAdSdk : AdSdk {
-    override fun initialize(activity: Activity, onComplete: () -> Unit) = onComplete()
+    override fun initialize(activity: Activity, onComplete: () -> Unit, onFailure: () -> Unit) = onComplete()
 }
 
 data class AdsStatus(
@@ -58,11 +61,14 @@ data class AdsStatus(
  * is not entitled to an ad-free app.
  *
  * @param adsDisabled Entitlement check; true for Pro users. Read each time consent resolves.
+ * @param onConsent Gets every consent result, also when ads stay off (Consent Mode v2 for Analytics, TRD §4.11).
+ *   A throw is contained.
  */
 class AdsInitializer(
     private val consentManager: ConsentManager,
     private val adSdk: AdSdk = NoAdSdk,
     private val adsDisabled: () -> Boolean = { false },
+    private val onConsent: (ConsentResult) -> Unit = {},
 ) {
     private val _status = MutableStateFlow(AdsStatus())
     val status: StateFlow<AdsStatus> = _status.asStateFlow()
@@ -87,6 +93,7 @@ class AdsInitializer(
             _status.update {
                 it.copy(privacyOptionsRequired = result.privacyOptionsRequired, lastConsentError = result.error)
             }
+            runCatching { onConsent(result) }
             when {
                 !result.canRequestAds -> setPhase(AdsStatus.Phase.CONSENT_NOT_GRANTED)
                 adsDisabled() -> setPhase(AdsStatus.Phase.ADS_DISABLED)
@@ -107,7 +114,11 @@ class AdsInitializer(
         setPhase(sdkPhase)
         // TRD §11.1 1.3: an SDK failure must not crash the shared app/IME process.
         runCatching {
-            adSdk.initialize(activity) { onSdkFinished(AdsStatus.Phase.READY) }
+            adSdk.initialize(
+                activity,
+                onComplete = { onSdkFinished(AdsStatus.Phase.READY) },
+                onFailure = { onSdkFinished(AdsStatus.Phase.SDK_FAILED) },
+            )
         }.onFailure {
             onSdkFinished(AdsStatus.Phase.SDK_FAILED)
         }

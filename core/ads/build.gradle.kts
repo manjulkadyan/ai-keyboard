@@ -6,7 +6,8 @@
 // :core:ads (TRD §2.2, §4.11): consent (UMP), placement registry, global and frequency caps.
 // App process only: :ime* modules must not depend on this module (enforced by aikeyboard.module-rules),
 // and the upstream IME code inside :app must not import it (enforced by ImeAdIsolationTest in :app).
-// The Google Mobile Ads SDK is not added yet; placements and ad loading arrive in Sprint 4.
+// S4 Task 6: the Google Mobile Ads SDK (gma/) starts only after UMP consent, from the app's main Activity.
+// Its init provider is removed in :app's manifest, so nothing here runs at process start (TRD §11.1).
 
 plugins {
     alias(libs.plugins.aikeyboard.android.library)
@@ -23,5 +24,9 @@ android {
 
 dependencies {
     api(libs.kotlinx.coroutines)
+    api(projects.core.common)
+    implementation(projects.core.datastore)
     implementation(libs.google.ump)
+    implementation(libs.play.services.ads)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

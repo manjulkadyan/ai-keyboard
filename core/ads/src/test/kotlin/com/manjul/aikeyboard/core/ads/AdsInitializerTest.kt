@@ -35,8 +35,11 @@ class AdsInitializerTest {
         var calls = 0
         var complete: (() -> Unit)? = null
 
-        override fun initialize(activity: Activity, onComplete: () -> Unit) {
+        var failed: (() -> Unit)? = null
+
+        override fun initialize(activity: Activity, onComplete: () -> Unit, onFailure: () -> Unit) {
             calls++
+            failed = onFailure
             if (fail) error("sdk boom")
             if (completeImmediately) onComplete() else complete = onComplete
         }
@@ -167,5 +170,39 @@ class AdsInitializerTest {
         consent.resolve(ConsentResult(canRequestAds = true, privacyOptionsRequired = false))
         assertEquals(1, sdk.calls)
         assertEquals(AdsStatus.Phase.SDK_FAILED, initializer.status.value.phase)
+    }
+
+    @Test
+    fun `an asynchronous sdk failure gives SDK_FAILED`() {
+        val sdk = FakeSdk(completeImmediately = false)
+        val initializer = AdsInitializer(consent, sdk)
+        initializer.initialize(activity)
+        consent.resolve(ConsentResult(canRequestAds = true, privacyOptionsRequired = false))
+        sdk.failed!!()
+        assertEquals(AdsStatus.Phase.SDK_FAILED, initializer.status.value.phase)
+    }
+
+    @Test
+    fun `every consent result goes to onConsent, also when ads stay off`() {
+        val results = mutableListOf<ConsentResult>()
+        val initializer = AdsInitializer(consent, FakeSdk(), adsDisabled = { true }, onConsent = { results += it })
+        initializer.initialize(activity)
+        val denied = ConsentResult(canRequestAds = false, privacyOptionsRequired = true)
+        consent.resolve(denied)
+        initializer.initialize(activity)
+        val granted = ConsentResult(canRequestAds = true, privacyOptionsRequired = false)
+        consent.resolve(granted)
+        assertEquals(listOf(denied, granted), results)
+        assertEquals(AdsStatus.Phase.ADS_DISABLED, initializer.status.value.phase)
+    }
+
+    @Test
+    fun `a throwing onConsent does not stop the ads stack`() {
+        val sdk = FakeSdk()
+        val initializer = AdsInitializer(consent, sdk, onConsent = { error("sink boom") })
+        initializer.initialize(activity)
+        consent.resolve(ConsentResult(canRequestAds = true, privacyOptionsRequired = false))
+        assertEquals(1, sdk.calls)
+        assertEquals(AdsStatus.Phase.READY, initializer.status.value.phase)
     }
 }
