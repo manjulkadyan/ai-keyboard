@@ -78,6 +78,16 @@ App process only. The keyboard never loads UMP or GMA (`ImeAdIsolationTest`, `Im
 | `ad_paid_event` (`app/ads/PaidEventLogger`) | `placement`, `format`, `value_micros` (Long), `currency` (ISO 4217 or `other`), `precision` | Per the Firebase Analytics row | Firebase Analytics, through the consent-aware relay | Each GMA paid callback (impression-level revenue) | No ad unit id, ad content, advertising id or user content. A failing sink never throws into the SDK |
 | `ads_state.json` (`:core:ads` `DataStoreAdCapStateStore`) | Ad show records (placement, format, time), session count, last background time, feature-use count, last interstitial and app-open times | No | App files (`files/datastore/ads_state.json`), app process only | Each ad show, session start, background and feature use | Counts and time stamps only. Feeds the frequency caps and the session and feature-use rules. Removed with the app data |
 
+## In-app update (Sprint 4)
+
+App process only (Home). The keyboard never loads the Play update client.
+
+| Flow | Data | Leaves the device? | Where to | When | Notes |
+|---|---|---|---|---|---|
+| Update check (`fork/update/UpdateController`) | The package name and installed version, which Play already has | Yes | Google Play (the Play Core app-update client) | On Home resume, at most once per 24 h, after onboarding, never for a text-selection or share entry. A declined immediate update asks again on the next Home resume | No account, text or device id is added by the app. Nothing goes to kb-api |
+| `updateCheckedAt` | The time of the last finished check | No | `FeatureSettings` on the device | After a check | Local only, never sent |
+| `update_prompt` | `type` (`flexible`, `immediate`), `result` (`accepted`, `declined`, `failed`) | Yes, with analytics consent | Firebase Analytics, through the consent-aware relay | Once per shown update dialog | No version number or user content |
+
 ## Suggestions and the user dictionary (Sprint 3)
 
 | Flow | Data | Leaves the device? | Where to | When | Notes |

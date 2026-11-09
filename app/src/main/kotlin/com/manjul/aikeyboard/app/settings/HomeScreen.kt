@@ -43,9 +43,11 @@ import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
+import com.manjul.aikeyboard.app.ads.AdsAppGraph // FORK(S4-update): the current entry source for the update prompt
 import com.manjul.aikeyboard.app.ads.HomeBannerSlot // FORK(S4-ads)
 import com.manjul.aikeyboard.fork.billing.HomeFixPaymentBanner // FORK(S4-billing)
 import com.manjul.aikeyboard.fork.paywall.HomeWinBackCard // FORK(S4-paywall)
+import com.manjul.aikeyboard.fork.update.HomeUpdatePrompt // FORK(S4-update)
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.lib.util.InputMethodUtils
 import dev.patrickgold.jetpref.datastore.model.observeAsState
@@ -69,6 +71,9 @@ fun HomeScreen() = FlorisScreen {
     content {
         // FORK(S4-billing): "Fix payment" in Play grace and account hold
         HomeFixPaymentBanner()
+        // FORK(S4-update): Play in-app update check on resume, and the "Restart" snackbar after a flexible download
+        val adsGraph = AdsAppGraph.get(context.applicationContext as android.app.Application)
+        HomeUpdatePrompt(currentEntry = { adsGraph.currentEntry })
         // FORK(S4-paywall): T8 win-back card on day 3 and day 10
         HomeWinBackCard()
         val isCollapsed by prefs.internal.homeIsBetaToolboxCollapsed.observeAsState()

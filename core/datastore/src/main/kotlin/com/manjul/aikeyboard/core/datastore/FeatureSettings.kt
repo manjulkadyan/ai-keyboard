@@ -85,6 +85,8 @@ data class FeatureSettings(
     val paywallOnboardingShownAt: Long = 0L,
     val winBackShownCount: Int = 0,
     val winBackLastShownAt: Long = 0L,
+    /** When the Play in-app update check last finished (S4 Task 8, epoch ms); 0 = never. Local only. */
+    val updateCheckedAt: Long = 0L,
 ) {
     /** True while any AI consent is on record, so Settings can offer to withdraw it. */
     val hasAnyAiConsent: Boolean get() = consentAiAt > 0L || consentAutoPolishAt > 0L

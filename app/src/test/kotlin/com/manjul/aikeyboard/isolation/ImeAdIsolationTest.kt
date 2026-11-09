@@ -66,7 +66,8 @@ class ImeAdIsolationTest {
                 "S4 Task 7: AppNavHost reports navigation steps (NavTransitionReporter), the only interstitial " +
                 "trigger. The nav host is composed only by FlorisAppActivity; the IME reads route types only.",
             "com/manjul/aikeyboard/app/settings/HomeScreen.kt" to
-                "S4 Task 7: the banner_home slot at the bottom of Home. Composed only inside FlorisAppActivity.",
+                "S4 Task 7: the banner_home slot at the bottom of Home. S4 Task 8: reads the current entry source " +
+                "(a plain EntrySource) for the update prompt. Composed only inside FlorisAppActivity.",
             "com/manjul/aikeyboard/fork/translator/TranslatorScreen.kt" to
                 "S4 Task 7: the native_translator slot and translate_done as a feature use. Activity screen only.",
             "com/manjul/aikeyboard/fork/translator/HistoryScreen.kt" to

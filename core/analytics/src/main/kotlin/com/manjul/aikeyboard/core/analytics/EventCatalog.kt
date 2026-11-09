@@ -59,6 +59,7 @@ object EventCatalog {
     const val PAYWALL_VIEW = "paywall_view"
     const val PAYWALL_CLOSE = "paywall_close"
     const val AD_PAID_EVENT = "ad_paid_event"
+    const val UPDATE_PROMPT = "update_prompt"
 
     /** User property: one of [ProStatus]. */
     const val USER_PROPERTY_PRO_STATUS = "pro_status"
@@ -106,6 +107,7 @@ object EventCatalog {
         PAYWALL_VIEW to setOf("trigger"),
         PAYWALL_CLOSE to setOf("trigger", "seconds_bucket"),
         AD_PAID_EVENT to setOf("placement", "format", "value_micros", "currency", "precision"),
+        UPDATE_PROMPT to setOf("type", "result"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -278,6 +280,10 @@ object EventCatalog {
         "trigger" to trigger.value,
         "seconds_bucket" to Buckets.seconds(seconds),
     )
+
+    /** The Play in-app update prompt ended with [result] (S4 Task 8). Logged once per prompt. */
+    fun updatePrompt(type: UpdateTypeParam, result: UpdateResultParam) =
+        event(UPDATE_PROMPT, "type" to type.value, "result" to result.value)
 
     /**
      * The ad SDK reported revenue for one impression (S4 Task 7, GMA `OnPaidEventListener`). [placement] is a

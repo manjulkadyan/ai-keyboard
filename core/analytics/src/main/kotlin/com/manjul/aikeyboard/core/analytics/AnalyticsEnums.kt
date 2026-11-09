@@ -119,3 +119,9 @@ enum class AdFormatParam(val value: String) {
 enum class AdPrecisionParam(val value: String) {
     UNKNOWN("unknown"), ESTIMATED("estimated"), PUBLISHER_PROVIDED("publisher_provided"), PRECISE("precise"),
 }
+
+/** `update_prompt{type}`: the Play in-app update type. */
+enum class UpdateTypeParam(val value: String) { FLEXIBLE("flexible"), IMMEDIATE("immediate") }
+
+/** `update_prompt{result}`: what the user did with the Play update dialog, or [FAILED] when Play could not run it. */
+enum class UpdateResultParam(val value: String) { ACCEPTED("accepted"), DECLINED("declined"), FAILED("failed") }

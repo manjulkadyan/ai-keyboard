@@ -30,6 +30,7 @@ import com.manjul.aikeyboard.core.ads.placement.AdPlacements
 import com.manjul.aikeyboard.core.ads.rules.AdSessionTracker
 import com.manjul.aikeyboard.core.ads.rules.AdUnitIds
 import com.manjul.aikeyboard.core.common.NonFatalReporter
+import com.manjul.aikeyboard.core.common.entry.EntrySource
 import com.manjul.aikeyboard.core.config.ConfigKeys
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.firebaseGraph
@@ -145,6 +146,9 @@ class AdsAppGraph(private val app: Application) {
     fun onExternalFlowStart() {
         controller.onExternalFlowStart()
     }
+
+    /** The entry source in effect (S4 Task 8 reads it for the update prompt). Read only. */
+    val currentEntry: EntrySource get() = controller.currentEntry
 
     /** The SDK state and the Pro state, observed once per process. */
     private fun observeOnce() {

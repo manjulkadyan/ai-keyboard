@@ -176,6 +176,9 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt` | S4-ads | `onCreate` calls `app/ads/AdsAppGraph.attach(this)`: the entry source of each intent, the foreground and background, and the external-flow return flag for the S4 Task 7 ad rules. It overrides `startActivityForResult` and `startIntentSenderForResult` to set that flag, and provides `LocalAdsAppGraph` so ad slots render only in this Activity |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt` | S4-ads | `AppNavHost` composes `app/ads/NavTransitionReporter`, which reports feature-to-Home steps (the only interstitial trigger) and marks onboarding (no app-open ad). On the `ImeAdIsolationTest.AD_HOST_CALLERS` list |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S4-ads | The Settings home shows `app/ads/HomeBannerSlot` (`banner_home`) as its bottom bar. Empty for Pro, before ads are ready, in the first session or without a unit id. On the `ImeAdIsolationTest.AD_HOST_CALLERS` list |
+| `gradle/libs.versions.toml` | S4-update | `app-update` version (2.1.0) and `play-app-update-ktx` library, inside the `# --- AI Keyboard ---` blocks |
+| `app/build.gradle.kts` | S4-update | `implementation(libs.play.app.update.ktx)`: Play in-app update, used by `fork/update` |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S4-update | Home composes `fork/update/HomeUpdatePrompt`: the update check on resume (with the ad entry source from `AdsAppGraph.currentEntry`) and the "Restart" snackbar. Already on the `ImeAdIsolationTest.AD_HOST_CALLERS` list |
 | `README.md` | Rewritten from scratch for the fork (S0-branding); no upstream hunk is left to annotate |
 
 ## Decisions

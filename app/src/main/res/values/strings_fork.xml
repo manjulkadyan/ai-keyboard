@@ -336,4 +336,7 @@
     <!-- S4 Task 7: native ad slots (app.ads.NativeAdSlot). The link sits outside the ad container. -->
     <string name="ads__native_label" tools:ignore="MissingTranslation">Ad</string>
     <string name="ads__remove_ads_link" tools:ignore="MissingTranslation">Remove ads</string>
+    <string name="update__downloaded_message" tools:ignore="MissingTranslation">An update is ready to install.</string>
+    <string name="update__restart_action" tools:ignore="MissingTranslation">Restart</string>
+    <string name="update__later_action" tools:ignore="MissingTranslation">Later</string>
 </resources>

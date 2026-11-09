@@ -354,6 +354,7 @@ dependencies {
     implementation(projects.core.network)
     implementation(projects.core.billing) // FORK(S4-billing): Play Billing and the entitlement, app process only
     implementation(projects.core.firebase)
+    implementation(libs.play.app.update.ktx) // FORK(S4-update): Play in-app update
     implementation(projects.ime.aiUi) // FORK(S3-ai): the in-keyboard AI rewrite sheet and its controller
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)

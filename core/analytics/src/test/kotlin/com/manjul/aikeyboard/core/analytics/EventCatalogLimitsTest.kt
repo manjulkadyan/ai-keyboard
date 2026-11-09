@@ -58,6 +58,7 @@ class EventCatalogLimitsTest {
         EventCatalog.paywallView(PaywallTriggerParam.ONBOARDING),
         EventCatalog.paywallClose(PaywallTriggerParam.WIN_BACK, Long.MAX_VALUE),
         EventCatalog.adPaidEvent(big, AdFormatParam.APP_OPEN, Long.MAX_VALUE, big, AdPrecisionParam.ESTIMATED),
+        EventCatalog.updatePrompt(UpdateTypeParam.FLEXIBLE, UpdateResultParam.FAILED),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -153,6 +154,12 @@ class EventCatalogLimitsTest {
         assertEquals("translate", EventCatalog.packDownloadStart("ur", PackKind.TRANSLATE, 0).params["kind"])
     }
 
+    @Test fun updatePromptCarriesTypeAndResultOnly() {
+        val e = EventCatalog.updatePrompt(UpdateTypeParam.IMMEDIATE, UpdateResultParam.DECLINED)
+        assertEquals("update_prompt", e.name)
+        assertEquals(mapOf("type" to "immediate", "result" to "declined"), e.params)
+    }
+
     @Test fun namesMatchPrd() {
         val expected = setOf(
             "onboarding_start", "onboarding_step_view", "ime_enabled", "ime_selected", "languages_set",
@@ -163,7 +170,7 @@ class EventCatalogLimitsTest {
             "ai_request", "ai_rewrite_done", "ai_polish_done", "ai_quota_hit", "ai_error", "ai_output_reported",
             "consent_result", "consent_withdrawn",
             "purchase_start", "trial_start", "purchase_success", "purchase_fail", "subscription_state",
-            "restore_purchases", "paywall_view", "paywall_close", "ad_paid_event",
+            "restore_purchases", "paywall_view", "paywall_close", "ad_paid_event", "update_prompt",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)
