@@ -79,6 +79,7 @@ import com.manjul.aikeyboard.core.tts.TtsManager
 import com.manjul.aikeyboard.fork.suggest.SuggestContext // FORK(S3-suggest)
 import com.manjul.aikeyboard.fork.ai.AiAppGraph // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.rc.FirebaseGraph // FORK(S4-rc)
+import com.manjul.aikeyboard.fork.billing.BillingAppGraph // FORK(S4-billing)
 import kotlinx.coroutines.flow.distinctUntilChanged // FORK(S4-rc)
 import kotlinx.coroutines.flow.drop // FORK(S4-rc)
 import kotlinx.coroutines.flow.map // FORK(S4-rc)
@@ -168,6 +169,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     // FORK(S3-ai): config, kb-api tokens, cloud engine, LRU, pause gate, reports; no HTTP client or Firebase until used
     // FORK(S4-rc): the AI kill switch and timeouts come from the Remote Config mirror
     val aiAppGraph = lazy { AiAppGraph.create(this, firebaseGraph.value.remoteConfig) }
+    // FORK(S4-billing): Play Billing and the kb-api entitlement; app Activities only, the IME reads the Pro cache
+    val billing = lazy { BillingAppGraph(this) }
 
     // FORK(S1-whisper): WorkManager initialises on demand (its startup initializer is removed in the manifest)
     override val workManagerConfiguration: Configuration
@@ -177,6 +180,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
                     addFactory(ModelDownloadWorkerFactory { whisperVoice.value.models })
                     // FORK(S2-packs): translation model downloads
                     addFactory(TranslateModelDownloadWorkerFactory { translateModelStore.value })
+                    // FORK(S4-billing): the offline purchase verify retry
+                    addFactory(BillingAppGraph.workerFactory { billing.value })
                 },
             )
             .build()
@@ -329,3 +334,6 @@ fun Context.aiAppGraph() = this.florisApplication().aiAppGraph
 
 // FORK(S4-rc): accessor for the Remote Config mirror, Analytics sink and Crashlytics reporter
 fun Context.firebaseGraph() = this.florisApplication().firebaseGraph
+
+// FORK(S4-billing)
+fun Context.billing() = this.florisApplication().billing

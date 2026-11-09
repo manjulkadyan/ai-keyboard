@@ -127,6 +127,7 @@ import com.manjul.aikeyboard.fork.clipboard.ClipboardPanelGate // FORK(S1-policy
 import com.manjul.aikeyboard.fork.analytics.ImeSessionStartReporter // FORK(S1-analytics)
 import com.manjul.aikeyboard.fork.privacy.PrivateAppUndo // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.privacy.privateAppsRepository // FORK(S1-smartbar)
+import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.flow.update
 import org.florisboard.lib.android.AndroidInternalR
@@ -401,7 +402,7 @@ class FlorisImeService : LifecycleInputMethodService() {
             settings = featureSettingsStore().value,
             graph = aiAppGraph().value,
             launchConsent = { startActivity(AiConsentActivity.intent(this, it)) },
-            isPro = { false },
+            isPro = proGate(featureSettingsStore().value), // FORK(S4-billing): the signed Pro cache only
             scope = lifecycleScope,
             isRawInputEditor = { editorInstance.activeInfo.isRawInputEditor },
             locale = { subtypeManager.activeSubtype.primaryLocale.languageTag() },

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
+import com.manjul.aikeyboard.fork.billing.HomeFixPaymentBanner // FORK(S4-billing)
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.lib.util.InputMethodUtils
 import dev.patrickgold.jetpref.datastore.model.observeAsState
@@ -61,6 +62,8 @@ fun HomeScreen() = FlorisScreen {
     val context = LocalContext.current
 
     content {
+        // FORK(S4-billing): "Fix payment" in Play grace and account hold
+        HomeFixPaymentBanner()
         val isCollapsed by prefs.internal.homeIsBetaToolboxCollapsed.observeAsState()
 
         val isFlorisBoardEnabled by InputMethodUtils.observeIsFlorisboardEnabled(foregroundOnly = true)

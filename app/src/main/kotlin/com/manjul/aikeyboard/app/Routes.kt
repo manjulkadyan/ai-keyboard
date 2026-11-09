@@ -79,6 +79,10 @@ import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator
 import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.ai.ProPlaceholderScreen // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.settings.AiSettingsScreen // FORK(S3-polish)
+import com.manjul.aikeyboard.featureSettingsStore // FORK(S4-billing)
+import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
+import androidx.compose.runtime.remember // FORK(S4-billing)
+import androidx.compose.ui.platform.LocalContext // FORK(S4-billing)
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreen
 import com.manjul.aikeyboard.app.settings.theme.ThemeManagerScreenAction
 import com.manjul.aikeyboard.app.settings.theme.ThemeScreen
@@ -356,7 +360,11 @@ object Routes {
             composableWithDeepLink(Translator::class) { TranslatorScreen() } // FORK(S2-translator)
             composableWithDeepLink(TranslatorHistory::class) { HistoryScreen() } // FORK(S2-translator)
             composableWithDeepLink(Pro::class) { ProPlaceholderScreen() } // FORK(S3-ai)
-            composableWithDeepLink(Settings.Ai::class) { AiSettingsScreen() } // FORK(S3-polish)
+            composableWithDeepLink(Settings.Ai::class) { // FORK(S3-polish)
+                // FORK(S4-billing): auto-polish unlocks from the signed Pro cache
+                val store = LocalContext.current.featureSettingsStore().value
+                AiSettingsScreen(isPro = remember(store) { proGate(store) })
+            }
 
             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
 

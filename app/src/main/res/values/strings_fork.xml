@@ -294,4 +294,8 @@
     <!-- Label next to a Pro-only setting. -->
     <string name="ai_settings__pro" tools:ignore="MissingTranslation">Pro</string>
     <string name="ai_settings__auto_polish_pro_only" tools:ignore="MissingTranslation">Available with Pro.</string>
+
+    <!-- S4-billing: "Fix payment" banner on the Settings home (Play grace period and account hold). A tap opens Play. -->
+    <string name="billing__fix_payment_grace" tools:ignore="MissingTranslation">Your payment did not go through. Fix payment to keep Pro.</string>
+    <string name="billing__fix_payment_hold" tools:ignore="MissingTranslation">Pro is paused because of a payment problem. Fix payment to get it back.</string>
 </resources>

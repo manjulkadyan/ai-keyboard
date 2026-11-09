@@ -323,6 +323,7 @@ dependencies {
     implementation(projects.core.config)
     implementation(projects.core.ai)
     implementation(projects.core.network)
+    implementation(projects.core.billing) // FORK(S4-billing): Play Billing and the entitlement, app process only
     implementation(projects.core.firebase)
     implementation(projects.ime.aiUi) // FORK(S3-ai): the in-keyboard AI rewrite sheet and its controller
 

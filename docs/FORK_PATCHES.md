@@ -160,7 +160,11 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S1-voice | Device check 4.2 fix (R25): `onFinishInputView` ends dictation before `super.onFinishInputView`, which finishes the composing region, so a hide discards the partial instead of committing it. The companion `hideUi` (our hide key) ends dictation at once, so the mic turns off before the hide animation ends. Both report `end_reason=hidden` |
 | `settings.gradle.kts` | S4-billing | `include(":core:billing")` |
 | `gradle/libs.versions.toml` | S4-billing | `billing` version (Play Billing Library 9.1.0) and the `billing-ktx` library |
-| `app/build.gradle.kts` | S4-billing | BuildConfig `ENTITLEMENT_PUBLIC_KEY` from the Gradle property `aikb.entitlement.publicKey`; `packageRelease` and `bundleRelease` fail when it is empty |
+| `app/build.gradle.kts` | S4-billing | BuildConfig `ENTITLEMENT_PUBLIC_KEY` from the Gradle property `aikb.entitlement.publicKey`; `packageRelease` and `bundleRelease` fail when it is empty; `implementation(projects.core.billing)` |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S4-billing | Lazy `billing` (`fork/billing/BillingAppGraph`: Play Billing gateway and `EntitlementRepository`, built on first use) and `Context.billing()` accessor; `VerifyPurchaseWorker` joins the `DelegatingWorkerFactory` through `BillingAppGraph.workerFactory`. No `:core:billing` reference in this file (`ImeAdIsolationTest`) |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/FlorisAppActivity.kt` | S4-billing | `onCreate` calls `billing().onAppStart()` (one `refresh(COLD_START)` per process); new `onResume` calls `onAppResume()` (`refresh(RESUME)`, throttled). Both do nothing before AI consent or an earlier entitlement answer |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S4-billing | `AiImeSession(isPro = proGate(featureSettingsStore))`: the IME reads the signed Pro cache only, never `:core:billing` |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt`, `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S4-billing | `Settings.Ai` passes the same `proGate` to `AiSettingsScreen`; the Settings home shows `fork/billing/HomeFixPaymentBanner` at the top in Play grace and account hold |
 | `README.md` | Rewritten from scratch for the fork (S0-branding); no upstream hunk is left to annotate |
 
 ## Decisions

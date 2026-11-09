@@ -52,6 +52,7 @@ import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.cacheManager
 import com.manjul.aikeyboard.featureSettingsStore // FORK(S1-onboarding)
 import com.manjul.aikeyboard.firebaseGraph // FORK(S4-rc)
+import com.manjul.aikeyboard.billing // FORK(S4-billing)
 import com.manjul.aikeyboard.fork.routes.AppIntent // FORK(S2-routes)
 import com.manjul.aikeyboard.fork.routes.AppIntents // FORK(S2-routes)
 import com.manjul.aikeyboard.fork.routes.TranslatorHandoff // FORK(S2-routes)
@@ -116,6 +117,8 @@ class FlorisAppActivity : ComponentActivity() {
         // FORK(S4-rc): activate Remote Config at the cold start, fetch after the first frame, and listen for
         // kill-switch updates while this Activity is started. Does nothing without Firebase options.
         firebaseGraph().value.onAppActivityCreated(this) { task -> window.decorView.post(task) }
+        // FORK(S4-billing): one entitlement refresh per process start (after AI consent or an earlier answer)
+        billing().value.onAppStart()
 
         prefs.other.settingsTheme.asFlow().collectIn(lifecycleScope) {
             appTheme = it
@@ -164,6 +167,12 @@ class FlorisAppActivity : ComponentActivity() {
             }
             onNewIntent(intent)
         }
+    }
+
+    // FORK(S4-billing): entitlement refresh on resume, at most once per 5 min (the repository throttles it)
+    override fun onResume() {
+        super.onResume()
+        billing().value.onAppResume()
     }
 
     override fun onPause() {
