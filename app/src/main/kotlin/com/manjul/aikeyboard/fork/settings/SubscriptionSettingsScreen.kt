@@ -35,6 +35,7 @@ import com.manjul.aikeyboard.fork.paywall.PaywallTrigger
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.florisboard.lib.compose.stringRes
 
@@ -93,6 +94,11 @@ internal fun SubscriptionSettingsContent(
                 scope.launch {
                     val found = try {
                         onRestore()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // A Billing or network failure must not crash Settings. The user can try again.
+                        false
                     } finally {
                         restoring = false
                     }

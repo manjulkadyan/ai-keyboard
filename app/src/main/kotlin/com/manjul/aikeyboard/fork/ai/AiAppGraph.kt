@@ -17,6 +17,7 @@ import com.manjul.aikeyboard.core.ai.AiRequest
 import com.manjul.aikeyboard.core.ai.AuthHeaders
 import com.manjul.aikeyboard.core.ai.CloudAiEngine
 import com.manjul.aikeyboard.core.ai.TokenSource
+import com.manjul.aikeyboard.core.ai.kb.QuotaClient
 import com.manjul.aikeyboard.core.config.DefaultsRemoteConfig
 import com.manjul.aikeyboard.core.config.RemoteConfig
 import com.manjul.aikeyboard.core.firebase.DevTokenSource
@@ -61,6 +62,8 @@ class AiAppGraph(
     val pause: AiPauseGate,
     val report: suspend (ReportPayload) -> Unit,
     val isConfigured: Boolean,
+    /** S4 Task 11: `GET /v1/quota` for Settings → AI, on the same lazy OkHttp client. */
+    val quota: Lazy<QuotaClient?> = lazyOf(null),
 ) {
     companion object {
         fun create(context: Context, config: RemoteConfig = DefaultsRemoteConfig()): AiAppGraph {
@@ -88,6 +91,7 @@ class AiAppGraph(
                 pause = AiPauseGate(System::currentTimeMillis),
                 report = reports::send,
                 isConfigured = isConfigured(baseUrl, BuildConfig.AI_DEV_AUTH, firebase),
+                quota = lazy { QuotaClient(http.value, baseUrl, tokens) },
             )
         }
 

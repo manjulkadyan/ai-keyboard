@@ -77,9 +77,16 @@ class QuotaClientTest {
     }
 
     @Test
-    fun `quota status totals follow the tier`() {
-        assertEquals(10, QuotaStatus(3, 0L, "FREE").dailyTotal)
-        assertEquals(150, QuotaStatus(3, 0L, "PRO").dailyTotal)
-        assertEquals(10, QuotaStatus(3, 0L, "other").dailyTotal)
+    fun `the daily limit comes from the server when it is sent`() = runBlocking {
+        server.enqueue(json(200, """{"ai_left_today":7,"resets_at":0,"tier":"FREE","ai_daily_limit":10}"""))
+        assertEquals(QuotaResult.Ok(QuotaStatus(7, 0L, "FREE", dailyTotal = 10)), client().status())
+    }
+
+    @Test
+    fun `without a daily limit the total is unknown, whatever the tier`() = runBlocking {
+        server.enqueue(json(200, """{"ai_left_today":120,"resets_at":0,"tier":"PRO"}"""))
+        assertEquals(QuotaResult.Ok(QuotaStatus(120, 0L, "PRO", dailyTotal = null)), client().status())
+        server.enqueue(json(200, """{"ai_left_today":3,"resets_at":0,"tier":"FREE","ai_daily_limit":null}"""))
+        assertEquals(QuotaResult.Ok(QuotaStatus(3, 0L, "FREE", dailyTotal = null)), client().status())
     }
 }

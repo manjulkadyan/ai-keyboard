@@ -83,8 +83,10 @@ class AdsAppGraph(private val app: Application) {
         object : AdPrivacyOptions {
             override val required: StateFlow<Boolean> = required
 
-            override fun show(activity: Activity) {
-                consentManager.showPrivacyOptionsForm(activity) { }
+            override fun show(activity: Activity, onResult: (Boolean) -> Unit) {
+                consentManager.showPrivacyOptionsForm(activity) { error ->
+                    onResult(privacyOptionsResult(error, reporter))
+                }
             }
         }
     }

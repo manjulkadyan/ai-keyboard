@@ -17,6 +17,9 @@ interface AdPrivacyOptions {
     /** True when UMP says the user must be able to change their ad consent. */
     val required: StateFlow<Boolean>
 
-    /** Shows the UMP privacy options form. Call on the main thread. */
-    fun show(activity: Activity)
+    /**
+     * Shows the UMP privacy options form. Call on the main thread. [onResult] gets false when the form failed to
+     * show (the ads stack reports the error code), so the screen can tell the user.
+     */
+    fun show(activity: Activity, onResult: (Boolean) -> Unit)
 }

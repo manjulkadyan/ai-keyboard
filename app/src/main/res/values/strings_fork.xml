@@ -381,6 +381,7 @@
     <string name="ai_settings__tone_longer" tools:ignore="MissingTranslation">Longer</string>
     <string name="ai_settings__tone_emojify" tools:ignore="MissingTranslation">Emojify</string>
     <string name="ai_settings__quota" tools:ignore="MissingTranslation">{left} of {total} left today</string>
+    <string name="ai_settings__quota_left" tools:ignore="MissingTranslation">{left} left today</string>
     <string name="privacy_settings__title" tools:ignore="MissingTranslation">Privacy</string>
     <string name="privacy_settings__consents" tools:ignore="MissingTranslation">Your consents</string>
     <string name="privacy_settings__agreed" tools:ignore="MissingTranslation">Agreed</string>
@@ -399,6 +400,7 @@
     <string name="privacy_settings__delete_data_summary" tools:ignore="MissingTranslation">Ask us to delete the data kept on our servers</string>
     <string name="privacy_settings__data_policy" tools:ignore="MissingTranslation">Privacy policy</string>
     <string name="privacy_settings__coming_soon" tools:ignore="MissingTranslation">Coming soon</string>
+    <string name="privacy_settings__ad_privacy_failed" tools:ignore="MissingTranslation">Could not open ad privacy options. Try again later.</string>
     <string name="subscription_settings__title" tools:ignore="MissingTranslation">Subscription</string>
     <string name="subscription_settings__manage" tools:ignore="MissingTranslation">Manage in Google Play</string>
     <string name="subscription_settings__restore" tools:ignore="MissingTranslation">Restore purchases</string>

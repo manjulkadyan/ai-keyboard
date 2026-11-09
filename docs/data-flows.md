@@ -101,7 +101,7 @@ App process only (Home). The keyboard never loads the Play update client.
 
 | Flow | Data | Leaves the device? | Where to | When | Notes |
 |---|---|---|---|---|---|
-| AI quota (`GET /v1/quota`, `:core:ai` `QuotaClient`) | The kb-api auth headers only; no body | Yes, only after AI consent | kb-api | Each open of Settings → AI while `consentAiAt` is set | The answer (`ai_left_today`, `resets_at`, `tier`) is shown and not stored. No request without consent or a base URL |
+| AI quota (`GET /v1/quota`, `:core:ai` `QuotaClient`) | The kb-api auth headers only; no body | Yes, only after AI consent | kb-api | Each open of Settings → AI while `consentAiAt` is set | The answer (`ai_left_today`, `resets_at`, `tier`, optional `ai_daily_limit`) is shown and not stored. No request without consent or a base URL |
 | `aiDefaultTone` | One of `fix`, `formal`, `friendly`, `shorter`, `longer`, `emojify` | No | `FeatureSettings` on the device | Settings → AI → Default tone | Puts that tone first on the ✦ sheet. Local only, never sent |
 | `consentCloudTranslateAt` | A time stamp, 0 when not given | No | `FeatureSettings` on the device | Withdraw on Settings → Privacy (cloud translation is not in this build, so nothing sets it yet) | Withdraw also sets `cloudTranslateOptIn` to false |
 | Consent withdraw (Settings → Privacy) | The consent time stamps (`consentAiAt`, `consentAutoPolishAt`, `consentCloudTranslateAt`, `consentVoiceNoticeAt`) set to 0 | No | `FeatureSettings` on the device | A confirmed Withdraw tap | `consent_withdrawn{kind}` is logged for the AI and auto-polish kinds only, through the consent-aware relay |

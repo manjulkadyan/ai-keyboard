@@ -35,18 +35,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.aiAppGraph
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.appContext
-import com.manjul.aikeyboard.core.ai.kb.QuotaClient
 import com.manjul.aikeyboard.core.ai.kb.QuotaResult
 import com.manjul.aikeyboard.core.ai.kb.QuotaStatus
 import com.manjul.aikeyboard.core.analytics.ConsentKind
 import com.manjul.aikeyboard.core.datastore.FeatureSettings
-import com.manjul.aikeyboard.core.network.HttpClientFactory
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.fork.ai.AiConsentActivity
 import com.manjul.aikeyboard.fork.paywall.PaywallTrigger
@@ -92,9 +89,8 @@ fun AiSettingsScreen(isPro: () -> Boolean = { false }) = FlorisScreen {
         quota = if (!consented) {
             null
         } else {
-            val tokens = context.aiAppGraph().value.tokens
-            val client = QuotaClient(HttpClientFactory.create(), BuildConfig.AI_BASE_URL, tokens)
-            (client.status() as? QuotaResult.Ok)?.status
+            // The graph's lazy client shares AiAppGraph's OkHttp client. Leaving the screen cancels the call.
+            (context.aiAppGraph().value.quota.value?.status() as? QuotaResult.Ok)?.status
         }
     }
 
@@ -142,7 +138,14 @@ internal fun AiSettingsContent(
             ListItem(
                 headlineContent = {
                     val left = "left" to quota.aiLeftToday
-                    Text(stringRes(R.string.ai_settings__quota, left, "total" to quota.dailyTotal))
+                    val total = quotaTotal(quota)
+                    Text(
+                        if (total != null) {
+                            stringRes(R.string.ai_settings__quota, left, "total" to total)
+                        } else {
+                            stringRes(R.string.ai_settings__quota_left, left)
+                        },
+                    )
                 },
             )
         }
@@ -248,6 +251,12 @@ internal fun AiSettingsContent(
         )
     }
 }
+
+/**
+ * The total for the quota row: the server's `ai_daily_limit`, never less than what is left (so the row never reads
+ * "15 of 10"). Null when the server sent no limit: the row then shows only what is left.
+ */
+internal fun quotaTotal(quota: QuotaStatus): Int? = quota.dailyTotal?.let { maxOf(it, quota.aiLeftToday) }
 
 private fun toneLabel(wire: String): Int = when (wire) {
     "formal" -> R.string.ai_settings__tone_formal

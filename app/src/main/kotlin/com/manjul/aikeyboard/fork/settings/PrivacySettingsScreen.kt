@@ -121,6 +121,9 @@ fun PrivacySettingsScreen(adPrivacy: AdPrivacyOptions) = FlorisScreen {
             onClearData = { comingSoon(context) },
             onDeleteData = { comingSoon(context) },
             onDataPolicy = { context.launchUrl(R.string.privacy_policy_url) },
+            onAdPrivacyFailed = {
+                Toast.makeText(context, R.string.privacy_settings__ad_privacy_failed, Toast.LENGTH_SHORT).show()
+            },
         )
     }
 }
@@ -135,6 +138,7 @@ internal fun PrivacySettingsContent(
     onClearData: () -> Unit,
     onDeleteData: () -> Unit,
     onDataPolicy: () -> Unit,
+    onAdPrivacyFailed: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val adPrivacyRequired by adPrivacy.required.collectAsState()
@@ -178,7 +182,14 @@ internal fun PrivacySettingsContent(
 
         if (adPrivacyRequired) {
             ListItem(
-                modifier = Modifier.clickable(role = Role.Button) { context.findActivity()?.let(adPrivacy::show) },
+                modifier = Modifier.clickable(role = Role.Button) {
+                    val activity = context.findActivity()
+                    if (activity == null) {
+                        onAdPrivacyFailed()
+                    } else {
+                        adPrivacy.show(activity) { ok -> if (!ok) onAdPrivacyFailed() }
+                    }
+                },
                 headlineContent = { Text(stringRes(R.string.privacy_settings__ad_privacy)) },
                 supportingContent = { Text(stringRes(R.string.privacy_settings__ad_privacy_summary)) },
             )

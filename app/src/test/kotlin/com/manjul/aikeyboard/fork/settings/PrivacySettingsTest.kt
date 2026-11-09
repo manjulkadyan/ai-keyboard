@@ -40,11 +40,12 @@ class PrivacySettingsTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private class FakeAdPrivacy(required: Boolean) : AdPrivacyOptions {
+    private class FakeAdPrivacy(required: Boolean, private val succeeds: Boolean = true) : AdPrivacyOptions {
         override val required = MutableStateFlow(required)
         var shown = 0
-        override fun show(activity: Activity) {
+        override fun show(activity: Activity, onResult: (Boolean) -> Unit) {
             shown++
+            onResult(succeeds)
         }
     }
 
@@ -52,6 +53,7 @@ class PrivacySettingsTest {
     private val events = mutableListOf<AnalyticsEvent>()
     private var clearData = 0
     private var deleteData = 0
+    private var adPrivacyFailed = 0
 
     private fun show(ads: AdPrivacyOptions) = compose.setContent {
         ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
@@ -64,6 +66,7 @@ class PrivacySettingsTest {
                 onClearData = { clearData++ },
                 onDeleteData = { deleteData++ },
                 onDataPolicy = {},
+                onAdPrivacyFailed = { adPrivacyFailed++ },
             )
         }
     }
@@ -77,6 +80,16 @@ class PrivacySettingsTest {
         compose.onNodeWithText("Ad privacy options").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(1, ads.shown)
+        assertEquals(0, adPrivacyFailed)
+    }
+
+    @Test fun aFailedAdPrivacyFormIsSurfaced() {
+        val ads = FakeAdPrivacy(required = true, succeeds = false)
+        show(ads)
+        compose.onNodeWithText("Ad privacy options").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(1, ads.shown)
+        assertEquals(1, adPrivacyFailed)
     }
 
     @Test fun theFourConsentClassesEachWithdrawToZero() {

@@ -87,9 +87,26 @@ class AiSettingsTest {
         assertEquals("friendly", settings.aiDefaultTone)
     }
 
-    @Test fun quotaRowShowsWhatIsLeftToday() {
-        show(quota = QuotaStatus(aiLeftToday = 7, resetsAtMs = 0L, tier = "FREE"))
+    @Test fun quotaRowShowsWhatIsLeftOfTheServerLimit() {
+        show(quota = QuotaStatus(aiLeftToday = 7, resetsAtMs = 0L, tier = "FREE", dailyTotal = 10))
         compose.onNodeWithText("7 of 10 left today").performScrollTo().assertExists()
+    }
+
+    @Test fun quotaRowWithoutAServerLimitShowsOnlyWhatIsLeft() {
+        show(quota = QuotaStatus(aiLeftToday = 7, resetsAtMs = 0L, tier = "PRO"))
+        compose.onNodeWithText("7 left today").performScrollTo().assertExists()
+        compose.onNodeWithText(" of ", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun quotaRowNeverShowsMoreLeftThanTheTotal() {
+        show(quota = QuotaStatus(aiLeftToday = 15, resetsAtMs = 0L, tier = "FREE", dailyTotal = 10))
+        compose.onNodeWithText("15 of 15 left today").performScrollTo().assertExists()
+    }
+
+    @Test fun quotaTotalIsTheServerLimitClampedToWhatIsLeft() {
+        assertEquals(10, quotaTotal(QuotaStatus(aiLeftToday = 7, resetsAtMs = 0L, tier = "FREE", dailyTotal = 10)))
+        assertEquals(15, quotaTotal(QuotaStatus(aiLeftToday = 15, resetsAtMs = 0L, tier = "FREE", dailyTotal = 10)))
+        assertEquals(null, quotaTotal(QuotaStatus(aiLeftToday = 7, resetsAtMs = 0L, tier = "PRO")))
     }
 
     @Test fun noQuotaRowWithoutAnAnswer() {
