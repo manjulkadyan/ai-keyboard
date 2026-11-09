@@ -61,6 +61,7 @@ object EventCatalog {
     const val AD_PAID_EVENT = "ad_paid_event"
     const val UPDATE_PROMPT = "update_prompt"
     const val THEME_APPLY = "theme_apply"
+    const val DELETE_DATA = "delete_data"
 
     /** User property: one of [ProStatus]. */
     const val USER_PROPERTY_PRO_STATUS = "pro_status"
@@ -110,6 +111,7 @@ object EventCatalog {
         AD_PAID_EVENT to setOf("placement", "format", "value_micros", "currency", "precision"),
         UPDATE_PROMPT to setOf("type", "result"),
         THEME_APPLY to setOf("theme_id", "premium"),
+        DELETE_DATA to emptySet(),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -296,6 +298,9 @@ object EventCatalog {
         "theme_id" to if (themeId.length <= 40 && SNAKE_CASE.matches(themeId)) themeId else "other",
         "premium" to premium,
     )
+
+    /** The user confirmed Delete my data and kb-api deleted the account (S4 Task 12, PRD §12). No params. */
+    fun deleteData() = event(DELETE_DATA)
 
     /**
      * The ad SDK reported revenue for one impression (S4 Task 7, GMA `OnPaidEventListener`). [placement] is a

@@ -76,7 +76,7 @@ App process only. The keyboard never loads UMP or GMA (`ImeAdIsolationTest`, `Im
 | Google Mobile Ads SDK start (GMA 25.5.0) | AdMob app id, advertising id (`AD_ID` permission), device, app and network metadata, SDK diagnostics (per Google's AdMob terms) | Yes | Google (AdMob) | Once per process, after UMP allows ad requests (`canRequestAds`), on a background thread | Ad units load only from S4 Task 7 placements (rows below). Debug and beta use Google's sample app id, so only test ads can serve. SDK exceptions are caught and reported as class name and stack only (`safeAdCallback`) |
 | Ad requests (S4 Task 7: `app_open`, `inter_feature_exit`, `banner_home`, `native_translator`, `native_history`) | The ad unit id from Remote Config (`ad_unit_<placement>`) plus the GMA request metadata of the SDK start row | Yes | Google (AdMob) | App-open preload after the SDK is `READY`; interstitial preload; banner on Home; native as the last item of Translator and History. Never for Pro, in the first session, or with an empty unit id | No user content goes into a request. An empty unit id turns the placement off. Rules in `:core:ads` `AdEligibility`; caps in `AdCapPolicy` |
 | `ad_paid_event` (`app/ads/PaidEventLogger`) | `placement`, `format`, `value_micros` (Long), `currency` (ISO 4217 or `other`), `precision` | Per the Firebase Analytics row | Firebase Analytics, through the consent-aware relay | Each GMA paid callback (impression-level revenue) | No ad unit id, ad content, advertising id or user content. A failing sink never throws into the SDK |
-| `ads_state.json` (`:core:ads` `DataStoreAdCapStateStore`) | Ad show records (placement, format, time), session count, last background time, feature-use count, last interstitial and app-open times | No | App files (`files/datastore/ads_state.json`), app process only | Each ad show, session start, background and feature use | Counts and time stamps only. Feeds the frequency caps and the session and feature-use rules. Removed with the app data |
+| `ads_state.json` (`:core:ads` `DataStoreAdCapStateStore`) | Ad show records (placement, format, time), session count, last background time, feature-use count, last interstitial and app-open times | No | App files (`files/datastore/ads_state.json`), app process only | Each ad show, session start, background and feature use | Counts and time stamps only. Feeds the frequency caps and the session and feature-use rules. Reset by Delete my data (`AdsAppGraph.clearAdState`) and removed with the app data |
 
 ## In-app update (Sprint 4)
 
@@ -115,3 +115,40 @@ App process only (Home). The keyboard never loads the Play update client.
 | Suggestions and autocorrect | The word being typed and the previous word | No | — | Every keystroke while suggestions are on and the field allows the strip | Dictionaries are bundled in the APK (`assets/dict/<lang>.sdict`, FrequencyWords and urduhack lists); nothing is downloaded. Candidates and typed words are never logged (the upstream candidate debug logs were removed) |
 | Learned words (`user_word`, `user_bigram` in `AppDatabase`) | Words the user accepted and the word before them, lower-cased, with a use count and last-used time; words the user removed are kept as blocked | No | Room on the device | On accepting a word, only when the field decision allows learning and the keyboard is not in incognito (PC-1) | Up to 5,000 words per language, least recently used evicted first. Not in backups (`AppDatabase` is not on the backup include list). Deleted with Settings → Suggestions and autocorrect → Clear learned words |
 | Suggestion settings | `suggestionsEnabled`, `autocorrectLocales` | No | `FeatureSettings` on the device | Settings → Suggestions and autocorrect | |
+
+## Delete my data (Sprint 4)
+
+Settings → Privacy → Clear data and Delete my data both open one screen (`fork/privacy/DeleteDataScreen`). It has
+two actions and one "also remove downloaded models" checkbox.
+
+| Flow | Data | Leaves the device? | Where to | When | Notes |
+|---|---|---|---|---|---|
+| Account delete (`POST /v1/account/delete`, `:core:ai` `AccountClient`) | A random `client_req_id` and the kb-api auth headers; no other body | Yes | kb-api, which deletes the uid's quota and spend counters, reports and entitlement record | A confirmed "Delete everything" tap | Sent even without AI consent, because deletion is a right and not an AI feature. The device is wiped only after `{"deleted": true}`. On an error nothing is wiped and the user can retry. Two taps send one request |
+| `delete_data` | No params | Yes, with analytics consent | Firebase Analytics, through the consent-aware relay | Once, after the server confirmed the delete and before the device wipe | Not logged for "Clear on device only" or on a failure |
+| Device wipe (`fork/privacy/DataWiper`) | Removes: translation history, `user_word`, `user_bigram`, the upstream user dictionary, clipboard history and its files, `FeatureSettings` (consents, private apps, chip order, voice, translate, AI and theme settings), `ads_state.json`, the in-memory AI LRU, and the models when asked | No | — | After a confirmed server delete, or on "Clear on device only" | Keeps `onboardingDone`, `analyticsOptOut` (the user's privacy choice survives) and the signed `pro*` cache, which the entitlement refresh after the wipe checks again. Keeps `rc_mirror.json` (config only) and the upstream keyboard and theme preferences |
+| Firebase reset (`:core:firebase` `FirebaseDataResetter`) | Deletes the Firebase installation id, resets the Analytics app instance id, signs out the anonymous Auth user | Yes, the installation delete call | Google (Firebase) | Part of the device wipe, only when Firebase is configured | A new anonymous uid is issued on the next kb-api call |
+| Entitlement refresh | As the entitlement verify and read row | Yes | kb-api | After each wipe | The Pro cache follows the kb-api answer, as in the entitlement rows |
+
+A Google Play subscription is not cancelled by either action. The screen says so and links to Play
+(`PlayLinks.openManageSubscription`).
+
+## SDK inventory (Data safety diff check)
+
+`scripts/check-data-flows.sh` (CI, after Assemble debug) reads the release runtime classpath. Every ads, consent,
+Firebase, billing, ML Kit and Play artifact in it must be named below as `group:artifact`. A new artifact fails CI
+until it has a row here and its data flow is described in a section above.
+
+| SDK | Artifacts | Data flow section |
+|---|---|---|
+| Google Mobile Ads | `com.google.android.gms:play-services-ads`, `com.google.android.gms:play-services-ads-api`, `com.google.android.gms:play-services-ads-identifier` | Ads and consent |
+| User Messaging Platform | `com.google.android.ump:user-messaging-platform` | Ads and consent |
+| Play Billing | `com.android.billingclient:billing`, `com.android.billingclient:billing-ktx` | Play Billing and Pro entitlement |
+| Play in-app update | `com.google.android.play:app-update`, `com.google.android.play:app-update-ktx`, `com.google.android.play:core-common` | In-app update |
+| Play Integrity (through App Check) | `com.google.android.play:integrity`, `com.google.android.play:hsdp` | AI rewrite and Polish (kb-api auth) |
+| Firebase Analytics | `com.google.firebase:firebase-analytics`, `com.google.firebase:firebase-measurement-connector` | Remote Config, Analytics and Crashlytics |
+| Firebase Crashlytics | `com.google.firebase:firebase-crashlytics`, `com.google.firebase:firebase-sessions` | Remote Config, Analytics and Crashlytics |
+| Firebase Remote Config | `com.google.firebase:firebase-config`, `com.google.firebase:firebase-config-interop`, `com.google.firebase:firebase-abt` | Remote Config, Analytics and Crashlytics |
+| Firebase App Check and Auth | `com.google.firebase:firebase-appcheck`, `com.google.firebase:firebase-appcheck-interop`, `com.google.firebase:firebase-appcheck-playintegrity`, `com.google.firebase:firebase-auth`, `com.google.firebase:firebase-auth-interop` | AI rewrite and Polish (kb-api auth) |
+| Firebase Installations | `com.google.firebase:firebase-installations`, `com.google.firebase:firebase-installations-interop` | Remote Config, Analytics and Crashlytics; Delete my data |
+| Firebase core and transport (no own data flow) | `com.google.firebase:firebase-bom`, `com.google.firebase:firebase-common`, `com.google.firebase:firebase-components`, `com.google.firebase:firebase-annotations`, `com.google.firebase:firebase-datatransport`, `com.google.firebase:firebase-encoders`, `com.google.firebase:firebase-encoders-json`, `com.google.firebase:firebase-encoders-proto` | The rows of the Firebase SDKs above and ML Kit SDK telemetry |
+| ML Kit | `com.google.mlkit:common`, `com.google.mlkit:translate`, `com.google.mlkit:language-id`, `com.google.mlkit:language-id-common` | Translation |

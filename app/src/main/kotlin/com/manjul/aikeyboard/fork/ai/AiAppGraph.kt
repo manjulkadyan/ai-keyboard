@@ -17,6 +17,7 @@ import com.manjul.aikeyboard.core.ai.AiRequest
 import com.manjul.aikeyboard.core.ai.AuthHeaders
 import com.manjul.aikeyboard.core.ai.CloudAiEngine
 import com.manjul.aikeyboard.core.ai.TokenSource
+import com.manjul.aikeyboard.core.ai.kb.AccountClient
 import com.manjul.aikeyboard.core.ai.kb.QuotaClient
 import com.manjul.aikeyboard.core.config.DefaultsRemoteConfig
 import com.manjul.aikeyboard.core.config.RemoteConfig
@@ -64,6 +65,8 @@ class AiAppGraph(
     val isConfigured: Boolean,
     /** S4 Task 11: `GET /v1/quota` for Settings → AI, on the same lazy OkHttp client. */
     val quota: Lazy<QuotaClient?> = lazyOf(null),
+    /** S4 Task 12: `POST /v1/account/delete` for Delete my data, on the same lazy OkHttp client. */
+    val account: Lazy<AccountClient?> = lazyOf(null),
 ) {
     companion object {
         fun create(context: Context, config: RemoteConfig = DefaultsRemoteConfig()): AiAppGraph {
@@ -92,6 +95,7 @@ class AiAppGraph(
                 report = reports::send,
                 isConfigured = isConfigured(baseUrl, BuildConfig.AI_DEV_AUTH, firebase),
                 quota = lazy { QuotaClient(http.value, baseUrl, tokens) },
+                account = lazy { AccountClient(http.value, baseUrl, tokens) },
             )
         }
 

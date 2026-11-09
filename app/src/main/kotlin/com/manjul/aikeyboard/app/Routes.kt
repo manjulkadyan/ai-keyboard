@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
- * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): Themes route. FORK(S4-settings): settings tree
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): Themes route. FORK(S4-settings): settings tree.
+ * FORK(S4-privacy): Delete my data route
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,6 +87,7 @@ import com.manjul.aikeyboard.fork.settings.AiSettingsScreen // FORK(S3-polish)
 import android.app.Application // FORK(S4-settings)
 import com.manjul.aikeyboard.app.ads.AdsAppGraph // FORK(S4-settings)
 import com.manjul.aikeyboard.fork.settings.PrivacySettingsScreen // FORK(S4-settings)
+import com.manjul.aikeyboard.fork.privacy.DeleteDataScreen // FORK(S4-privacy)
 import com.manjul.aikeyboard.fork.settings.SettingsScreen // FORK(S4-settings)
 import com.manjul.aikeyboard.fork.settings.SubscriptionSettingsScreen // FORK(S4-settings)
 import com.manjul.aikeyboard.fork.settings.TranslateSettingsScreen // FORK(S4-settings)
@@ -163,6 +165,10 @@ object Routes {
         @Serializable
         @Deeplink("settings/privacy")
         object Privacy // FORK(S4-settings)
+
+        @Serializable
+        @Deeplink("settings/privacy/delete-data")
+        object DeleteData // FORK(S4-privacy): not on the RouteRegistry allow-list; opened from Privacy only
 
         @Serializable
         @Deeplink("settings/subscription")
@@ -371,6 +377,10 @@ object Routes {
             composableWithDeepLink(Settings.Privacy::class) { // FORK(S4-settings)
                 val app = LocalContext.current.applicationContext as Application
                 PrivacySettingsScreen(adPrivacy = remember(app) { AdsAppGraph.get(app).privacyOptions })
+            }
+            composableWithDeepLink(Settings.DeleteData::class) { // FORK(S4-privacy): ad state clear from app.ads
+                val app = LocalContext.current.applicationContext as Application
+                DeleteDataScreen(clearAdState = remember(app) { AdsAppGraph.get(app)::clearAdState })
             }
             composableWithDeepLink(Settings.Subscription::class) { SubscriptionSettingsScreen() } // FORK(S4-settings)
 

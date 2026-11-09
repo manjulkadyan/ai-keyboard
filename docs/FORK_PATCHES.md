@@ -147,6 +147,7 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt` | S4-settings | `Settings.All` (`settings/all`, `fork/settings/SettingsScreen`), `Settings.Translate`, `Settings.Privacy` and `Settings.Subscription` routes for the settings tree (PRD FR-09). Privacy gets `AdsAppGraph.privacyOptions` (an `AdPrivacyOptions`), so `fork.settings` never references `:core:ads` |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S4-settings | One "Settings" entry after Appearance that opens `Routes.Settings.All`. The other Home entries stay |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/about/AboutScreen.kt` | S4-settings | Terms of service row (`terms_url`) and a Contact row (`mailto:` the placeholder `contact_email`, a toast when no email app exists) |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt` | S4-privacy | `Settings.DeleteData` route (`settings/privacy/delete-data`, not on the `RouteRegistry` allow-list) rendering `fork/privacy/DeleteDataScreen`, opened by Privacy's Clear data and Delete my data. It gets `AdsAppGraph.clearAdState`, so `fork.privacy` never references `:core:ads` |
 
 ## Marker-exempt files
 
@@ -352,6 +353,9 @@ New files (no markers needed), TRD §2.1, §7.2, §11.8:
   `:build-logic:convention:test`), `:app:verify{Debug,Release}NoAdAutoInit`, `:app:verify{Debug,Release}ExportedComponents`, `:app:lintDebug` and the 16 KB
   alignment check on the debug APK. The IME isolation and manifest hardening tests run as `:app` unit tests.
 - `scripts/check-fork-markers.sh`: see "Marker-exempt files" above. Run it locally before opening a PR.
+- `scripts/check-data-flows.sh [tree]` (S4-privacy, CI step after Assemble debug): every ads, consent, Firebase,
+  billing, ML Kit and Play artifact of the release runtime classpath must be named in `docs/data-flows.md`.
+  `CheckDataFlowsScriptTest` in `:app` runs it against fixtures.
 - `scripts/check-16kb-alignment.sh <apk>...`: `zipalign -c -P 16 -v 4` on the APK and an ELF check that
   every `LOAD` segment of every `lib/<abi>/*.so` is aligned to at least 16 KB (`llvm-readelf` from the NDK).
   All ABIs are checked. TRD §11.8 also asks for the check on the release AAB; that belongs to the Main stage.

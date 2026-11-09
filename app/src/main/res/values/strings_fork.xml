@@ -399,7 +399,21 @@
     <string name="privacy_settings__delete_data" tools:ignore="MissingTranslation">Delete my data</string>
     <string name="privacy_settings__delete_data_summary" tools:ignore="MissingTranslation">Ask us to delete the data kept on our servers</string>
     <string name="privacy_settings__data_policy" tools:ignore="MissingTranslation">Privacy policy</string>
-    <string name="privacy_settings__coming_soon" tools:ignore="MissingTranslation">Coming soon</string>
+    <string name="delete_data__title" tools:ignore="MissingTranslation">Delete my data</string>
+    <string name="delete_data__body" tools:ignore="MissingTranslation">Delete everything asks our servers to delete your account data, then clears this device. Clear on device only clears this device. Both remove your translation history, learned words, clipboard history, settings and consents, and reset the Firebase ids. Onboarding, the analytics choice and your Pro status stay.</string>
+    <string name="delete_data__include_models" tools:ignore="MissingTranslation">Also remove downloaded voice and translation models</string>
+    <string name="delete_data__delete_everything" tools:ignore="MissingTranslation">Delete everything</string>
+    <string name="delete_data__clear_on_device" tools:ignore="MissingTranslation">Clear on device only</string>
+    <string name="delete_data__confirm_everything" tools:ignore="MissingTranslation">Delete your data on our servers and on this device? You cannot undo this.</string>
+    <string name="delete_data__confirm_device" tools:ignore="MissingTranslation">Clear your data on this device? You cannot undo this.</string>
+    <string name="delete_data__confirm" tools:ignore="MissingTranslation">Delete</string>
+    <string name="delete_data__cancel" tools:ignore="MissingTranslation">Cancel</string>
+    <string name="delete_data__working" tools:ignore="MissingTranslation">Deleting…</string>
+    <string name="delete_data__error" tools:ignore="MissingTranslation">Could not delete. Check your connection and try again.</string>
+    <string name="delete_data__done_server" tools:ignore="MissingTranslation">Your data was deleted on our servers and on this device.</string>
+    <string name="delete_data__done_device" tools:ignore="MissingTranslation">Your data was cleared on this device.</string>
+    <string name="delete_data__subscription_note" tools:ignore="MissingTranslation">This does not cancel a Google Play subscription. Cancel it in Google Play.</string>
+    <string name="delete_data__manage_subscription" tools:ignore="MissingTranslation">Manage subscription</string>
     <string name="privacy_settings__ad_privacy_failed" tools:ignore="MissingTranslation">Could not open ad privacy options. Try again later.</string>
     <string name="subscription_settings__title" tools:ignore="MissingTranslation">Subscription</string>
     <string name="subscription_settings__manage" tools:ignore="MissingTranslation">Manage in Google Play</string>

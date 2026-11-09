@@ -94,6 +94,11 @@ jobs:
       - name: Assemble debug
         run: ./gradlew assembleDebug --console=plain
 
+      # Data safety diff (S4 Task 12): every ads, consent, Firebase, billing, ML Kit and Play artifact of the
+      # release runtime classpath must be named in docs/data-flows.md.
+      - name: Data flows cover every SDK
+        run: scripts/check-data-flows.sh
+
       # `test` without a project path runs in every project that has it (all JVM modules, plus every
       # unit-test variant of the Android modules); build-logic is an included build, so it is named.
       - name: Unit tests (all modules)

@@ -95,8 +95,9 @@ internal fun consentWithdrawnEventsFor(before: FeatureSettings, cls: String): Li
 
 /**
  * Settings → Privacy (PRD FR-09, FR-35, RN-09): private apps, the analytics opt-out, the four consent classes with
- * Withdraw, "Ad privacy options" when UMP requires it, Clear data and Delete my data (Task 12 hooks) and the data
- * policy. [adPrivacy] comes from `app.ads` through `Routes.kt`; this package never touches the ads stack.
+ * Withdraw, "Ad privacy options" when UMP requires it, Clear data and Delete my data (both open
+ * `DeleteDataScreen`) and the data policy. [adPrivacy] comes from `app.ads` through `Routes.kt`; this package never
+ * touches the ads stack.
  */
 @Composable
 fun PrivacySettingsScreen(adPrivacy: AdPrivacyOptions) = FlorisScreen {
@@ -117,9 +118,9 @@ fun PrivacySettingsScreen(adPrivacy: AdPrivacyOptions) = FlorisScreen {
             onUpdate = { transform -> scope.launch { store.update(transform) } },
             onEvents = { events -> events.forEach(context.appContext().value.analytics.value::log) },
             onPrivateApps = { navController.navigate(Routes.Settings.PrivateApps) },
-            // TODO(S4 Task 12): real Clear data and Delete my data flows.
-            onClearData = { comingSoon(context) },
-            onDeleteData = { comingSoon(context) },
+            // Both open the Delete my data screen, which offers "Clear on device" and "Delete everything".
+            onClearData = { navController.navigate(Routes.Settings.DeleteData) },
+            onDeleteData = { navController.navigate(Routes.Settings.DeleteData) },
             onDataPolicy = { context.launchUrl(R.string.privacy_policy_url) },
             onAdPrivacyFailed = {
                 Toast.makeText(context, R.string.privacy_settings__ad_privacy_failed, Toast.LENGTH_SHORT).show()
@@ -245,8 +246,4 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
-}
-
-private fun comingSoon(context: Context) {
-    Toast.makeText(context, R.string.privacy_settings__coming_soon, Toast.LENGTH_SHORT).show()
 }

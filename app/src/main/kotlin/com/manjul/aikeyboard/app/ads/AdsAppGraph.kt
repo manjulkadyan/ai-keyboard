@@ -19,6 +19,8 @@ import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.core.ads.AdsInitializer
 import com.manjul.aikeyboard.core.ads.AdsStatus
+import com.manjul.aikeyboard.core.ads.cap.AdCapState
+import com.manjul.aikeyboard.core.ads.cap.AdSessionState
 import com.manjul.aikeyboard.core.ads.cap.DataStoreAdCapStateStore
 import com.manjul.aikeyboard.core.ads.consent.ConsentModeSignals
 import com.manjul.aikeyboard.core.ads.consent.ConsentResult
@@ -95,8 +97,11 @@ class AdsAppGraph(private val app: Application) {
         GmaAdLoaders(app, firebase.reporter, PaidEventLogger { app.appContext().value.analytics.value.log(it) })
     }
 
+    /** One store per process: two DataStores on `ads_state.json` in one process would fail. */
+    private val capStore by lazy { DataStoreAdCapStateStore.create(app) }
+
     val controller: AdsController by lazy {
-        val store = DataStoreAdCapStateStore.create(app)
+        val store = capStore
         AdsController(
             unitIds = { id: AdPlacementId -> unitIds.unitFor(id) },
             appOpen = AppOpenAdManager(loaders.appOpen()),
@@ -108,6 +113,15 @@ class AdsAppGraph(private val app: Application) {
             isPro = { !adsAllowed() },
             scope = scope,
         )
+    }
+
+    /**
+     * Delete my data (S4 Task 12): resets the persisted ad caps and session counters in `ads_state.json`. A running
+     * [AdSessionTracker] keeps its in-memory copy until the next process start.
+     */
+    suspend fun clearAdState() {
+        capStore.update { AdCapState() }
+        capStore.updateSession { AdSessionState() }
     }
 
     private var observing = false

@@ -60,6 +60,7 @@ class EventCatalogLimitsTest {
         EventCatalog.adPaidEvent(big, AdFormatParam.APP_OPEN, Long.MAX_VALUE, big, AdPrecisionParam.ESTIMATED),
         EventCatalog.updatePrompt(UpdateTypeParam.FLEXIBLE, UpdateResultParam.FAILED),
         EventCatalog.themeApply(big, premium = true),
+        EventCatalog.deleteData(),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -172,6 +173,7 @@ class EventCatalogLimitsTest {
             "consent_result", "consent_withdrawn",
             "purchase_start", "trial_start", "purchase_success", "purchase_fail", "subscription_state",
             "restore_purchases", "paywall_view", "paywall_close", "ad_paid_event", "update_prompt", "theme_apply",
+            "delete_data",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)
