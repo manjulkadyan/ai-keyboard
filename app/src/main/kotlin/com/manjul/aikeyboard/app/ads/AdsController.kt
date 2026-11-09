@@ -105,10 +105,21 @@ class AdsController(
         _adsVisible.value = !pro() && adsReady && tracker.sessionIndex > 1
     }
 
-    /** The entry source of the intent that brought the Activity to the front. */
+    /** The entry source in effect for the ad rules. */
+    internal val currentEntry: EntrySource get() = entry
+
+    /**
+     * The entry source of a new intent, or [EntrySource.RESUME] for a return without one. A restricted entry
+     * ([EntrySource.PROCESS_TEXT], [EntrySource.SEND], [EntrySource.NOTIFICATION]) is sticky. Only a launcher intent
+     * or another restricted entry replaces it. A resume or a deep link does not.
+     */
     @MainThread
     fun onIntent(source: EntrySource) {
-        entry = source
+        entry = when {
+            source == EntrySource.LAUNCHER -> source
+            entry in stickyEntries && source !in stickyEntries -> entry
+            else -> source
+        }
     }
 
     /** True while the splash or onboarding is on screen: no app-open ad then. */
@@ -122,7 +133,6 @@ class AdsController(
     fun onExternalFlowStart() {
         externalFlow = true
     }
-
 
     /** The GMA SDK is `READY`: preload the app-open and interstitial ads. */
     @MainThread
@@ -274,5 +284,7 @@ class AdsController(
     companion object {
         /** GMA native ads expire after an hour. */
         val NATIVE_MAX_AGE_MS: Long = 1.hours.inWholeMilliseconds
+
+        private val stickyEntries = setOf(EntrySource.PROCESS_TEXT, EntrySource.SEND, EntrySource.NOTIFICATION)
     }
 }

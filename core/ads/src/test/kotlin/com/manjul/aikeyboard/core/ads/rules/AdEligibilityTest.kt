@@ -52,6 +52,18 @@ class AdEligibilityTest {
         }
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rows")
+    fun `a flipped field leaves the other formats allowed`(row: Row) {
+        if (Kind.APP_OPEN !in row.blocks) assertTrue(AdEligibility.appOpen(row.context, row.unitId), "app open")
+        if (Kind.INTERSTITIAL !in row.blocks) {
+            assertTrue(AdEligibility.interstitial(row.context, row.transition, row.unitId), "interstitial")
+        }
+        if (Kind.BANNER_OR_NATIVE !in row.blocks) {
+            assertTrue(AdEligibility.bannerOrNative(row.context, row.unitId), "banner or native")
+        }
+    }
+
     companion object {
         const val NOW = 1_800_000_000_000L
         const val UNIT = "ca-app-pub-3940256099942544/9257395921"

@@ -17,7 +17,8 @@ import com.manjul.aikeyboard.core.ads.rules.NavTransition
 /**
  * Reports each navigation step of the app to [AdsController]. Only a step from a feature screen (Translator,
  * History, a theme screen) back to Home is [NavTransition.FEATURE_TO_HOME], the one step that can show an
- * interstitial. It also tells the controller when onboarding is on screen (no app-open ad there).
+ * interstitial. It also tells the controller when onboarding (with its O6 paywall step) or the paywall is on
+ * screen: no app-open ad there.
  */
 @Composable
 fun NavTransitionReporter(navController: NavController) {
@@ -26,7 +27,7 @@ fun NavTransitionReporter(navController: NavController) {
     DisposableEffect(navController, activity) {
         var previous: NavDestination? = null
         val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
-            controller.setSplashOrOnboarding(destination.hasRoute(Routes.Setup.Screen::class))
+            controller.setSplashOrOnboarding(destination.blocksFullScreenAds())
             val from = previous
             previous = destination
             if (from != null && from.id != destination.id) {
@@ -37,6 +38,10 @@ fun NavTransitionReporter(navController: NavController) {
         onDispose { navController.removeOnDestinationChangedListener(listener) }
     }
 }
+
+/** Onboarding (`Setup.Screen`, which also hosts the O6 paywall step) and the paywall never show a full-screen ad. */
+internal fun NavDestination.blocksFullScreenAds(): Boolean =
+    hasRoute(Routes.Setup.Screen::class) || hasRoute(Routes.Paywall::class)
 
 private fun NavDestination.isHome(): Boolean = hasRoute(Routes.Settings.Home::class)
 

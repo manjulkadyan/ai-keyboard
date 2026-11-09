@@ -7,6 +7,7 @@ package com.manjul.aikeyboard.app.ads
 
 import android.app.Activity
 import android.app.Application
+import android.content.Intent
 import androidx.datastore.core.DataStore
 import com.manjul.aikeyboard.core.ads.cap.AdsState
 import com.manjul.aikeyboard.core.ads.cap.AdSessionState
@@ -184,6 +185,70 @@ class AdsControllerTest {
     fun `a return from an external flow shows no app open`() {
         val (appOpen, _, _) = ready()
         controller.onExternalFlowStart()
+        controller.onBackground()
+        now += 31 * 60_000L
+        controller.onForeground(activity, coldStart = false)
+        assertEquals(0, appOpen.shown)
+    }
+
+    @Test
+    fun `a process text entry stays restricted across a background and resume`() {
+        val (appOpen, inter, _) = ready()
+        val entries = AdEntryTracker(controller)
+        entries.onNewIntent(Intent(Intent.ACTION_PROCESS_TEXT), current = null)
+        controller.onBackground()
+        entries.onStop()
+        now += 31 * 60_000L
+        entries.onResume()
+        controller.onForeground(activity, coldStart = false)
+        controller.onFeatureUse()
+        controller.onFeatureUse()
+        controller.onNavTransition(activity, NavTransition.FEATURE_TO_HOME)
+        assertEquals(EntrySource.PROCESS_TEXT, controller.currentEntry)
+        assertEquals(0, appOpen.shown)
+        assertEquals(0, inter.shown)
+
+        // Only a real launcher intent ends the restricted entry.
+        entries.onNewIntent(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), current = null)
+        assertEquals(EntrySource.LAUNCHER, controller.currentEntry)
+    }
+
+    @Test
+    fun `a recreation keeps the saved entry and ignores the replayed bare intent`() {
+        val (appOpen, _, _) = ready()
+        val first = AdEntryTracker(controller)
+        first.onNewIntent(Intent(Intent.ACTION_SEND), current = null)
+        val saved = first.save()
+
+        // The recreated Activity: its intent is the bare ACTION_MAIN, and onCreate replays that same object.
+        val bare = Intent(Intent.ACTION_MAIN)
+        val second = AdEntryTracker(controller)
+        second.onCreate(bare, AdEntryTracker.restore(saved))
+        second.onNewIntent(bare, current = bare)
+        assertEquals(EntrySource.SEND, controller.currentEntry)
+        controller.onBackground()
+        now += 31 * 60_000L
+        controller.onForeground(activity, coldStart = false)
+        assertEquals(0, appOpen.shown)
+    }
+
+    @Test
+    fun `the IME settings key opens no app-open ad`() {
+        val (appOpen, _, _) = ready()
+        val entries = AdEntryTracker(controller)
+        controller.onBackground()
+        entries.onStop()
+        now += 31 * 60_000L
+        entries.onNewIntent(Intent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), current = null)
+        entries.onResume()
+        controller.onForeground(activity, coldStart = false)
+        assertEquals(0, appOpen.shown)
+    }
+
+    @Test
+    fun `the paywall or onboarding on screen blocks the app open`() {
+        val (appOpen, _, _) = ready()
+        controller.setSplashOrOnboarding(true)
         controller.onBackground()
         now += 31 * 60_000L
         controller.onForeground(activity, coldStart = false)

@@ -30,7 +30,6 @@ import com.manjul.aikeyboard.core.ads.placement.AdPlacements
 import com.manjul.aikeyboard.core.ads.rules.AdSessionTracker
 import com.manjul.aikeyboard.core.ads.rules.AdUnitIds
 import com.manjul.aikeyboard.core.common.NonFatalReporter
-import com.manjul.aikeyboard.core.common.entry.EntrySource
 import com.manjul.aikeyboard.core.config.ConfigKeys
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.firebaseGraph
@@ -112,27 +111,23 @@ class AdsAppGraph(private val app: Application) {
         val coldStart = !attachedInProcess
         attachedInProcess = true
         observeOnce()
-        controller.onIntent(AdEntry.classify(activity.intent))
+        val entries = AdEntryTracker(controller)
+        val registry = activity.savedStateRegistry
+        entries.onCreate(activity.intent, AdEntryTracker.restore(registry.consumeRestoredStateForKey(SAVED_STATE_KEY)))
+        registry.registerSavedStateProvider(SAVED_STATE_KEY, entries::save)
         controller.setSplashOrOnboarding(true)
-        var resumeEntry = false
         var firstResume = true
-        activity.addOnNewIntentListener(
-            Consumer<Intent> { intent ->
-                resumeEntry = false
-                controller.onIntent(AdEntry.classify(intent))
-            },
-        )
+        activity.addOnNewIntentListener(Consumer<Intent> { intent -> entries.onNewIntent(intent, activity.intent) })
         activity.lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
                 when (event) {
                     Lifecycle.Event.ON_RESUME -> {
-                        if (resumeEntry) controller.onIntent(EntrySource.RESUME)
-                        resumeEntry = false
+                        entries.onResume()
                         controller.onForeground(activity, coldStart = coldStart && firstResume)
                         firstResume = false
                     }
                     Lifecycle.Event.ON_STOP -> if (!activity.isChangingConfigurations) {
-                        resumeEntry = true
+                        entries.onStop()
                         controller.onBackground()
                     }
                     else -> Unit
@@ -187,6 +182,8 @@ class AdsAppGraph(private val app: Application) {
     }
 
     companion object {
+        private const val SAVED_STATE_KEY = AdEntryTracker.SAVED_STATE_KEY
+
         @Volatile
         private var instance: AdsAppGraph? = null
 
