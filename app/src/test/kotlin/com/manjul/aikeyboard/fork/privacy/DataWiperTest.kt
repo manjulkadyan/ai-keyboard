@@ -16,6 +16,8 @@ import com.manjul.aikeyboard.core.database.UserWordRepository
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
 import com.manjul.aikeyboard.ime.clipboard.provider.ItemType
+import com.manjul.aikeyboard.ime.dictionary.FlorisUserDictionaryDatabase
+import com.manjul.aikeyboard.ime.dictionary.UserDictionaryEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -62,6 +65,7 @@ class DataWiperTest {
         clearAiCache = { aiClears++ },
         deleteModels = { modelDeletes++ },
         firebase = resetter,
+        clearUpstreamDictionary = { DataWiper.clearFlorisUserDictionary(app) },
     )
 
     @After
@@ -140,6 +144,40 @@ class DataWiperTest {
         }
 
     @Test
+    fun `wipe empties the upstream user dictionary even when DictionaryManager never loaded it`() = runBlocking {
+        // The real file, as the IME or the user dictionary screen would have created it. DictionaryManager is not
+        // touched, so its DAO stays null, as on the Delete my data screen.
+        val seeded = Room.databaseBuilder(
+            app,
+            FlorisUserDictionaryDatabase::class.java,
+            FlorisUserDictionaryDatabase.DB_FILE_NAME,
+        ).allowMainThreadQueries().build()
+        seeded.userDictionaryDao().insert(
+            UserDictionaryEntry(id = 0, word = "zorblax", freq = 255, locale = "en", shortcut = null),
+        )
+        seeded.close()
+
+        assertTrue(wiper.wipeLocal(includeModels = false))
+
+        val check = Room.databaseBuilder(
+            app,
+            FlorisUserDictionaryDatabase::class.java,
+            FlorisUserDictionaryDatabase.DB_FILE_NAME,
+        ).allowMainThreadQueries().build()
+        try {
+            assertEquals(emptyList(), check.userDictionaryDao().queryAll())
+        } finally {
+            check.close()
+        }
+    }
+
+    @Test
+    fun `no upstream user dictionary file is not a failure and creates none`() = runBlocking {
+        assertTrue(wiper.wipeLocal(includeModels = false))
+        assertFalse(app.getDatabasePath(FlorisUserDictionaryDatabase.DB_FILE_NAME).exists())
+    }
+
+    @Test
     fun `firebase reset, ad state and AI cache run once and models stay unless asked`() = runBlocking {
         seed()
         wiper.wipeLocal(includeModels = false)
@@ -164,6 +202,7 @@ class DataWiperTest {
             clearAiCache = { aiClears++ },
             deleteModels = { modelDeletes++ },
             firebase = resetter,
+            clearUpstreamDictionary = {},
         )
         assertEquals(false, failing.wipeLocal(includeModels = false))
         assertEquals(0, db.translationHistoryDao().count())

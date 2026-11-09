@@ -6,6 +6,7 @@
 package com.manjul.aikeyboard.fork.privacy
 
 import android.app.Application
+import android.util.Log
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.core.ai.AiError
 import com.manjul.aikeyboard.core.ai.FakeTokenSource
@@ -56,12 +57,15 @@ class DeleteDataViewModelTest {
         }
     }
 
+    /** What each wipe returns, in order; true once the list is used up. */
+    private val wipeResults = ArrayDeque<Boolean>()
+
     private fun vm(account: AccountApi?, scope: CoroutineScope) = DeleteDataViewModel(
         account = { account },
         wipe = { models ->
             order += "wipe"
             wipes += models
-            true
+            wipeResults.removeFirstOrNull() ?: true
         },
         log = {
             order += "log"
@@ -128,6 +132,61 @@ class DeleteDataViewModelTest {
         assertEquals(1, account.calls)
         assertEquals(listOf(false), wipes)
         assertEquals(1, logged.size)
+    }
+
+    @Test
+    fun `a partial wipe after a server delete shows its state and a retry runs only the local wipe`() = runTest {
+        ShadowLog.clear()
+        val account = FakeAccount(AccountResult.Deleted)
+        wipeResults += false
+        val vm = vm(account, this)
+        vm.deleteEverything(includeModels = true)
+        advanceUntilIdle()
+
+        assertEquals(DeleteDataState.PartiallyCleared(serverDeleted = true, includeModels = true), vm.state.value)
+        assertEquals(1, account.calls)
+        assertEquals(1, logged.size)
+
+        vm.retryLocalWipe()
+        advanceUntilIdle()
+
+        assertEquals(DeleteDataState.Done(serverDeleted = true), vm.state.value)
+        assertEquals(1, account.calls)
+        assertEquals(1, logged.size)
+        assertEquals(listOf(true, true), wipes)
+        assertEquals(2, refreshes)
+        val app = RuntimeEnvironment.getApplication()
+        assertEquals(
+            "Your data was deleted on our servers, but some data on this device was not cleared. Try again to clear it.",
+            app.getString(R.string.delete_data__partial_server),
+        )
+        val levels = ShadowLog.getLogsForTag("DeleteData").map { it.type }
+        assertEquals(listOf(Log.ERROR, Log.WARN), levels)
+    }
+
+    @Test
+    fun `a partial clear on device retries without a request`() = runTest {
+        val account = FakeAccount(AccountResult.Deleted)
+        wipeResults += false
+        val vm = vm(account, this)
+        vm.clearOnDevice(includeModels = false)
+        advanceUntilIdle()
+        assertEquals(DeleteDataState.PartiallyCleared(serverDeleted = false, includeModels = false), vm.state.value)
+
+        vm.retryLocalWipe()
+        advanceUntilIdle()
+        assertEquals(DeleteDataState.Done(serverDeleted = false), vm.state.value)
+        assertEquals(0, account.calls)
+        assertEquals(emptyList(), logged)
+    }
+
+    @Test
+    fun `retry does nothing outside the partial state`() = runTest {
+        val vm = vm(FakeAccount(AccountResult.Deleted), this)
+        vm.retryLocalWipe()
+        advanceUntilIdle()
+        assertEquals(DeleteDataState.Idle, vm.state.value)
+        assertEquals(emptyList(), wipes)
     }
 
     @Test

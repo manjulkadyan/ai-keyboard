@@ -43,6 +43,7 @@ import org.florisboard.lib.compose.stringRes
 internal const val DELETE_EVERYTHING_TAG = "delete_data:everything"
 internal const val CLEAR_ON_DEVICE_TAG = "delete_data:device"
 internal const val DELETE_CONFIRM_TAG = "delete_data:confirm"
+internal const val RETRY_LOCAL_TAG = "delete_data:retry_local"
 
 private enum class Pending { EVERYTHING, DEVICE }
 
@@ -97,14 +98,23 @@ fun DeleteDataScreen(clearAdState: suspend () -> Unit) = FlorisScreen {
                 DeleteDataState.Failed -> R.string.delete_data__error
                 is DeleteDataState.Done ->
                     if (s.serverDeleted) R.string.delete_data__done_server else R.string.delete_data__done_device
+                is DeleteDataState.PartiallyCleared ->
+                    if (s.serverDeleted) R.string.delete_data__partial_server else R.string.delete_data__partial_device
             }
             if (status != null) {
-                val color = if (state == DeleteDataState.Failed) {
+                val color = if (state == DeleteDataState.Failed || state is DeleteDataState.PartiallyCleared) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.onSurface
                 }
                 Text(stringRes(status), color = color, modifier = Modifier.padding(top = 16.dp))
+            }
+            if (state is DeleteDataState.PartiallyCleared) {
+                // Runs only the local wipe again; the server delete (if any) already succeeded.
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag(RETRY_LOCAL_TAG),
+                    onClick = { vm.retryLocalWipe() },
+                ) { Text(stringRes(R.string.delete_data__retry_local)) }
             }
 
             Text(stringRes(R.string.delete_data__subscription_note), modifier = Modifier.padding(top = 24.dp))

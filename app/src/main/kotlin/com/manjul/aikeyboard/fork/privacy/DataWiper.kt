@@ -6,6 +6,7 @@
 package com.manjul.aikeyboard.fork.privacy
 
 import android.content.Context
+import androidx.room.Room
 import com.manjul.aikeyboard.aiAppGraph
 import com.manjul.aikeyboard.clipboardManager
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
@@ -20,7 +21,7 @@ import com.manjul.aikeyboard.firebaseGraph
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFileStorage
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFilesDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
-import com.manjul.aikeyboard.ime.dictionary.DictionaryManager
+import com.manjul.aikeyboard.ime.dictionary.FlorisUserDictionaryDatabase
 import com.manjul.aikeyboard.translateModelStore
 import com.manjul.aikeyboard.translationHistory
 import com.manjul.aikeyboard.userWordRepository
@@ -51,7 +52,7 @@ class DataWiper(
     private val clearAiCache: suspend () -> Unit,
     private val deleteModels: suspend () -> Unit,
     private val firebase: FirebaseResetter,
-    private val clearUpstreamDictionary: suspend () -> Unit = {},
+    private val clearUpstreamDictionary: suspend () -> Unit,
 ) {
     /** Returns false when a step failed; the other steps still ran. */
     suspend fun wipeLocal(includeModels: Boolean): Boolean {
@@ -102,10 +103,28 @@ class DataWiper(
                 clearAiCache = { app.aiAppGraph().let { if (it.isInitialized()) it.value.lru.clear() } },
                 deleteModels = { deleteModels(app) },
                 firebase = DefaultFirebaseResetter(FirebaseDataResetter(app, app.firebaseGraph().value.bootstrap)),
-                clearUpstreamDictionary = {
-                    withContext(Dispatchers.IO) { DictionaryManager.default().florisUserDictionaryDao()?.deleteAll() }
-                },
+                clearUpstreamDictionary = { clearFlorisUserDictionary(app) },
             )
+        }
+
+        /**
+         * Empties the upstream FlorisBoard user dictionary (`floris_user_dictionary`). `DictionaryManager` opens it
+         * only once its screen or the IME loaded it, and only while `enableFlorisUserDictionary` is on, so this
+         * opens the database file on its own, whatever that setting is. It shares the SQLite file with a loaded
+         * instance, so the IME sees the empty table. Without a database file there is nothing to clear.
+         */
+        internal suspend fun clearFlorisUserDictionary(app: Context) = withContext(Dispatchers.IO) {
+            if (!app.getDatabasePath(FlorisUserDictionaryDatabase.DB_FILE_NAME).exists()) return@withContext
+            val db = Room.databaseBuilder(
+                app,
+                FlorisUserDictionaryDatabase::class.java,
+                FlorisUserDictionaryDatabase.DB_FILE_NAME,
+            ).build()
+            try {
+                db.userDictionaryDao().deleteAll()
+            } finally {
+                db.close()
+            }
         }
 
         private suspend fun clearClipboard(app: Context) {

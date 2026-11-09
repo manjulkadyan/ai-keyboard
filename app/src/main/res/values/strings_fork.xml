@@ -412,6 +412,9 @@
     <string name="delete_data__error" tools:ignore="MissingTranslation">Could not delete. Check your connection and try again.</string>
     <string name="delete_data__done_server" tools:ignore="MissingTranslation">Your data was deleted on our servers and on this device.</string>
     <string name="delete_data__done_device" tools:ignore="MissingTranslation">Your data was cleared on this device.</string>
+    <string name="delete_data__partial_server" tools:ignore="MissingTranslation">Your data was deleted on our servers, but some data on this device was not cleared. Try again to clear it.</string>
+    <string name="delete_data__partial_device" tools:ignore="MissingTranslation">Some data on this device was not cleared. Try again to clear it.</string>
+    <string name="delete_data__retry_local" tools:ignore="MissingTranslation">Try again</string>
     <string name="delete_data__subscription_note" tools:ignore="MissingTranslation">This does not cancel a Google Play subscription. Cancel it in Google Play.</string>
     <string name="delete_data__manage_subscription" tools:ignore="MissingTranslation">Manage subscription</string>
     <string name="privacy_settings__ad_privacy_failed" tools:ignore="MissingTranslation">Could not open ad privacy options. Try again later.</string>
