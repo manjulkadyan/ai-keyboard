@@ -63,7 +63,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.map
 import org.florisboard.lib.compose.stringRes
 
 /** Keeps the view model, and so the Pro observer for a pending premium theme, while the paywall is on top. */
@@ -74,7 +73,6 @@ internal class ThemesHolder(context: Context) : ViewModel() {
     val vm = ThemesViewModel(
         prefs = prefs,
         settings = store,
-        isPro = store.flow.map { it.isProAt(System.currentTimeMillis()) },
         analytics = context.appContext().value.analytics.value::log,
         previewThemeId = context.themeManager().value.previewThemeId,
         scope = scope,

@@ -45,17 +45,27 @@ class KeySoundPlayerTest {
         shadowOf(player.poolForTest!!).notifyResourceLoaded(R.raw.key_soft, true)
         player.play(KeySound.SOFT, 0.5f)
         assertTrue(pool.wasResourcePlayed(R.raw.key_soft))
+        // The queued first press is not dropped: it plays on load, then the second press.
+        assertEquals(2, pool.getResourcePlaybacks(R.raw.key_soft).size)
         assertFalse(pool.wasResourcePlayed(R.raw.key_crisp))
     }
 
-    @Test fun `five fast plays keep at most 4 streams`() {
+    @Test fun `five fast plays keep 4 streams`() {
         player.play(KeySound.CRISP, 1f)
         shadowOf(player.poolForTest!!).notifyResourceLoaded(R.raw.key_crisp, true)
         repeat(5) { player.play(KeySound.CRISP, 1f) }
         // The first press plays once its sample is ready, then the five fast ones.
         assertEquals(6, shadowOf(player.poolForTest!!).getResourcePlaybacks(R.raw.key_crisp).size)
-        assertTrue(player.activeStreams <= KeySoundPlayer.MAX_STREAMS)
-        assertEquals(4, KeySoundPlayer.MAX_STREAMS)
+        assertEquals(KeySoundPlayer.MAX_STREAMS, player.activeStreams)
+    }
+
+    @Test fun `play after release does nothing and builds no new pool`() {
+        player.play(KeySound.POP, 1f)
+        assertTrue(player.hasPool)
+        player.release()
+        player.play(KeySound.POP, 1f)
+        assertFalse(player.hasPool)
+        assertEquals(0, player.activeStreams)
     }
 
     @Test fun `every wire value maps back and an unknown one falls back to system`() {

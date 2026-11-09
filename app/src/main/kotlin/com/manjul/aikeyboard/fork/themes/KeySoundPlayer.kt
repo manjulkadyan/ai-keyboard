@@ -14,7 +14,8 @@ import androidx.annotation.VisibleForTesting
  * Plays the bundled key sounds (S4 Task 10). The [SoundPool] is built on the first [play] of a bundled sound, and
  * each sample is loaded on its first use; that first press plays as soon as the sample is ready. At most
  * [MAX_STREAMS] clicks sound at once: a new one stops the oldest. [KeySound.OFF] and [KeySound.SYSTEM] are not
- * handled here (the caller keeps the platform click for SYSTEM). Thread-safe; call [release] when done.
+ * handled here (the caller keeps the platform click for SYSTEM). Thread-safe; call [release] when done. After
+ * [release], [play] does nothing, so a late key press cannot build a new pool that nobody frees.
  */
 class KeySoundPlayer(context: Context) {
     companion object {
@@ -28,6 +29,7 @@ class KeySoundPlayer(context: Context) {
     /** Volume of a first press that waits for its sample, by sample id. */
     private val pendingPlays = HashMap<Int, Float>()
     private val streams = ArrayDeque<Int>()
+    private var released = false
 
     @get:VisibleForTesting
     val hasPool: Boolean @Synchronized get() = pool != null
@@ -42,6 +44,7 @@ class KeySoundPlayer(context: Context) {
 
     @Synchronized
     fun play(sound: KeySound, volume: Float) {
+        if (released) return
         val res = sound.rawRes ?: return
         val pool = pool ?: newPool().also { pool = it }
         val v = volume.coerceIn(0f, 1f)
@@ -52,6 +55,7 @@ class KeySoundPlayer(context: Context) {
 
     @Synchronized
     fun release() {
+        released = true
         pool?.release()
         pool = null
         soundIds.clear()
