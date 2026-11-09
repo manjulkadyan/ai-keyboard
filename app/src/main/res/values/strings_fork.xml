@@ -351,4 +351,67 @@
     <string name="themes__key_sound_crisp" tools:ignore="MissingTranslation">Crisp</string>
     <string name="themes__key_sound_wood" tools:ignore="MissingTranslation">Wood</string>
     <string name="themes__key_sound_pop" tools:ignore="MissingTranslation">Pop</string>
+
+    <!-- S4-settings: the settings tree (PRD FR-09) and its Translate, Privacy, Subscription and About rows. -->
+    <string name="settings_tree__title" tools:ignore="MissingTranslation">Settings</string>
+    <string name="settings_tree__languages" tools:ignore="MissingTranslation">Languages</string>
+    <string name="settings_tree__voice" tools:ignore="MissingTranslation">Voice</string>
+    <string name="settings_tree__translate" tools:ignore="MissingTranslation">Translate</string>
+    <string name="settings_tree__ai" tools:ignore="MissingTranslation">AI</string>
+    <string name="settings_tree__appearance" tools:ignore="MissingTranslation">Appearance</string>
+    <string name="settings_tree__typing" tools:ignore="MissingTranslation">Typing</string>
+    <string name="settings_tree__privacy" tools:ignore="MissingTranslation">Privacy</string>
+    <string name="settings_tree__subscription" tools:ignore="MissingTranslation">Subscription</string>
+    <string name="settings_tree__about" tools:ignore="MissingTranslation">About</string>
+    <string name="translate_settings__title" tools:ignore="MissingTranslation">Translate</string>
+    <string name="translate_settings__default_pair" tools:ignore="MissingTranslation">Default languages</string>
+    <string name="translate_settings__from" tools:ignore="MissingTranslation">Translate from</string>
+    <string name="translate_settings__to" tools:ignore="MissingTranslation">Translate to</string>
+    <string name="translate_settings__live" tools:ignore="MissingTranslation">Translate while typing</string>
+    <string name="translate_settings__live_summary" tools:ignore="MissingTranslation">Show the translation in the bar as you type</string>
+    <string name="translate_settings__wifi_only" tools:ignore="MissingTranslation">Download packs on Wi-Fi only</string>
+    <string name="translate_settings__history" tools:ignore="MissingTranslation">Save translation history</string>
+    <string name="translate_settings__history_summary" tools:ignore="MissingTranslation">Keep Translator results on this device</string>
+    <string name="translate_settings__offline_summary" tools:ignore="MissingTranslation">Download or remove language packs</string>
+    <string name="ai_settings__default_tone" tools:ignore="MissingTranslation">Default tone</string>
+    <string name="ai_settings__tone_fix" tools:ignore="MissingTranslation">Fix grammar</string>
+    <string name="ai_settings__tone_formal" tools:ignore="MissingTranslation">Formal</string>
+    <string name="ai_settings__tone_friendly" tools:ignore="MissingTranslation">Friendly</string>
+    <string name="ai_settings__tone_shorter" tools:ignore="MissingTranslation">Shorter</string>
+    <string name="ai_settings__tone_longer" tools:ignore="MissingTranslation">Longer</string>
+    <string name="ai_settings__tone_emojify" tools:ignore="MissingTranslation">Emojify</string>
+    <string name="ai_settings__quota" tools:ignore="MissingTranslation">{left} of {total} left today</string>
+    <string name="privacy_settings__title" tools:ignore="MissingTranslation">Privacy</string>
+    <string name="privacy_settings__consents" tools:ignore="MissingTranslation">Your consents</string>
+    <string name="privacy_settings__agreed" tools:ignore="MissingTranslation">Agreed</string>
+    <string name="privacy_settings__not_agreed" tools:ignore="MissingTranslation">Not agreed</string>
+    <string name="privacy_settings__consent_ai" tools:ignore="MissingTranslation">AI writing help</string>
+    <string name="privacy_settings__consent_cloud_translate" tools:ignore="MissingTranslation">Online translation</string>
+    <string name="privacy_settings__consent_auto_polish" tools:ignore="MissingTranslation">Auto-polish</string>
+    <string name="privacy_settings__consent_voice_notice" tools:ignore="MissingTranslation">Voice typing notice</string>
+    <string name="privacy_settings__withdraw_confirm" tools:ignore="MissingTranslation">Withdraw this consent? The feature stops until you agree again.</string>
+    <string name="privacy_settings__ad_privacy" tools:ignore="MissingTranslation">Ad privacy options</string>
+    <string name="privacy_settings__ad_privacy_summary" tools:ignore="MissingTranslation">Change your ad consent choices</string>
+    <string name="privacy_settings__your_data" tools:ignore="MissingTranslation">Your data</string>
+    <string name="privacy_settings__clear_data" tools:ignore="MissingTranslation">Clear data</string>
+    <string name="privacy_settings__clear_data_summary" tools:ignore="MissingTranslation">Remove history, learned words and caches from this device</string>
+    <string name="privacy_settings__delete_data" tools:ignore="MissingTranslation">Delete my data</string>
+    <string name="privacy_settings__delete_data_summary" tools:ignore="MissingTranslation">Ask us to delete the data kept on our servers</string>
+    <string name="privacy_settings__data_policy" tools:ignore="MissingTranslation">Privacy policy</string>
+    <string name="privacy_settings__coming_soon" tools:ignore="MissingTranslation">Coming soon</string>
+    <string name="subscription_settings__title" tools:ignore="MissingTranslation">Subscription</string>
+    <string name="subscription_settings__manage" tools:ignore="MissingTranslation">Manage in Google Play</string>
+    <string name="subscription_settings__restore" tools:ignore="MissingTranslation">Restore purchases</string>
+    <string name="subscription_settings__restored" tools:ignore="MissingTranslation">Pro restored</string>
+    <string name="subscription_settings__not_found" tools:ignore="MissingTranslation">No purchase found</string>
+    <string name="subscription_settings__state_free" tools:ignore="MissingTranslation">Free</string>
+    <string name="subscription_settings__state_pro" tools:ignore="MissingTranslation">Pro</string>
+    <string name="subscription_settings__state_pending" tools:ignore="MissingTranslation">Purchase pending</string>
+    <string name="subscription_settings__state_payment" tools:ignore="MissingTranslation">Payment problem</string>
+    <string name="subscription_settings__renews" tools:ignore="MissingTranslation">Renews on {date}</string>
+    <string name="about__terms__title" tools:ignore="MissingTranslation">Terms of service</string>
+    <string name="about__contact__title" tools:ignore="MissingTranslation">Contact</string>
+    <string name="about__contact__no_app" tools:ignore="MissingTranslation">No email app found</string>
+    <!-- S4-settings: placeholder until the support address exists. -->
+    <string name="contact_email" translatable="false">support@example.com</string>
 </resources>

@@ -65,6 +65,9 @@ class RouteRegistryTest {
                 "settings/privacy/private-apps", "pro", "paywall?trigger=ai_quota", "paywall?trigger=premium_theme",
                 "paywall?trigger=remove_ads", "paywall?trigger=cloud_quality", "paywall?trigger=premium_sticker",
                 "paywall?trigger=auto_polish", "paywall?trigger=win_back", "themes",
+                // S4-settings: the settings tree root and its sections
+                "settings/all", "settings/languages", "settings/translate", "settings/ai", "settings/appearance",
+                "settings/typing", "settings/privacy", "settings/subscription", "settings/about",
             ),
             RouteRegistry.routes.keys,
         )

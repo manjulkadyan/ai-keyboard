@@ -8,6 +8,7 @@ package com.manjul.aikeyboard.fork.routes
 import android.net.Uri
 import com.manjul.aikeyboard.fork.paywall.PaywallTrigger
 import com.manjul.aikeyboard.fork.paywall.paywallPath
+import com.manjul.aikeyboard.fork.settings.SettingsSection
 
 /**
  * The deep-link allow-list (PRD FR-32, TRD §4.3.4). `FlorisAppActivity` is exported, so the `open_screen` extra and
@@ -21,7 +22,8 @@ import com.manjul.aikeyboard.fork.paywall.paywallPath
  *
  * The paywall is `paywall?trigger=<wire>` for every link-able [PaywallTrigger] (S4-paywall). `pro`, which the AI
  * quota card opens, is an alias of `paywall?trigger=ai_quota` (plan decision 23). Before onboarding is done every
- * paywall route opens Home (PRD FR-32 AC3). `themes` opens the Themes screen (S4-themes). PRD FR-32 also lists
+ * paywall route opens Home (PRD FR-32 AC3). `themes` opens the Themes screen (S4-themes). `settings/all` opens the
+ * Settings tree and `settings/<slug>` each of its [SettingsSection]s (S4-settings, PRD FR-09). PRD FR-32 also lists
  * `conversation` and `camera`; their sprints add them.
  */
 object RouteRegistry {
@@ -36,6 +38,7 @@ object RouteRegistry {
     const val PRO = "pro"
     const val PAYWALL = "paywall"
     const val THEMES = "themes"
+    const val SETTINGS = SettingsSection.ROOT_ROUTE
 
     private const val HOME_PATH = "settings/home"
     private const val UI_SCHEME = "ui"
@@ -55,7 +58,9 @@ object RouteRegistry {
         "settings/privacy/private-apps" to "settings/privacy/private-apps",
         PRO to paywallPath(PaywallTrigger.AI_QUOTA), // S4-paywall: alias (plan decision 23)
         THEMES to "themes", // S4-themes: the Themes screen
-    ) + PaywallTrigger.entries.filter { it.deepLinkable }.map(::paywallPath).associateWith { it }
+        SETTINGS to SettingsSection.ROOT_ROUTE, // S4-settings: the Settings tree
+    ) + SettingsSection.entries.associate { it.route to it.path } +
+        PaywallTrigger.entries.filter { it.deepLinkable }.map(::paywallPath).associateWith { it }
 
     /** Where to go. [path] is a `@Deeplink` path; [unknown] means the value was not allow-listed (Home + event). */
     data class Resolved(val name: String, val path: String, val unknown: Boolean) {

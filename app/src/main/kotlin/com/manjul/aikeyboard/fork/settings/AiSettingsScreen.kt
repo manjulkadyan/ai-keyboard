@@ -22,6 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,12 +35,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.R
+import com.manjul.aikeyboard.aiAppGraph
+import com.manjul.aikeyboard.app.LocalNavController
+import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.appContext
+import com.manjul.aikeyboard.core.ai.kb.QuotaClient
+import com.manjul.aikeyboard.core.ai.kb.QuotaResult
+import com.manjul.aikeyboard.core.ai.kb.QuotaStatus
 import com.manjul.aikeyboard.core.analytics.ConsentKind
 import com.manjul.aikeyboard.core.datastore.FeatureSettings
+import com.manjul.aikeyboard.core.network.HttpClientFactory
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.fork.ai.AiConsentActivity
+import com.manjul.aikeyboard.fork.paywall.PaywallTrigger
 import com.manjul.aikeyboard.fork.privacy.consentWithdrawnEvents
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import kotlinx.coroutines.launch
@@ -60,8 +70,9 @@ internal fun autoPolishChange(settings: FeatureSettings, on: Boolean, isPro: Boo
 }
 
 /**
- * AI settings (Sprint 3 Task 14, a Settings home entry): the ✦ Polish output script, "Auto-polish every dictation"
- * (Pro; disabled without it) and "Withdraw AI consent" (same as on the Private apps screen).
+ * AI settings (Sprint 3 Task 14, Settings → AI in S4): what is left of today's AI quota, the default ✦ tone, the
+ * ✦ Polish output script, "Auto-polish every dictation" (Pro; a free user goes to the paywall) and "Withdraw AI
+ * consent" (same as on the Private apps screen). The quota is asked of kb-api only after `consentAiAt` is set.
  */
 @Composable
 fun AiSettingsScreen(isPro: () -> Boolean = { false }) = FlorisScreen {
@@ -73,11 +84,26 @@ fun AiSettingsScreen(isPro: () -> Boolean = { false }) = FlorisScreen {
     val store = remember { context.featureSettingsStore().value }
     val scope = rememberCoroutineScope()
     val settings by store.flow.collectAsState(initial = store.current)
+    val navController = LocalNavController.current
+    var quota by remember { mutableStateOf<QuotaStatus?>(null) }
+    val consented = settings.consentAiAt > 0L
+    LaunchedEffect(consented) {
+        // Nothing goes to kb-api before AI consent (PRD §10.6). Only the auth headers are sent.
+        quota = if (!consented) {
+            null
+        } else {
+            val tokens = context.aiAppGraph().value.tokens
+            val client = QuotaClient(HttpClientFactory.create(), BuildConfig.AI_BASE_URL, tokens)
+            (client.status() as? QuotaResult.Ok)?.status
+        }
+    }
 
     content {
         AiSettingsContent(
             settings = settings,
             isPro = isPro(),
+            quota = quota,
+            onAutoPolishPaywall = { navController.navigate(Routes.Paywall(PaywallTrigger.AUTO_POLISH.wire)) },
             onUpdate = { transform -> scope.launch { store.update(transform) } },
             onAutoPolish = { on ->
                 when (autoPolishChange(store.current, on, isPro())) {
@@ -106,10 +132,21 @@ internal fun AiSettingsContent(
     onUpdate: ((FeatureSettings) -> FeatureSettings) -> Unit,
     onAutoPolish: (Boolean) -> Unit,
     onWithdrawAiConsent: () -> Unit,
+    quota: QuotaStatus? = null,
+    onAutoPolishPaywall: () -> Unit = {},
 ) {
     var confirmWithdraw by rememberSaveable { mutableStateOf(false) }
     val script = FeatureSettings.normalizeOutputScript(settings.polishOutputScript)
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        if (quota != null) {
+            ListItem(
+                headlineContent = {
+                    val left = "left" to quota.aiLeftToday
+                    Text(stringRes(R.string.ai_settings__quota, left, "total" to quota.dailyTotal))
+                },
+            )
+        }
+
         Text(
             text = stringRes(R.string.ai_settings__output_script),
             style = MaterialTheme.typography.titleSmall,
@@ -138,9 +175,9 @@ internal fun AiSettingsContent(
         ListItem(
             modifier = Modifier.toggleable(
                 value = autoOn,
-                enabled = isPro || autoOn,
                 role = Role.Switch,
-                onValueChange = onAutoPolish,
+                // A free user turning it on goes to the paywall (auto_polish trigger); turning off always works.
+                onValueChange = { on -> if (on && !isPro) onAutoPolishPaywall() else onAutoPolish(on) },
             ),
             headlineContent = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -160,8 +197,28 @@ internal fun AiSettingsContent(
                     ),
                 )
             },
-            trailingContent = { Switch(checked = autoOn, onCheckedChange = null, enabled = isPro || autoOn) },
+            trailingContent = { Switch(checked = autoOn, onCheckedChange = null) },
         )
+
+        Text(
+            text = stringRes(R.string.ai_settings__default_tone),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        val tone = FeatureSettings.normalizeAiTone(settings.aiDefaultTone)
+        for (option in FeatureSettings.AI_TONES) {
+            val selected = option == tone
+            ListItem(
+                modifier = Modifier.selectable(
+                    selected = selected,
+                    role = Role.RadioButton,
+                    onClick = { onUpdate { it.copy(aiDefaultTone = option) } },
+                ),
+                headlineContent = { Text(stringRes(toneLabel(option))) },
+                leadingContent = { RadioButton(selected = selected, onClick = null) },
+            )
+        }
 
         val given = settings.hasAnyAiConsent
         ListItem(
@@ -190,6 +247,15 @@ internal fun AiSettingsContent(
             },
         )
     }
+}
+
+private fun toneLabel(wire: String): Int = when (wire) {
+    "formal" -> R.string.ai_settings__tone_formal
+    "friendly" -> R.string.ai_settings__tone_friendly
+    "shorter" -> R.string.ai_settings__tone_shorter
+    "longer" -> R.string.ai_settings__tone_longer
+    "emojify" -> R.string.ai_settings__tone_emojify
+    else -> R.string.ai_settings__tone_fix
 }
 
 private fun scriptLabel(wire: String): Int = when (wire) {

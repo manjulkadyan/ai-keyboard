@@ -59,6 +59,7 @@ internal class AiRig(
     var consentRequests = 0
     var translateTarget: String? = "es"
     var targetAvailable = true
+    var defaultTone = "fix"
     val lru = AiLru()
     val clock: () -> Long = { scope.testScheduler.currentTime }
     val pause = AiPauseGate(clock)
@@ -103,6 +104,7 @@ internal class AiRig(
         report = { reports += it },
         scope = scope.backgroundScope,
         clock = clock,
+        defaultTone = { defaultTone },
     )
 
     val state: AiSheetState get() = controller.state.value
@@ -180,6 +182,19 @@ class AiActionControllerTest {
         val noTranslate = assertIs<AiSheetState.ChooseTone>(rig.state)
         assertFalse(RewriteMode.TRANSLATE in noTranslate.tones)
         assertTrue(rig.engine.requests.isEmpty())
+    }
+
+    @Test fun `the default tone from settings comes first, an unknown one keeps the order`() = runTest {
+        val rig = AiRig(this)
+        rig.defaultTone = "friendly"
+        rig.controller.open()
+        val tones = assertIs<AiSheetState.ChooseTone>(rig.state).tones
+        assertEquals(RewriteMode.FRIENDLY, tones.first())
+        assertEquals(RewriteMode.entries.toSet(), tones.toSet())
+        rig.controller.dismiss()
+        rig.defaultTone = "translate"
+        rig.controller.open()
+        assertEquals(RewriteMode.entries.toList(), assertIs<AiSheetState.ChooseTone>(rig.state).tones)
     }
 
     @Test fun `deltas build the preview, then Ready`() = runTest {

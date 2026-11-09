@@ -86,6 +86,7 @@ class AiImeSession(
         report = graph.report,
         scope = scope,
         clock = clock,
+        defaultTone = { settings.current.aiDefaultTone },
     )
 
     // Polish has its own replacer: closing one sheet must not drop the other's pending undo.

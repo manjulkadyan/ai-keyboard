@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
- * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): Appearance entry
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): Appearance entry. FORK(S4-settings): Settings entry
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.material.icons.filled.AutoFixHigh // FORK(S3-userdict)
 import androidx.compose.material.icons.filled.AutoAwesome // FORK(S3-polish)
 import androidx.compose.material.icons.filled.Brush // FORK(S4-themes)
+import androidx.compose.material.icons.filled.Settings // FORK(S4-settings)
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Keyboard
@@ -140,6 +141,12 @@ fun HomeScreen() = FlorisScreen {
             icon = Icons.Default.Brush,
             title = stringRes(R.string.themes__title),
             onClick = { navController.navigate(Routes.Themes) },
+        )
+        // FORK(S4-settings): "Settings" entry for the FR-09 settings tree (the upstream entries below stay)
+        Preference(
+            icon = Icons.Default.Settings,
+            title = stringRes(R.string.settings_tree__title),
+            onClick = { navController.navigate(Routes.Settings.All) },
         )
         Preference(
             icon = Icons.Default.Language,

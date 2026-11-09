@@ -35,13 +35,17 @@ import com.manjul.aikeyboard.core.config.ConfigKeys
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.firebaseGraph
 import com.manjul.aikeyboard.fork.billing.proGate
+import com.manjul.aikeyboard.fork.settings.AdPrivacyOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -54,8 +58,10 @@ class AdsAppGraph(private val app: Application) {
     private val firebase by app.firebaseGraph()
     private val isPro by lazy { proGate(settings) }
 
+    private val consentManager = UmpConsentManager()
+
     val initializer: AdsInitializer = AdsInitializer(
-        consentManager = UmpConsentManager(),
+        consentManager = consentManager,
         adSdk = GmaAdSdk(GoogleMobileAdsFacade, Dispatchers.IO, firebase.reporter),
         // Read again when consent resolves: a purchase or a kill switch during the form keeps the SDK off.
         adsDisabled = { !adsAllowed() },
@@ -69,6 +75,19 @@ class AdsAppGraph(private val app: Application) {
     private val nativePlacements = listOf(AdPlacements.NATIVE_TRANSLATOR, AdPlacements.NATIVE_HISTORY)
 
     internal val reporter: NonFatalReporter get() = firebase.reporter
+
+    /** S4 Task 11: the "Ad privacy options" row of Settings → Privacy, wired in `Routes.kt`. */
+    val privacyOptions: AdPrivacyOptions by lazy {
+        val required = status.map { it.privacyOptionsRequired }
+            .stateIn(scope, SharingStarted.Eagerly, status.value.privacyOptionsRequired)
+        object : AdPrivacyOptions {
+            override val required: StateFlow<Boolean> = required
+
+            override fun show(activity: Activity) {
+                consentManager.showPrivacyOptionsForm(activity) { }
+            }
+        }
+    }
 
     internal val loaders: GmaAdLoaders by lazy {
         GmaAdLoaders(app, firebase.reporter, PaidEventLogger { app.appContext().value.analytics.value.log(it) })

@@ -97,6 +97,17 @@ App process only (Home). The keyboard never loads the Play update client.
 | `pendingPremiumThemeId` | The stylesheet id of a premium preset tried without Pro | No | `FeatureSettings` on the device | Apply of a premium preset without Pro. Cleared by any applied theme, which includes the pending one when Pro turns on while the Themes screen is open or on its next open | Local only, never sent |
 | `theme_apply` | `theme_id` (a built-in preset id, else `other`), `premium` (bool) | Yes, with analytics consent | Firebase Analytics, through the consent-aware relay | Once per applied theme | No user content |
 
+## Settings (Sprint 4)
+
+| Flow | Data | Leaves the device? | Where to | When | Notes |
+|---|---|---|---|---|---|
+| AI quota (`GET /v1/quota`, `:core:ai` `QuotaClient`) | The kb-api auth headers only; no body | Yes, only after AI consent | kb-api | Each open of Settings → AI while `consentAiAt` is set | The answer (`ai_left_today`, `resets_at`, `tier`) is shown and not stored. No request without consent or a base URL |
+| `aiDefaultTone` | One of `fix`, `formal`, `friendly`, `shorter`, `longer`, `emojify` | No | `FeatureSettings` on the device | Settings → AI → Default tone | Puts that tone first on the ✦ sheet. Local only, never sent |
+| `consentCloudTranslateAt` | A time stamp, 0 when not given | No | `FeatureSettings` on the device | Withdraw on Settings → Privacy (cloud translation is not in this build, so nothing sets it yet) | Withdraw also sets `cloudTranslateOptIn` to false |
+| Consent withdraw (Settings → Privacy) | The consent time stamps (`consentAiAt`, `consentAutoPolishAt`, `consentCloudTranslateAt`, `consentVoiceNoticeAt`) set to 0 | No | `FeatureSettings` on the device | A confirmed Withdraw tap | `consent_withdrawn{kind}` is logged for the AI and auto-polish kinds only, through the consent-aware relay |
+| Ad privacy options | The UMP privacy options form (see the UMP row) | Per the UMP row | Google (User Messaging Platform) | A tap on Settings → Privacy → Ad privacy options, shown only when UMP requires it | App process only |
+| Restore purchases (Settings → Subscription) | As the entitlement verify row | Yes | Google Play and kb-api | A tap on Restore purchases | `restore_purchases{found}` (a boolean) through the consent-aware relay |
+
 ## Suggestions and the user dictionary (Sprint 3)
 
 | Flow | Data | Leaves the device? | Where to | When | Notes |

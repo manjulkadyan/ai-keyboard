@@ -144,6 +144,9 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/input/InputFeedbackController.kt` | S4-themes | `performAudioFeedback` reads `FeatureSettings.keySound`: any choice but `system` goes to `fork/themes/KeySoundPlayer` (`off` plays nothing) instead of `AudioManager.playSoundEffect`. The upstream volume and activation checks still apply. New `release()` frees the `SoundPool` |
 | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S4-themes | `onCreate` runs `fork/themes/PremiumThemeGuard.check` once the preferences and the Pro cache are loaded (a lapsed Pro goes back to light and dark); `onDestroy` calls `inputFeedbackController.release()` |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/AppPrefs.kt` | S4-themes | Default day theme `com.manjul.aikeyboard.themes:light`, default night theme `com.manjul.aikeyboard.themes:dark` (was `org.florisboard.themes:floris_day` / `floris_night`); the unused `extCoreTheme` import is removed. The upstream theme packs still ship and stay selectable |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt` | S4-settings | `Settings.All` (`settings/all`, `fork/settings/SettingsScreen`), `Settings.Translate`, `Settings.Privacy` and `Settings.Subscription` routes for the settings tree (PRD FR-09). Privacy gets `AdsAppGraph.privacyOptions` (an `AdPrivacyOptions`), so `fork.settings` never references `:core:ads` |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S4-settings | One "Settings" entry after Appearance that opens `Routes.Settings.All`. The other Home entries stay |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/about/AboutScreen.kt` | S4-settings | Terms of service row (`terms_url`) and a Contact row (`mailto:` the placeholder `contact_email`, a toast when no email app exists) |
 
 ## Marker-exempt files
 

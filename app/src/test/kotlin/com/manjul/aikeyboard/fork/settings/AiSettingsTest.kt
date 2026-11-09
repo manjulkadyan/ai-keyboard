@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.manjul.aikeyboard.R
+import com.manjul.aikeyboard.core.ai.kb.QuotaStatus
 import com.manjul.aikeyboard.core.datastore.FeatureSettings
 import com.manjul.aikeyboard.fork.testing.ComposeHostActivityRule
 import org.florisboard.lib.compose.ProvideLocalizedResources
@@ -37,8 +38,9 @@ class AiSettingsTest {
     private var settings by mutableStateOf(FeatureSettings())
     private val autoPolish = mutableListOf<Boolean>()
     private var withdrawn = 0
+    private var paywall = 0
 
-    private fun show(isPro: Boolean = false) = compose.setContent {
+    private fun show(isPro: Boolean = false, quota: QuotaStatus? = null) = compose.setContent {
         ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
             AiSettingsContent(
                 settings = settings,
@@ -46,6 +48,8 @@ class AiSettingsTest {
                 onUpdate = { settings = it(settings) },
                 onAutoPolish = { autoPolish += it },
                 onWithdrawAiConsent = { withdrawn++ },
+                quota = quota,
+                onAutoPolishPaywall = { paywall++ },
             )
         }
     }
@@ -60,11 +64,37 @@ class AiSettingsTest {
         assertEquals("MATCH_INPUT", settings.polishOutputScript)
     }
 
-    @Test fun autoPolishIsDisabledWithoutPro() {
+    @Test fun autoPolishWithoutProOpensThePaywall() {
         show(isPro = false)
         compose.onNodeWithText("Auto-polish every dictation").performScrollTo().performClick()
         compose.waitForIdle()
         assertTrue(autoPolish.isEmpty())
+        assertEquals(1, paywall)
+    }
+
+    @Test fun autoPolishWithProDoesNotOpenThePaywall() {
+        show(isPro = true)
+        compose.onNodeWithText("Auto-polish every dictation").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(true), autoPolish)
+        assertEquals(0, paywall)
+    }
+
+    @Test fun defaultToneIsSaved() {
+        show()
+        compose.onNodeWithText("Friendly").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals("friendly", settings.aiDefaultTone)
+    }
+
+    @Test fun quotaRowShowsWhatIsLeftToday() {
+        show(quota = QuotaStatus(aiLeftToday = 7, resetsAtMs = 0L, tier = "FREE"))
+        compose.onNodeWithText("7 of 10 left today").performScrollTo().assertExists()
+    }
+
+    @Test fun noQuotaRowWithoutAnAnswer() {
+        show(quota = null)
+        compose.onNodeWithText("left today", substring = true).assertDoesNotExist()
     }
 
     @Test fun autoPolishChangeNeedsProAndItsOwnConsent() {

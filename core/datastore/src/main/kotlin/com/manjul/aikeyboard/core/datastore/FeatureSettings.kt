@@ -97,6 +97,13 @@ data class FeatureSettings(
      * screen. It is applied and cleared when Pro turns on; empty = none. Local only.
      */
     val pendingPremiumThemeId: String = "",
+    /**
+     * The tone the ✦ sheet lists first (S4 Task 11), a `RewriteMode` wire name from [AI_TONES]. Kept as a string so
+     * this module does not depend on `:core:ai`; [FeatureSettingsStore] clamps unknown values to the default.
+     */
+    val aiDefaultTone: String = DEFAULT_AI_TONE,
+    /** When the user agreed to cloud translation (`consent_cloud_translate`, RN-09); 0 = no consent. */
+    val consentCloudTranslateAt: Long = 0L,
 ) {
     /** True while any AI consent is on record, so Settings can offer to withdraw it. */
     val hasAnyAiConsent: Boolean get() = consentAiAt > 0L || consentAutoPolishAt > 0L
@@ -113,6 +120,15 @@ data class FeatureSettings(
         /** [value] as one of [OUTPUT_SCRIPTS] (case-insensitive), or [DEFAULT_OUTPUT_SCRIPT]. */
         fun normalizeOutputScript(value: String): String =
             value.uppercase(java.util.Locale.ROOT).takeIf { it in OUTPUT_SCRIPTS } ?: DEFAULT_OUTPUT_SCRIPT
+
+        /** The `RewriteMode` wire names a user can pick as the default tone. `translate` is not a tone. */
+        val AI_TONES: List<String> = listOf("fix", "formal", "friendly", "shorter", "longer", "emojify")
+
+        const val DEFAULT_AI_TONE: String = "fix"
+
+        /** [value] as one of [AI_TONES] (case-insensitive), or [DEFAULT_AI_TONE]. */
+        fun normalizeAiTone(value: String): String =
+            value.lowercase(java.util.Locale.ROOT).takeIf { it in AI_TONES } ?: DEFAULT_AI_TONE
 
         /** The MVP keyboard languages (PRD FR-05). */
         val MVP_LANGUAGES: List<String> = listOf("en", "es", "fr", "pt", "id", "ar", "ur", "hi")

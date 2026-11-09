@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
- * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): Themes route
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): Themes route. FORK(S4-settings): settings tree
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,6 +83,12 @@ import com.manjul.aikeyboard.fork.paywall.PaywallRoute // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.paywall.PaywallTrigger // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.themes.ThemesScreen // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.settings.AiSettingsScreen // FORK(S3-polish)
+import android.app.Application // FORK(S4-settings)
+import com.manjul.aikeyboard.app.ads.AdsAppGraph // FORK(S4-settings)
+import com.manjul.aikeyboard.fork.settings.PrivacySettingsScreen // FORK(S4-settings)
+import com.manjul.aikeyboard.fork.settings.SettingsScreen // FORK(S4-settings)
+import com.manjul.aikeyboard.fork.settings.SubscriptionSettingsScreen // FORK(S4-settings)
+import com.manjul.aikeyboard.fork.settings.TranslateSettingsScreen // FORK(S4-settings)
 import com.manjul.aikeyboard.featureSettingsStore // FORK(S4-billing)
 import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
 import androidx.compose.runtime.remember // FORK(S4-billing)
@@ -143,6 +149,24 @@ object Routes {
         @Serializable
         @Deeplink("settings/home")
         object Home
+
+        // FORK(S4-settings): the settings tree (PRD FR-09): its root and the new Translate, Privacy and Subscription
+        // sections. The other sections open existing screens (SettingsSection.path).
+        @Serializable
+        @Deeplink("settings/all")
+        object All
+
+        @Serializable
+        @Deeplink("settings/translate")
+        object Translate // FORK(S4-settings)
+
+        @Serializable
+        @Deeplink("settings/privacy")
+        object Privacy // FORK(S4-settings)
+
+        @Serializable
+        @Deeplink("settings/subscription")
+        object Subscription // FORK(S4-settings)
 
         @Serializable
         @Deeplink("settings/localization")
@@ -341,6 +365,14 @@ object Routes {
             composable<Setup.Screen> { OnboardingScreen() }
 
             composableWithDeepLink(Settings.Home::class) { HomeScreen() }
+            // FORK(S4-settings): the settings tree. Ad privacy comes from the app-process ads stack (AD_HOST_CALLERS).
+            composableWithDeepLink(Settings.All::class) { SettingsScreen() }
+            composableWithDeepLink(Settings.Translate::class) { TranslateSettingsScreen() } // FORK(S4-settings)
+            composableWithDeepLink(Settings.Privacy::class) { // FORK(S4-settings)
+                val app = LocalContext.current.applicationContext as Application
+                PrivacySettingsScreen(adPrivacy = remember(app) { AdsAppGraph.get(app).privacyOptions })
+            }
+            composableWithDeepLink(Settings.Subscription::class) { SubscriptionSettingsScreen() } // FORK(S4-settings)
 
             composableWithDeepLink(Settings.Localization::class) { LocalizationScreen() }
             composableWithDeepLink(Settings.SelectLocale::class) { SelectLocaleScreen() }

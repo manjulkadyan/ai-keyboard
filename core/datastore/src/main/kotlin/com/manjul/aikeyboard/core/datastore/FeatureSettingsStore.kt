@@ -34,7 +34,10 @@ internal object FeatureSettingsSerializer : Serializer<FeatureSettings> {
 
     override suspend fun readFrom(input: InputStream): FeatureSettings = try {
         json.decodeFromString(FeatureSettings.serializer(), input.readBytes().decodeToString()).let {
-            it.copy(polishOutputScript = FeatureSettings.normalizeOutputScript(it.polishOutputScript))
+            it.copy(
+                polishOutputScript = FeatureSettings.normalizeOutputScript(it.polishOutputScript),
+                aiDefaultTone = FeatureSettings.normalizeAiTone(it.aiDefaultTone),
+            )
         }
     } catch (e: SerializationException) {
         // Never put the file content in the message (it can contain package names).
@@ -82,11 +85,14 @@ class FeatureSettingsStore(
                 lastSourceLang = new.lastSourceLang?.takeIf { it.isNotBlank() },
                 consentAiAt = new.consentAiAt.coerceAtLeast(0L),
                 consentAutoPolishAt = new.consentAutoPolishAt.coerceAtLeast(0L),
+                consentCloudTranslateAt = new.consentCloudTranslateAt.coerceAtLeast(0L),
+                consentVoiceNoticeAt = new.consentVoiceNoticeAt.coerceAtLeast(0L),
                 paywallOnboardingShownAt = new.paywallOnboardingShownAt.coerceAtLeast(0L),
                 winBackShownCount = new.winBackShownCount.coerceAtLeast(0),
                 winBackLastShownAt = new.winBackLastShownAt.coerceAtLeast(0L),
                 updateCheckedAt = new.updateCheckedAt.coerceAtLeast(0L),
                 polishOutputScript = FeatureSettings.normalizeOutputScript(new.polishOutputScript),
+                aiDefaultTone = FeatureSettings.normalizeAiTone(new.aiDefaultTone),
                 autocorrectLocales = new.autocorrectLocales.filterTo(LinkedHashSet()) { it in FeatureSettings.MVP_LANGUAGES },
             )
         }

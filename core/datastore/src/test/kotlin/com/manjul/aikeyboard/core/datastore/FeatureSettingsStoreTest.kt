@@ -180,6 +180,26 @@ class FeatureSettingsStoreTest {
     }
 
     @Test
+    fun `aiDefaultTone defaults to fix and unknown tones are clamped on write and on read`() = runTest {
+        assertEquals("fix", FeatureSettings().aiDefaultTone)
+        val store = FeatureSettingsStore(app)
+        store.update { it.copy(aiDefaultTone = "Friendly") }
+        assertEquals("friendly", store.flow.first().aiDefaultTone)
+        store.update { it.copy(aiDefaultTone = "translate") }
+        assertEquals("fix", store.current.aiDefaultTone)
+        val read = FeatureSettingsSerializer.readFrom("""{"aiDefaultTone":"x"}""".byteInputStream())
+        assertEquals("fix", read.aiDefaultTone)
+    }
+
+    @Test
+    fun `the cloud translate and voice notice consents are clamped to zero`() = runTest {
+        val store = FeatureSettingsStore(app)
+        store.update { it.copy(consentCloudTranslateAt = -1L, consentVoiceNoticeAt = -2L) }
+        assertEquals(0L, store.current.consentCloudTranslateAt)
+        assertEquals(0L, store.current.consentVoiceNoticeAt)
+    }
+
+    @Test
     fun `withdrawing ai consent clears both consents and auto-polish only`() = runTest {
         val given = FeatureSettings(
             consentAiAt = 5L, consentAutoPolishAt = 6L, autoPolish = true, polishOutputScript = "ROMAN",

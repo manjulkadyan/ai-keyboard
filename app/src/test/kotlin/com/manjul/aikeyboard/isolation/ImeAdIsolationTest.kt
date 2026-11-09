@@ -64,7 +64,8 @@ class ImeAdIsolationTest {
                 "(TRD §4.11). The IME never starts or loads this Activity.",
             "com/manjul/aikeyboard/app/Routes.kt" to
                 "S4 Task 7: AppNavHost reports navigation steps (NavTransitionReporter), the only interstitial " +
-                "trigger. The nav host is composed only by FlorisAppActivity; the IME reads route types only.",
+                "trigger. S4 Task 11: passes AdsAppGraph.privacyOptions to Settings → Privacy. The nav host is " +
+                "composed only by FlorisAppActivity; the IME reads route types only.",
             "com/manjul/aikeyboard/app/settings/HomeScreen.kt" to
                 "S4 Task 7: the banner_home slot at the bottom of Home. S4 Task 8: reads the current entry source " +
                 "(a plain EntrySource) for the update prompt. Composed only inside FlorisAppActivity.",

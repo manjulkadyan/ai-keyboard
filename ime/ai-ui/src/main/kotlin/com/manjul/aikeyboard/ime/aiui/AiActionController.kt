@@ -79,6 +79,8 @@ class AiActionController(
     private val scope: CoroutineScope,
     private val clock: () -> Long,
     private val newRequestId: () -> String = { UUID.randomUUID().toString() },
+    /** The `RewriteMode` wire name of the tone listed first (Settings → AI → Default tone). */
+    private val defaultTone: () -> String = { RewriteMode.FIX.wire },
 ) {
     /** One captured text and the request for it. [output] is user content. */
     private class Session(val captured: CapturedText, val generation: Int, val request: AiRequest.Rewrite) {
@@ -454,7 +456,10 @@ class AiActionController(
     private fun chooseToneState(): AiSheetState.ChooseTone {
         val target = translateTarget()
         val tones = RewriteMode.entries.filter { it != RewriteMode.TRANSLATE || target != null }
-        return AiSheetState.ChooseTone(tones, target)
+        // The default tone goes first; translate is never a default, an unknown value keeps the order.
+        val first = defaultTone().let { wire -> tones.firstOrNull { it != RewriteMode.TRANSLATE && it.wire == wire } }
+        val ordered = if (first == null) tones else listOf(first) + (tones - first)
+        return AiSheetState.ChooseTone(ordered, target)
     }
 
     companion object {

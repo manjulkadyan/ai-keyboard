@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
- * Modified by AI Keyboard contributors, 2026. FORK(S0-licences): Apache-2.0 §4(b) change notice
+ * Modified by AI Keyboard contributors, 2026. FORK(S0-licences): Apache-2.0 §4(b) change notice.
+ * FORK(S4-settings): Terms and Contact rows
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +18,9 @@
 
 package com.manjul.aikeyboard.app.settings.about
 
+import android.content.ActivityNotFoundException // FORK(S4-settings)
+import android.content.Intent // FORK(S4-settings)
+import android.net.Uri // FORK(S4-settings)
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,6 +30,8 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.material.icons.Icons
 // FORK(S0-branding): Code/History icon imports dropped with the Changelog and Repository rows
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Email // FORK(S4-settings)
+import androidx.compose.material.icons.outlined.Gavel // FORK(S4-settings)
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material3.Text
@@ -110,6 +116,27 @@ fun AboutScreen() = FlorisScreen {
             summary = stringRes(R.string.about__privacy_policy__summary),
             // FORK(S0-branding): our privacy policy (placeholder URL, TODO(OD-01)), not upstream's
             onClick = { context.launchUrl(R.string.privacy_policy_url) },
+        )
+        // FORK(S4-settings): Terms of service and Contact (PRD FR-09 About section)
+        Preference(
+            icon = Icons.Outlined.Gavel,
+            title = stringRes(R.string.about__terms__title),
+            onClick = { context.launchUrl(R.string.terms_url) },
+        )
+        Preference(
+            icon = Icons.Outlined.Email,
+            title = stringRes(R.string.about__contact__title),
+            summary = stringRes(R.string.contact_email),
+            onClick = {
+                // FORK(S4-settings): mailto only; no device or app details are added to the mail
+                val address = context.getString(R.string.contact_email)
+                val mail = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$address"))
+                try {
+                    context.startActivity(mail)
+                } catch (e: ActivityNotFoundException) {
+                    Toast.makeText(context, R.string.about__contact__no_app, Toast.LENGTH_SHORT).show()
+                }
+            },
         )
         Preference(
             icon = Icons.Outlined.Description,
