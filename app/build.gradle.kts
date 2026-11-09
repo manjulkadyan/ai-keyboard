@@ -325,6 +325,8 @@ dependencies {
     // FORK(S0-ads): ads stack for app Activities only. The IME code in this module must not use it
     // (ImeAdIsolationTest; TRD §2.2, §11.1). Nothing calls it yet.
     implementation(projects.core.ads)
+    // FORK(S4-ads): app.ads loads app-open, interstitial, banner and native ads (GMA init provider stays removed)
+    implementation(libs.play.services.ads)
 
     // FORK(S1-policy): fork settings store and the sensitive-field policy that FlorisImeService evaluates
     implementation(projects.core.datastore)

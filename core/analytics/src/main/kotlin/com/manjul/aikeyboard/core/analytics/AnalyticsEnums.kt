@@ -109,3 +109,13 @@ enum class SubscriptionStateParam(val value: String) {
 
 /** The `pro_status` user property. */
 enum class ProStatus(val value: String) { FREE("free"), TRIAL("trial"), PRO("pro"), GRACE("grace") }
+
+/** `ad_paid_event{format}`: the ad format of the placement. */
+enum class AdFormatParam(val value: String) {
+    APP_OPEN("app_open"), INTERSTITIAL("interstitial"), REWARDED("rewarded"), BANNER("banner"), NATIVE("native"),
+}
+
+/** `ad_paid_event{precision}`: GMA's `AdValue.PrecisionType`, by name. */
+enum class AdPrecisionParam(val value: String) {
+    UNKNOWN("unknown"), ESTIMATED("estimated"), PUBLISHER_PROVIDED("publisher_provided"), PRECISE("precise"),
+}

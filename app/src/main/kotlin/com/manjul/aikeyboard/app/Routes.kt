@@ -36,6 +36,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navDeepLink
 import androidx.navigation.toRoute
+import com.manjul.aikeyboard.app.ads.NavTransitionReporter // FORK(S4-ads)
 import com.manjul.aikeyboard.app.devtools.AndroidLocalesScreen
 import com.manjul.aikeyboard.app.devtools.AndroidSettingsScreen
 import com.manjul.aikeyboard.app.devtools.DevtoolsScreen
@@ -308,6 +309,8 @@ object Routes {
         navController: NavHostController,
         startDestination: KClass<*>,
     ) {
+        // FORK(S4-ads): feature-to-Home steps are the only interstitial trigger; onboarding blocks app-open ads
+        NavTransitionReporter(navController)
         NavHost(
             modifier = modifier,
             navController = navController,

@@ -73,7 +73,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
+import com.manjul.aikeyboard.app.ads.AdsAppGraph
+import com.manjul.aikeyboard.app.ads.TranslatorNativeAdSlot
 import com.manjul.aikeyboard.appContext
+import com.manjul.aikeyboard.core.analytics.EventCatalog
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.translate.RouterContext
 import com.manjul.aikeyboard.core.translate.bar.BarStatus
@@ -117,7 +120,11 @@ internal class TranslatorHolder(context: Context) : ViewModel() {
         history = context.translationHistory().value,
         tts = context.ttsManager().value.asTranslatorTts(),
         settings = store.asTranslatorSettings(),
-        analytics = context.appContext().value.analytics.value::log,
+        // S4 Task 7: a translate_done is a feature use for the interstitial rule (no ad is requested here)
+        analytics = { event ->
+            context.appContext().value.analytics.value.log(event)
+            if (event.name == EventCatalog.TRANSLATE_DONE) AdsAppGraph.onFeatureUse()
+        },
         clock = System::currentTimeMillis,
         speech = PlatformTranslatorMic(context, store, scope),
         scope = scope,
@@ -254,6 +261,8 @@ internal fun TranslatorContent(state: TranslatorUiState, vm: TranslatorViewModel
         }
         micMessage(state.mic)?.let { Text(stringRes(it), style = MaterialTheme.typography.bodySmall) }
         ResultCard(state, vm)
+        // S4 Task 7: native_translator, below the fold as the last item
+        TranslatorNativeAdSlot()
     }
     when (picker) {
         PickerSide.SOURCE -> LanguagePickerSheet(

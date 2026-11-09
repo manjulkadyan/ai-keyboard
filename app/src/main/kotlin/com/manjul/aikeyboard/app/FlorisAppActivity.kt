@@ -18,6 +18,7 @@ package com.manjul.aikeyboard.app
 
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender // FORK(S4-ads)
 import android.content.res.Configuration
 import android.os.Bundle
 import android.os.SystemClock // FORK(S1-onboarding)
@@ -46,6 +47,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.ads.AdsAppGraph // FORK(S4-ads)
+import com.manjul.aikeyboard.app.ads.LocalAdsAppGraph // FORK(S4-ads)
 import com.manjul.aikeyboard.app.apptheme.FlorisAppTheme
 import com.manjul.aikeyboard.app.ext.ExtensionImportScreenType
 import com.manjul.aikeyboard.app.setup.NotificationPermissionState
@@ -120,6 +122,8 @@ class FlorisAppActivity : ComponentActivity() {
         firebaseGraph().value.onAppActivityCreated(this) { task -> window.decorView.post(task) }
         // FORK(S4-billing): one entitlement refresh per process start (after AI consent or an earlier answer)
         billing().value.onAppStart()
+        // FORK(S4-ads): entry source, foreground, background and external-flow returns for the ad rules
+        AdsAppGraph.get(application).attach(this)
 
         prefs.other.settingsTheme.asFlow().collectIn(lifecycleScope) {
             appTheme = it
@@ -181,6 +185,29 @@ class FlorisAppActivity : ComponentActivity() {
         billing().value.onAppResume()
     }
 
+    // FORK(S4-ads): every screen this Activity starts (share sheet, Billing, browser, update flow) is an external
+    // flow: the return from it shows no app-open ad. startActivity and the result APIs all end here.
+    @Deprecated("Deprecated in Java")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        AdsAppGraph.get(application).onExternalFlowStart()
+        super.startActivityForResult(intent, requestCode, options)
+    }
+
+    // FORK(S4-ads): the in-app update flow and other IntentSender flows are external flows too
+    @Deprecated("Deprecated in Java")
+    override fun startIntentSenderForResult(
+        intent: IntentSender,
+        requestCode: Int,
+        fillInIntent: Intent?,
+        flagsMask: Int,
+        flagsValues: Int,
+        extraFlags: Int,
+        options: Bundle?,
+    ) {
+        AdsAppGraph.get(application).onExternalFlowStart()
+        super.startIntentSenderForResult(intent, requestCode, fillInIntent, flagsMask, flagsValues, extraFlags, options)
+    }
+
     override fun onPause() {
         super.onPause()
 
@@ -229,6 +256,7 @@ class FlorisAppActivity : ComponentActivity() {
         CompositionLocalProvider(
             LocalNavController provides navController,
             LocalPreviewFieldController provides previewFieldController,
+            LocalAdsAppGraph provides AdsAppGraph.get(application), // FORK(S4-ads): ad slots of this Activity only
         ) {
             ProvideDefaultDialogPrefStrings(
                 confirmLabel = stringRes(R.string.action__ok),

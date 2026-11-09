@@ -62,6 +62,15 @@ class ImeAdIsolationTest {
             "com/manjul/aikeyboard/app/FlorisAppActivity.kt" to
                 "S4 Task 6: the main Activity starts UMP consent and GMA through AdsAppGraph on its cold start " +
                 "(TRD §4.11). The IME never starts or loads this Activity.",
+            "com/manjul/aikeyboard/app/Routes.kt" to
+                "S4 Task 7: AppNavHost reports navigation steps (NavTransitionReporter), the only interstitial " +
+                "trigger. The nav host is composed only by FlorisAppActivity; the IME reads route types only.",
+            "com/manjul/aikeyboard/app/settings/HomeScreen.kt" to
+                "S4 Task 7: the banner_home slot at the bottom of Home. Composed only inside FlorisAppActivity.",
+            "com/manjul/aikeyboard/fork/translator/TranslatorScreen.kt" to
+                "S4 Task 7: the native_translator slot and translate_done as a feature use. Activity screen only.",
+            "com/manjul/aikeyboard/fork/translator/HistoryScreen.kt" to
+                "S4 Task 7: the native_history slot as the last list item. Activity screen only.",
         )
 
         /** Root-package files that start with, or are part of, the IME process start. */

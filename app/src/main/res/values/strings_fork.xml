@@ -333,4 +333,7 @@
     <string name="paywall__close" tools:ignore="MissingTranslation">Close</string>
     <string name="paywall__win_back_card_title" tools:ignore="MissingTranslation">See what Pro adds</string>
     <string name="paywall__win_back_card_body" tools:ignore="MissingTranslation">No ads, more AI actions every day, premium themes and auto-polish.</string>
+    <!-- S4 Task 7: native ad slots (app.ads.NativeAdSlot). The link sits outside the ad container. -->
+    <string name="ads__native_label" tools:ignore="MissingTranslation">Ad</string>
+    <string name="ads__remove_ads_link" tools:ignore="MissingTranslation">Remove ads</string>
 </resources>

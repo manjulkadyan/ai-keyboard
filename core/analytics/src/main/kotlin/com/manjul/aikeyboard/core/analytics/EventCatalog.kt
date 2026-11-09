@@ -58,11 +58,13 @@ object EventCatalog {
     const val RESTORE_PURCHASES = "restore_purchases"
     const val PAYWALL_VIEW = "paywall_view"
     const val PAYWALL_CLOSE = "paywall_close"
+    const val AD_PAID_EVENT = "ad_paid_event"
 
     /** User property: one of [ProStatus]. */
     const val USER_PROPERTY_PRO_STATUS = "pro_status"
 
     private val CURRENCY = Regex("^[A-Z]{3}\$")
+    private val SNAKE_CASE = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*\$")
 
     val paramRegistry: Map<String, Set<String>> = mapOf(
         ONBOARDING_START to setOf("source"),
@@ -103,6 +105,7 @@ object EventCatalog {
         RESTORE_PURCHASES to setOf("found"),
         PAYWALL_VIEW to setOf("trigger"),
         PAYWALL_CLOSE to setOf("trigger", "seconds_bucket"),
+        AD_PAID_EVENT to setOf("placement", "format", "value_micros", "currency", "precision"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -274,5 +277,25 @@ object EventCatalog {
         PAYWALL_CLOSE,
         "trigger" to trigger.value,
         "seconds_bucket" to Buckets.seconds(seconds),
+    )
+
+    /**
+     * The ad SDK reported revenue for one impression (S4 Task 7, GMA `OnPaidEventListener`). [placement] is a
+     * registered placement id: anything that is not snake_case (an ad unit id, for example) becomes "other". The
+     * value stays in micros as a Long. [currency] must be an ISO 4217 code, anything else becomes "other".
+     */
+    fun adPaidEvent(
+        placement: String,
+        format: AdFormatParam,
+        valueMicros: Long,
+        currency: String,
+        precision: AdPrecisionParam,
+    ) = event(
+        AD_PAID_EVENT,
+        "placement" to if (placement.length <= 40 && SNAKE_CASE.matches(placement)) placement else "other",
+        "format" to format.value,
+        "value_micros" to valueMicros,
+        "currency" to if (CURRENCY.matches(currency)) currency else "other",
+        "precision" to precision.value,
     )
 }

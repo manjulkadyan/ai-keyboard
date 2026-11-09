@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
+import com.manjul.aikeyboard.app.ads.HomeBannerSlot // FORK(S4-ads)
 import com.manjul.aikeyboard.fork.billing.HomeFixPaymentBanner // FORK(S4-billing)
 import com.manjul.aikeyboard.fork.paywall.HomeWinBackCard // FORK(S4-paywall)
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
@@ -61,6 +62,9 @@ fun HomeScreen() = FlorisScreen {
 
     val navController = LocalNavController.current
     val context = LocalContext.current
+
+    // FORK(S4-ads): banner_home, an anchored adaptive banner at the bottom (empty for Pro or without a unit id)
+    bottomBar { HomeBannerSlot() }
 
     content {
         // FORK(S4-billing): "Fix payment" in Play grace and account hold

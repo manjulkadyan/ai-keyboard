@@ -52,6 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.manjul.aikeyboard.R
+import com.manjul.aikeyboard.app.ads.HistoryNativeAdSlot
 import com.manjul.aikeyboard.core.database.TranslationHistoryEntity
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.translate.Lang
@@ -174,6 +175,8 @@ internal fun HistoryContent(vm: HistoryViewModel, confirmClear: Boolean, onConfi
             items(items, key = { it.id }) { row ->
                 HistoryRow(row, onFavorite = { vm.toggleFavorite(row) }, onDelete = { vm.delete(row) })
             }
+            // S4 Task 7: native_history, the last list item
+            item(key = "native_history") { HistoryNativeAdSlot() }
         }
     }
     if (confirmClear) {

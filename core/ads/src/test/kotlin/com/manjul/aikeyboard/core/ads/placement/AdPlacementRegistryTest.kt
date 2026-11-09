@@ -19,9 +19,9 @@ class AdPlacementRegistryTest {
     private val exit = AdPlacement(AdPlacementId("inter_feature_exit"), AdFormat.INTERSTITIAL)
 
     @Test
-    fun `no placements are defined in Sprint 0`() {
-        assertTrue(AdPlacements.registry.all.isEmpty())
-        assertFalse(AdPlacementId("app_open") in AdPlacements.registry)
+    fun `the app registry has no rewarded AI credit placement`() {
+        assertTrue(AdPlacementId("app_open") in AdPlacements.registry)
+        assertFalse(AdPlacementId("rewarded_ai_credit") in AdPlacements.registry)
     }
 
     @Test

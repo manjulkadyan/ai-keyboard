@@ -11,6 +11,7 @@
 
 plugins {
     alias(libs.plugins.aikeyboard.android.library)
+    alias(libs.plugins.kotlin.serialization) // S4 Task 7: ads_state.json
 }
 
 android {
@@ -26,6 +27,9 @@ dependencies {
     api(libs.kotlinx.coroutines)
     api(projects.core.common)
     implementation(projects.core.datastore)
+    implementation(projects.core.config) // S4 Task 7: ad unit ids from Remote Config
+    implementation(libs.androidx.datastore)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.google.ump)
     implementation(libs.play.services.ads)
     testImplementation(libs.kotlinx.coroutines.test)
