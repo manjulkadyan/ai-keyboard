@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): default day and night themes
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,7 +55,7 @@ import com.manjul.aikeyboard.ime.text.key.KeyHintMode
 import com.manjul.aikeyboard.ime.text.key.UtilityKeyAction
 import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
 import com.manjul.aikeyboard.ime.theme.ThemeMode
-import com.manjul.aikeyboard.ime.theme.extCoreTheme
+// FORK(S4-themes): extCoreTheme import removed, the theme defaults are no longer upstream themes
 import com.manjul.aikeyboard.lib.ext.ExtensionComponentName
 import com.manjul.aikeyboard.lib.observeAsTransformingState
 import com.manjul.aikeyboard.lib.util.VersionName
@@ -758,12 +759,14 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val dayThemeId = custom(
             key = "theme__day_theme_id",
-            default = extCoreTheme("floris_day"),
+            // FORK(S4-themes): our original presets (assets/ime/theme/com.manjul.aikeyboard.themes)
+            default = ExtensionComponentName("com.manjul.aikeyboard.themes", "light"),
             serializer = ExtensionComponentName.Serializer,
         )
         val nightThemeId = custom(
             key = "theme__night_theme_id",
-            default = extCoreTheme("floris_night"),
+            // FORK(S4-themes): our original presets (assets/ime/theme/com.manjul.aikeyboard.themes)
+            default = ExtensionComponentName("com.manjul.aikeyboard.themes", "dark"),
             serializer = ExtensionComponentName.Serializer,
         )
         val accentColor = custom(

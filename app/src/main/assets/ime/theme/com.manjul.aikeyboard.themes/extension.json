@@ -1,0 +1,207 @@
+{
+  "$": "ime.extension.theme",
+  "meta": {
+    "id": "com.manjul.aikeyboard.themes",
+    "version": "1.0.0",
+    "title": "AI Keyboard themes",
+    "description": "Original colour themes (day, night and Material You) for the keyboard UI",
+    "maintainers": [
+      "AI Keyboard contributors"
+    ],
+    "license": "apache-2.0"
+  },
+  "themes": [
+    {
+      "id": "light",
+      "label": "Light",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "light_borderless",
+      "label": "Light (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "dark",
+      "label": "Dark",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "dark_borderless",
+      "label": "Dark (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "amoled",
+      "label": "AMOLED",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "amoled_borderless",
+      "label": "AMOLED (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "material_you_light",
+      "label": "Material You Light",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "material_you_light_borderless",
+      "label": "Material You Light (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "material_you_dark",
+      "label": "Material You Dark",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "material_you_dark_borderless",
+      "label": "Material You Dark (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "ocean",
+      "label": "Ocean",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "ocean_borderless",
+      "label": "Ocean (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "forest",
+      "label": "Forest",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "forest_borderless",
+      "label": "Forest (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "slate",
+      "label": "Slate",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "slate_borderless",
+      "label": "Slate (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "sunset",
+      "label": "Sunset",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "sunset_borderless",
+      "label": "Sunset (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "rose",
+      "label": "Rose",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "rose_borderless",
+      "label": "Rose (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "midnight",
+      "label": "Midnight",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "midnight_borderless",
+      "label": "Midnight (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": true
+    },
+    {
+      "id": "sand",
+      "label": "Sand",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    },
+    {
+      "id": "sand_borderless",
+      "label": "Sand (Borderless)",
+      "authors": [
+        "AI Keyboard contributors"
+      ],
+      "isNight": false
+    }
+  ]
+}

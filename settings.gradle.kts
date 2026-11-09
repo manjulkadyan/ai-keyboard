@@ -96,6 +96,9 @@ include(":core:firebase")
 include(":core:billing")
 // FORK(S3-ai): in-keyboard AI rewrite sheet (controller, preview, safe replace, undo, quota card, report)
 include(":ime:ai-ui")
+// FORK(S4-themes): ThemeSpec, presets and Snygg generator (pure JVM); JVM tool that writes the theme extension
+include(":core:theme")
+include(":tools:themegen")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")
