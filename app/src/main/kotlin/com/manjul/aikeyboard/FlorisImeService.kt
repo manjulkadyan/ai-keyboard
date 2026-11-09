@@ -131,6 +131,7 @@ import com.manjul.aikeyboard.fork.privacy.privateAppsRepository // FORK(S1-smart
 import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
 import com.manjul.aikeyboard.core.datastore.isProAt // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.themes.PremiumThemeGuard // FORK(S4-themes)
+import com.manjul.aikeyboard.fork.perf.ImeTrace // FORK(S4-perf)
 import kotlinx.coroutines.flow.first // FORK(S4-themes)
 import kotlinx.coroutines.launch // FORK(S4-themes)
 import java.lang.ref.WeakReference
@@ -516,6 +517,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
+        ImeTrace.beginImeShow(inputWindowView) // FORK(S4-perf): aikb_ime_show runs to the keyboard's next draw
         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
         super.onStartInputView(info, restarting)
         if (info == null) return
@@ -567,6 +569,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        ImeTrace.endImeShow(inputWindowView) // FORK(S4-perf): a hide before the first draw closes the section
         flogInfo { "finishing=$finishingInput" }
         // FORK(S1-voice): end dictation before super, which finishes the composing region, so the partial is
         // discarded and not committed (R25)

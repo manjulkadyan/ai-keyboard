@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2022-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-perf): SDK levels and JVM target from the project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,22 +20,30 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+// FORK(S4-perf): the module was off upstream. It now builds with the project's SDK levels (minSdk 26, compile and
+// target 36) and JVM 11 like :app, and Kotlin's compilerOptions replaces the removed kotlinOptions block
+val projectMinSdk: String by project
+val projectTargetSdk: String by project
+val projectCompileSdk: String by project
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
+}
+
 android {
     namespace = "com.manjul.aikeyboard.benchmark"
-    compileSdk = 34
+    compileSdk = projectCompileSdk.toInt() // FORK(S4-perf)
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
+        sourceCompatibility = JavaVersion.VERSION_11 // FORK(S4-perf)
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     defaultConfig {
-        minSdk = 24
-        targetSdk = 34
+        minSdk = projectMinSdk.toInt() // FORK(S4-perf)
+        targetSdk = projectTargetSdk.toInt()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2022-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-perf): shared target package and IME id, TRD §6.4 budget
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +48,13 @@ class WarmStartupBenchmark : AbstractStartupBenchmark(StartupMode.WARM)
 @RunWith(AndroidJUnit4ClassRunner::class)
 class HotStartupBenchmark : AbstractStartupBenchmark(StartupMode.HOT)
 
+// FORK(S4-perf): the app package of the `benchmark` build type and our IME id, shared with ImeShowBenchmark
+internal const val TARGET_PACKAGE = "com.manjul.aikeyboard"
+internal const val IME_ID = "$TARGET_PACKAGE/.FlorisImeService"
+
 /**
+ * TRD §6.4 budget (mid tier): app cold start to first frame <= 700 ms p50 (`ColdStartupBenchmark`, FORK(S4-perf)).
+ *
  * Base class for benchmarks with different startup modes.
  * Enables app startups from various states of baseline profile or [CompilationMode]s.
  *
@@ -72,15 +79,15 @@ abstract class AbstractStartupBenchmark(private val startupMode: StartupMode) {
     fun startupFullCompilation() = startup(CompilationMode.Full())
 
     private fun startup(compilationMode: CompilationMode) = benchmarkRule.measureRepeated(
-        packageName = "com.manjul.aikeyboard",
+        packageName = TARGET_PACKAGE, // FORK(S4-perf)
         metrics = listOf(StartupTimingMetric()),
         compilationMode = compilationMode,
         iterations = 10,
         startupMode = startupMode,
         setupBlock = {
             pressHome()
-            device.executeShellCommand("ime enable com.manjul.aikeyboard/.FlorisImeService")
-            device.executeShellCommand("ime set com.manjul.aikeyboard/.FlorisImeService")
+            device.executeShellCommand("ime enable $IME_ID") // FORK(S4-perf)
+            device.executeShellCommand("ime set $IME_ID")
         }
     ) {
         startActivityAndWait()

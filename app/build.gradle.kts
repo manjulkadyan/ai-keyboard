@@ -58,6 +58,13 @@ kotlin {
 
 // FORK(S4-ads): Google's published sample AdMob app id. It serves test ads only (no real ad unit id is in the repo).
 val ADMOB_SAMPLE_APP_ID = "ca-app-pub-3940256099942544~3347511713"
+// FORK(S4-perf): Gradle properties of the release key. All four must be set, or release falls back to debug signing.
+val RELEASE_SIGNING_PROPS = listOf(
+    "aikb.signing.storeFile",
+    "aikb.signing.storePassword",
+    "aikb.signing.keyAlias",
+    "aikb.signing.keyPassword",
+)
 // FORK(S4-ads): app-only icon resValues of the debug build type, replaced in the test APK (see androidComponents)
 val TEST_APK_ICON_RES_VALUES = listOf(
     "mipmap" to "floris_app_icon",
@@ -130,6 +137,20 @@ android {
         }
     }
 
+    // FORK(S4-perf): release signing from aikb.signing.storeFile, storePassword, keyAlias and keyPassword (for
+    // example in ~/.gradle/gradle.properties, never in the repo). Without all four, release uses the debug key
+    // so that bundleRelease still builds locally and in CI. Play rejects that bundle (docs/release/closed-testing.md).
+    signingConfigs {
+        if (RELEASE_SIGNING_PROPS.all { aikbProperty(it).isNotEmpty() }) {
+            create("release") {
+                storeFile = rootProject.file(aikbProperty("aikb.signing.storeFile"))
+                storePassword = aikbProperty("aikb.signing.storePassword")
+                keyAlias = aikbProperty("aikb.signing.keyAlias")
+                keyPassword = aikbProperty("aikb.signing.keyPassword")
+            }
+        }
+    }
+
     bundle {
         language {
             // We disable language split because FlorisBoard does not use
@@ -193,6 +214,8 @@ android {
             buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"\"")
             buildConfigField("boolean", "AI_DEV_AUTH", "false") // FORK(S3-net): dev auth never outside debug
             manifestPlaceholders["admobAppId"] = aikbProperty("aikb.admob.appId") // FORK(S4-ads): no sample id
+            // FORK(S4-perf): the release key when aikb.signing.* is set, else the debug key (see signingConfigs)
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
 
         create("benchmark") {

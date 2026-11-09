@@ -47,7 +47,8 @@ dependencyResolutionManagement {
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 include(":app")
-//include(":benchmark")
+// FORK(S4-perf): Macrobenchmark module for the TRD §6.4 startup, IME show and key commit budgets
+include(":benchmark")
 include(":lib:android")
 include(":lib:color")
 include(":lib:compose")

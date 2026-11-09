@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2022-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-perf): benchmark 1.3 baseline profile API
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +17,14 @@
 
 package com.manjul.aikeyboard.benchmark
 
-import androidx.benchmark.macro.ExperimentalBaselineProfilesApi
+// FORK(S4-perf): ExperimentalBaselineProfilesApi and collectBaselineProfile were removed in benchmark 1.2
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-@ExperimentalBaselineProfilesApi
+// FORK(S4-perf): no opt-in annotation is needed since benchmark 1.2
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {
     @get:Rule
@@ -31,7 +32,7 @@ class BaselineProfileGenerator {
 
     @Test
     fun startup() =
-        baselineProfileRule.collectBaselineProfile(packageName = "com.manjul.aikeyboard") {
+        baselineProfileRule.collect(packageName = TARGET_PACKAGE) { // FORK(S4-perf): benchmark 1.3 API
             pressHome()
             // This block defines the app's critical user journey. Here we are interested in
             // optimizing for app startup. But you can also navigate and scroll

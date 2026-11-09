@@ -1,2 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest/>
+<!-- FORK(S4-perf): ImeShowBenchmark's text field host. It runs in the benchmark APK's own process, so only the
+     keyboard runs in the target app's process. Exported so that `am start` from the shell can open it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="com.manjul.aikeyboard.benchmark.ImeHostActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light"
+            android:windowSoftInputMode="stateAlwaysVisible"/>
+    </application>
+</manifest>

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-perf): Apache-2.0 §4(b) change notice
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +33,7 @@ import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.translate.BarKeyRouter // FORK(S2-bar)
 import com.manjul.aikeyboard.fork.suggest.AutocorrectGate // FORK(S3-suggest)
 import com.manjul.aikeyboard.suggestContext // FORK(S3-suggest)
+import com.manjul.aikeyboard.fork.perf.ImeTrace // FORK(S4-perf)
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
@@ -717,7 +719,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         }
     }
 
-    override fun onInputKeyUp(data: KeyData) = activeState.batchEdit {
+    // FORK(S4-perf): aikb_key_commit trace section around the key handler (TRD §6.4 key press to commit)
+    override fun onInputKeyUp(data: KeyData) = ImeTrace.keyCommit { activeState.batchEdit {
         // FORK(S2-bar): while the Translate bar is open, text keys, space, backspace and Enter edit the bar only
         if (routeToTranslateBar(data)) return@batchEdit
         when (data.code) {
@@ -864,7 +867,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 }
             }
         }
-    }
+    } } // FORK(S4-perf): closes ImeTrace.keyCommit
 
     // FORK(S2-bar): see onInputKeyUp; the shift state resets after a typed character as it does for the editor
     private fun routeToTranslateBar(data: KeyData): Boolean {
