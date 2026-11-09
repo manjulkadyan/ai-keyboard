@@ -18,7 +18,8 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class KeySoundSynthTest {
-    private fun tmp(name: String): File = Files.createTempDirectory("themegen").toFile().resolve(name).also { it.mkdirs() }
+    private fun tmp(name: String): File =
+        Files.createTempDirectory("themegen").toFile().resolve(name).also { it.mkdirs() }
 
     @Test fun everySoundIs48kMono16BitAtMost40ms() {
         for (name in KeySoundSynth.NAMES) {

@@ -46,16 +46,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import androidx.core.net.toUri
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceModel
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.app.LocalNavController
+import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.core.datastore.isProAt
 import com.manjul.aikeyboard.core.theme.SnyggGenerator
 import com.manjul.aikeyboard.core.theme.ThemePreset
 import com.manjul.aikeyboard.featureSettingsStore
+import com.manjul.aikeyboard.fork.paywall.PaywallTrigger
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.themeManager
 import kotlinx.coroutines.CoroutineScope
@@ -147,7 +148,8 @@ fun ThemesScreen() = FlorisScreen {
             onClick = {
                 when (val result = vm.apply(selected, keyBorder)) {
                     ApplyResult.Applied -> Unit
-                    is ApplyResult.NeedsPro -> navController.navigate("ui://florisboard/${result.route}".toUri())
+                    // The typed destination of result.route ("paywall?trigger=premium_theme").
+                    is ApplyResult.NeedsPro -> navController.navigate(Routes.Paywall(PaywallTrigger.PREMIUM_THEME.wire))
                 }
             },
         ) { Text(stringRes(R.string.themes__apply)) }
