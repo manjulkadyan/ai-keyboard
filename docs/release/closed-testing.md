@@ -145,12 +145,17 @@ If one of the four `aikb.signing.*` values is missing, the build signs with the 
 If `aikb.entitlement.publicKey` or `aikb.admob.appId` is missing, `bundleRelease` fails.
 
 The Crashlytics Gradle plugin does not upload the R8 mapping file, because the build has no Google Services plugin.
-Upload it yourself so that crash stacks are readable:
+Each build writes a new random mapping file id into the bundle. Crashlytics uses this id to find the mapping file.
+Upload the mapping file with the resource file of the same build, so that crash stacks are readable:
 
 ```sh
 firebase crashlytics:mappingfile:upload --app=<aikb.firebase.appId> \
+  --resource-file=app/build/generated/res/injectCrashlyticsMappingFileIdRelease/values/com_google_firebase_crashlytics_mappingfileid.xml \
   app/build/outputs/mapping/release/mapping.txt
 ```
+
+Do this before the next build. The next build writes a new id into the same resource file.
+Make sure that the id in the resource file is not `00000000000000000000000000000000`.
 
 ## 7. Upload to closed testing
 

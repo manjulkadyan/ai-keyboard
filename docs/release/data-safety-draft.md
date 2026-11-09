@@ -25,6 +25,7 @@ Form answers:
 
 - Data is encrypted in transit: yes (HTTPS to kb-api and Google).
 - Users can request deletion: yes, in the app (Settings → Privacy → Delete my data, `POST /v1/account/delete`).
-- The web deletion URL (RN-08) is `https://DOMAIN/delete-account`. kb-api serves it (`GET /delete-account`, static page). It is
-  not deployed yet, and the domain is still open (RN-08). Set `DELETION_CONTACT_EMAIL` before you submit the form.
+- The web deletion URL (RN-08) is `https://DOMAIN/delete-account`. kb-api serves it (`GET /delete-account`, a
+  static page). It is not deployed yet, and the domain is still open (RN-08). Set `DELETION_CONTACT_EMAIL` before
+  you submit the form.
 - The app declares the `AD_ID` permission (the GMA SDK adds it).

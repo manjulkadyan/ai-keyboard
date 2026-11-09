@@ -16,6 +16,7 @@
  */
 
 import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension // FORK(S4-rc): mapping upload off
+import com.google.firebase.crashlytics.buildtools.gradle.tasks.InjectMappingFileIdTask // FORK(S4-rc): unique id
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -216,6 +217,10 @@ android {
             manifestPlaceholders["admobAppId"] = aikbProperty("aikb.admob.appId") // FORK(S4-ads): no sample id
             // FORK(S4-perf): the release key when aikb.signing.* is set, else the debug key (see signingConfigs)
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            if (signingConfigs.findByName("release") == null) {
+                // FORK(S4-perf): say so in the build log. Play rejects a bundle that the debug key signs.
+                logger.warn("aikb: aikb.signing.* is not complete, so the release build type uses the debug key")
+            }
         }
 
         create("benchmark") {
@@ -225,7 +230,8 @@ android {
         }
 
         // FORK(S4-rc): no R8 mapping upload. It needs the Google-Services plugin, but Firebase options come from
-        // aikb.firebase.*, so every minified build failed. Upload mapping.txt with the Firebase CLI instead.
+        // aikb.firebase.*, so every minified build failed. Upload mapping.txt with the Firebase CLI instead
+        // (docs/release/closed-testing.md). The mapping file id stays unique: see InjectMappingFileIdTask below.
         configureEach {
             extensions.configure<CrashlyticsExtension> { mappingFileUploadEnabled = false }
         }
@@ -285,6 +291,16 @@ androidComponents {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// FORK(S4-rc): with the upload off, the plugin writes the blank id 00000000000000000000000000000000, and Crashlytics
+// cannot match a crash to mapping.txt. A new random id for each build lets the Firebase CLI upload match it. The
+// plugin sets the flag after this action runs, so the override is in doFirst. The task always runs, as with upload on.
+// Debug is not minified, so it keeps the blank id and its resources stay up to date.
+tasks.withType<InjectMappingFileIdTask>().configureEach {
+    if (name.endsWith("Debug")) return@configureEach
+    outputs.upToDateWhen { false }
+    doFirst { useBlankMappingFileId.set(false) }
 }
 
 // FORK(S4-ads): the debug build type's icon resValues point at app resources that the test APK does not have, so

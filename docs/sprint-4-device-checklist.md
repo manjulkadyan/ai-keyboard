@@ -1,9 +1,10 @@
 # Sprint 4 device checklist and exit check
 
-The Sprint 4 build was checked in a sandbox with no emulator, no physical device, no Play Console access, no Firebase
-project, no deployed kb-api and no release keystore. Everything below needs a device, a Play test track, a deployed
-backend or an owner action before Sprint 4 is signed off. Each row names the plan task, decision or Review Focus item
-it comes from (`T<n>` = plan task, `D<n>` = plan decision, `RF<n>` = plan Review Focus).
+The Sprint 4 build was checked in a sandbox with no working emulator, no Play Console access, no Firebase project, no
+deployed kb-api and no release keystore. A physical phone was attached, but no check ran on it. Everything below needs
+a device, a Play test track, a deployed backend or an owner action before Sprint 4 is signed off. Each row names the
+plan task, decision or Review Focus item it comes from (`T<n>` = plan task, `D<n>` = plan decision, `RF<n>` = plan
+Review Focus).
 
 Suggested devices: a Pixel and a Samsung (API 33+), one API 26-30 phone, an API 31+ phone for Material You, and a
 mid-tier phone (Pixel 6a / Galaxy A54 class) for the performance rows. Billing rows need a licence tester account
@@ -17,7 +18,10 @@ Fill in the Result column only after running the check. Record device, Android v
 |---|---|---|
 | Debug build | `$G ./gradlew assembleDebug` | PASS |
 | Unit tests | `$G ./gradlew test testDebugUnitTest :build-logic:convention:test` | PASS |
-| Check, lint and release bundle | `$G ./gradlew check :app:lintDebug :app:bundleRelease` | PASS after one fix (see below). `bundleRelease` needs the two release properties |
+| Check, lint and release bundle (combined) | `$G ./gradlew --continue check :app:lintDebug :app:bundleRelease` | FAIL ("Google-Services plugin not found"). Not run again as one command after the fix |
+| Check and lint | `$G ./gradlew --continue check :app:lintDebug` | PASS after the fix in `830eff3c` |
+| Release bundle without release properties | `$G ./gradlew :app:bundleRelease` | FAIL on purpose ("Set the Gradle property aikb.entitlement.publicKey for a release build") |
+| Release bundle with placeholders | `$G ./gradlew :app:bundleRelease -Paikb.entitlement.publicKey=PLACEHOLDER_NOT_A_KEY -Paikb.admob.appId=<sample id>` | PASS. Signed with the debug key. The mapping file id is not blank |
 | 16 KB alignment | `scripts/check-16kb-alignment.sh --min-libs 4 app/build/outputs/apk/debug/app-debug.apk` | PASS (23 libraries, 4 unaligned 32-bit, informational) |
 | Fork markers | `scripts/check-fork-markers.sh` | PASS |
 | Data flows | `scripts/check-data-flows.sh` | PASS (37 tracked artifacts) |
@@ -122,7 +126,8 @@ Task 13 ran these on 2026-11-09. The command output tails are in
 
 - `:app:bundleRelease` first failed with "Google-Services plugin not found". The Crashlytics plugin adds a mapping
   upload task to every minified build, and that task needs the Google-Services plugin. The fix turns the upload off
-  (commit `830eff3c`). Upload `mapping.txt` with the Firebase CLI (`docs/release/closed-testing.md`, step 6).
+  (commit `830eff3c`). A later fix makes each build write a new random mapping file id, not the blank id. Upload
+  `mapping.txt` with its resource file and the Firebase CLI (`docs/release/closed-testing.md`, step 6).
 - Without `aikb.entitlement.publicKey`, `bundleRelease` fails on purpose ("Set the Gradle property
   aikb.entitlement.publicKey for a release build"). With placeholder values for it and for `aikb.admob.appId`, it
   passes. Then the bundle is signed with "CN=Android Debug", because no `aikb.signing.*` value is set. X.16 checks

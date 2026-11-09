@@ -30,7 +30,10 @@ import org.junit.runner.RunWith
  * traces, or raise `iterations`. Run on a physical mid-tier phone (Pixel 6a class), see
  * `docs/sprint-4-device-checklist.md` G.1:
  *
- * `./gradlew :benchmark:connectedBenchmarkAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.manjul.aikeyboard.benchmark.ImeShowBenchmark`
+ * ```
+ * ./gradlew :benchmark:connectedBenchmarkAndroidTest \
+ *   -Pandroid.testInstrumentationRunnerArguments.class=com.manjul.aikeyboard.benchmark.ImeShowBenchmark
+ * ```
  *
  * The text field is [ImeHostActivity] in this APK, so the keyboard is the only thing in the target process.
  */
