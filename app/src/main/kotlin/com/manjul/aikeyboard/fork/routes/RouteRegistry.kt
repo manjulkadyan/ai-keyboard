@@ -21,8 +21,8 @@ import com.manjul.aikeyboard.fork.paywall.paywallPath
  *
  * The paywall is `paywall?trigger=<wire>` for every link-able [PaywallTrigger] (S4-paywall). `pro`, which the AI
  * quota card opens, is an alias of `paywall?trigger=ai_quota` (plan decision 23). Before onboarding is done every
- * paywall route opens Home (PRD FR-32 AC3). PRD FR-32 also lists `conversation`, `camera` and `themes`; their
- * sprints add them.
+ * paywall route opens Home (PRD FR-32 AC3). `themes` opens the Themes screen (S4-themes). PRD FR-32 also lists
+ * `conversation` and `camera`; their sprints add them.
  */
 object RouteRegistry {
     /** The `FlorisAppActivity` extra naming a route (a key of [routes]). */
@@ -35,6 +35,7 @@ object RouteRegistry {
     const val TRANSLATOR = "translator"
     const val PRO = "pro"
     const val PAYWALL = "paywall"
+    const val THEMES = "themes"
 
     private const val HOME_PATH = "settings/home"
     private const val UI_SCHEME = "ui"
@@ -53,6 +54,7 @@ object RouteRegistry {
         "settings/offline-languages" to "settings/offline-languages",
         "settings/privacy/private-apps" to "settings/privacy/private-apps",
         PRO to paywallPath(PaywallTrigger.AI_QUOTA), // S4-paywall: alias (plan decision 23)
+        THEMES to "themes", // S4-themes: the Themes screen
     ) + PaywallTrigger.entries.filter { it.deepLinkable }.map(::paywallPath).associateWith { it }
 
     /** Where to go. [path] is a `@Deeplink` path; [unknown] means the value was not allow-listed (Home + event). */

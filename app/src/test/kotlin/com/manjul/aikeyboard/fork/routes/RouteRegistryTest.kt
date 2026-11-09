@@ -64,7 +64,7 @@ class RouteRegistryTest {
                 "home", "translator", "settings/home", "settings/voice", "settings/offline-languages",
                 "settings/privacy/private-apps", "pro", "paywall?trigger=ai_quota", "paywall?trigger=premium_theme",
                 "paywall?trigger=remove_ads", "paywall?trigger=cloud_quality", "paywall?trigger=premium_sticker",
-                "paywall?trigger=auto_polish", "paywall?trigger=win_back",
+                "paywall?trigger=auto_polish", "paywall?trigger=win_back", "themes",
             ),
             RouteRegistry.routes.keys,
         )

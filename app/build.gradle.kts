@@ -367,7 +367,8 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(testFixtures(projects.core.ai)) // FORK(S3-ai): FakeAiEngine, FakeTokenSource
-    testImplementation(projects.core.theme) // FORK(S4-themes): ThemeAssetsTest compares the assets with the generator
+    // FORK(S4-themes): the presets behind the Themes screen and the premium guard
+    implementation(projects.core.theme)
     testRuntimeOnly(libs.junit.vintage.engine)
     // FORK(S1-onboarding): onboarding view model and screen tests
     testImplementation(libs.turbine)

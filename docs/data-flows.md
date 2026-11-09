@@ -88,6 +88,15 @@ App process only (Home). The keyboard never loads the Play update client.
 | `updateCheckedAt` | The time of the last finished check | No | `FeatureSettings` on the device | After a check | Local only, never sent |
 | `update_prompt` | `type` (`flexible`, `immediate`), `result` (`accepted`, `declined`, `failed`) | Yes, with analytics consent | Firebase Analytics, through the consent-aware relay | Once per shown update dialog | No version number or user content |
 
+## Themes and key sounds (Sprint 4)
+
+| Flow | Data | Leaves the device? | Where to | When | Notes |
+|---|---|---|---|---|---|
+| Theme choice | The day and night theme ids (`theme__day_theme_id`, `theme__night_theme_id`, upstream preferences) | No | Upstream preferences on the device | Apply on the Themes screen; `PremiumThemeGuard` on keyboard start after Pro lapses | Local only, never sent |
+| `keySound` | `off`, `system`, `soft`, `crisp`, `wood` or `pop` | No | `FeatureSettings` on the device | Key sound choice on the Themes screen | Local only, never sent. The sounds are bundled (`res/raw`), nothing is downloaded |
+| `pendingPremiumThemeId` | The stylesheet id of a premium preset tried without Pro | No | `FeatureSettings` on the device | Apply of a premium preset without Pro; cleared when Pro turns on and the theme is applied | Local only, never sent |
+| `theme_apply` | `theme_id` (a built-in preset id, else `other`), `premium` (bool) | Yes, with analytics consent | Firebase Analytics, through the consent-aware relay | Once per applied theme | No user content |
+
 ## Suggestions and the user dictionary (Sprint 3)
 
 | Flow | Data | Leaves the device? | Where to | When | Notes |

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): bundled key sounds
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +23,9 @@ import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.featureSettingsStore // FORK(S4-themes)
+import com.manjul.aikeyboard.fork.themes.KeySound // FORK(S4-themes)
+import com.manjul.aikeyboard.fork.themes.KeySoundPlayer // FORK(S4-themes)
 import com.manjul.aikeyboard.ime.keyboard.KeyData
 import com.manjul.aikeyboard.ime.text.key.KeyCode
 import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
@@ -52,6 +56,9 @@ class InputFeedbackController private constructor(private val ims: InputMethodSe
     private val vibrator = ims.systemVibratorOrNull()
     private val contentResolver = ims.contentResolver
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    // FORK(S4-themes): the bundled key sounds; the pool is built on the first bundled click, released in release()
+    private val keySoundPlayer = lazy { KeySoundPlayer(ims) }
 
     private var systemAudioEnabled: Boolean = false
     private var systemHapticEnabled: Boolean = false
@@ -106,10 +113,21 @@ class InputFeedbackController private constructor(private val ims: InputMethodSe
                 else -> AudioManager.FX_KEYPRESS_STANDARD
             }
             if (volume in 0.01..1.00) {
+                // FORK(S4-themes): any choice but SYSTEM goes to the KeySoundPlayer (OFF plays nothing)
+                val sound = KeySound.fromWire(ims.featureSettingsStore().value.current.keySound)
+                if (sound != KeySound.SYSTEM) {
+                    keySoundPlayer.value.play(sound, volume.toFloat())
+                    return@launch
+                }
                 flogDebug { "Perform audio with volume=$volume and effect=$effect" }
                 audioManager.playSoundEffect(effect, volume.toFloat())
             }
         }
+    }
+
+    // FORK(S4-themes): frees the key sound pool; called from FlorisImeService.onDestroy
+    fun release() {
+        if (keySoundPlayer.isInitialized()) keySoundPlayer.value.release()
     }
 
     private fun performHapticFeedback(data: KeyData, factor: Double) {

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): Themes route
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -80,6 +81,7 @@ import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator
 import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.paywall.PaywallRoute // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.paywall.PaywallTrigger // FORK(S4-paywall)
+import com.manjul.aikeyboard.fork.themes.ThemesScreen // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.settings.AiSettingsScreen // FORK(S3-polish)
 import com.manjul.aikeyboard.featureSettingsStore // FORK(S4-billing)
 import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
@@ -131,6 +133,11 @@ object Routes {
     @Serializable
     @Deeplink("paywall")
     data class Paywall(val trigger: String = "ai_quota")
+
+    // FORK(S4-themes): the Themes screen (presets, key border, key sound; PRD FR-32 route "themes")
+    @Serializable
+    @Deeplink("themes")
+    object Themes
 
     object Settings {
         @Serializable
@@ -371,6 +378,7 @@ object Routes {
                     if (!navController.popBackStack()) navController.navigate(Settings.Home)
                 }
             }
+            composableWithDeepLink(Themes::class) { ThemesScreen() } // FORK(S4-themes)
             composableWithDeepLink(Settings.Ai::class) { // FORK(S3-polish)
                 // FORK(S4-billing): auto-polish unlocks from the signed Pro cache
                 val store = LocalContext.current.featureSettingsStore().value

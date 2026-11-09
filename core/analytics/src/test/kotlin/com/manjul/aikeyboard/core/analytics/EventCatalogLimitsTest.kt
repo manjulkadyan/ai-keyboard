@@ -59,6 +59,7 @@ class EventCatalogLimitsTest {
         EventCatalog.paywallClose(PaywallTriggerParam.WIN_BACK, Long.MAX_VALUE),
         EventCatalog.adPaidEvent(big, AdFormatParam.APP_OPEN, Long.MAX_VALUE, big, AdPrecisionParam.ESTIMATED),
         EventCatalog.updatePrompt(UpdateTypeParam.FLEXIBLE, UpdateResultParam.FAILED),
+        EventCatalog.themeApply(big, premium = true),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -170,9 +171,20 @@ class EventCatalogLimitsTest {
             "ai_request", "ai_rewrite_done", "ai_polish_done", "ai_quota_hit", "ai_error", "ai_output_reported",
             "consent_result", "consent_withdrawn",
             "purchase_start", "trial_start", "purchase_success", "purchase_fail", "subscription_state",
-            "restore_purchases", "paywall_view", "paywall_close", "ad_paid_event", "update_prompt",
+            "restore_purchases", "paywall_view", "paywall_close", "ad_paid_event", "update_prompt", "theme_apply",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)
+    }
+
+    @Test fun themeApplyCarriesThemeIdAndPremiumOnly() {
+        val e = EventCatalog.themeApply("sunset", premium = true)
+        assertEquals("theme_apply", e.name)
+        assertEquals(mapOf("theme_id" to "sunset", "premium" to true), e.params)
+    }
+
+    @Test fun themeApplyDropsAnIdThatIsNotACatalogId() {
+        assertEquals("other", EventCatalog.themeApply("Not A Theme!", premium = false).params["theme_id"])
+        assertEquals("other", EventCatalog.themeApply("a".repeat(41), premium = false).params["theme_id"])
     }
 }

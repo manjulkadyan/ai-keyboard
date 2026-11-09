@@ -128,6 +128,10 @@ import com.manjul.aikeyboard.fork.analytics.ImeSessionStartReporter // FORK(S1-a
 import com.manjul.aikeyboard.fork.privacy.PrivateAppUndo // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.privacy.privateAppsRepository // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
+import com.manjul.aikeyboard.core.datastore.isProAt // FORK(S4-themes)
+import com.manjul.aikeyboard.fork.themes.PremiumThemeGuard // FORK(S4-themes)
+import kotlinx.coroutines.flow.first // FORK(S4-themes)
+import kotlinx.coroutines.launch // FORK(S4-themes)
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.flow.update
 import org.florisboard.lib.android.AndroidInternalR
@@ -414,6 +418,13 @@ class FlorisImeService : LifecycleInputMethodService() {
         privateAppUndo = privateAppsRepository().let { repo ->
             PrivateAppUndo(add = repo::add, remove = repo::remove, scope = lifecycleScope)
         }
+        // FORK(S4-themes): a lapsed Pro loses an active premium theme (back to light and dark). Waits for the stored
+        // preferences and the stored Pro cache, so the defaults never revert a Pro user's theme.
+        lifecycleScope.launch {
+            appContext().value.preferenceStoreLoaded.first { it }
+            val settings = featureSettingsStore().value.flow.first()
+            PremiumThemeGuard.check(settings.isProAt(System.currentTimeMillis()), prefs)
+        }
         // FORK(S1-analytics): see the imeSessionReporter declaration
         imeSessionReporter = ImeSessionStartReporter(System::currentTimeMillis, appContext().value.analytics.value::log)
         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
@@ -484,6 +495,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         voiceSession.destroy() // FORK(S1-voice)
         translateSession.destroy() // FORK(S2-bar)
         aiSession.onDestroy() // FORK(S3-ai)
+        inputFeedbackController.release() // FORK(S4-themes): the key sound pool
         FlorisImeServiceReference = WeakReference(null)
         inputWindowView = null
     }

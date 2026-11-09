@@ -339,4 +339,16 @@
     <string name="update__downloaded_message" tools:ignore="MissingTranslation">An update is ready to install.</string>
     <string name="update__restart_action" tools:ignore="MissingTranslation">Restart</string>
     <string name="update__later_action" tools:ignore="MissingTranslation">Later</string>
+    <!-- S4 Task 10: Themes screen (fork/themes) -->
+    <string name="themes__title" tools:ignore="MissingTranslation">Appearance</string>
+    <string name="themes__key_border" tools:ignore="MissingTranslation">Key borders</string>
+    <string name="themes__apply" tools:ignore="MissingTranslation">Apply</string>
+    <string name="themes__premium" tools:ignore="MissingTranslation">Premium theme</string>
+    <string name="themes__key_sound" tools:ignore="MissingTranslation">Key sound</string>
+    <string name="themes__key_sound_off" tools:ignore="MissingTranslation">Off</string>
+    <string name="themes__key_sound_system" tools:ignore="MissingTranslation">System</string>
+    <string name="themes__key_sound_soft" tools:ignore="MissingTranslation">Soft</string>
+    <string name="themes__key_sound_crisp" tools:ignore="MissingTranslation">Crisp</string>
+    <string name="themes__key_sound_wood" tools:ignore="MissingTranslation">Wood</string>
+    <string name="themes__key_sound_pop" tools:ignore="MissingTranslation">Pop</string>
 </resources>

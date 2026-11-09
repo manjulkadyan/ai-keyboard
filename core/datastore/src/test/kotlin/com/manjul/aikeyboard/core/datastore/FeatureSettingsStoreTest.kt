@@ -222,4 +222,20 @@ class FeatureSettingsStoreTest {
         val decoded = FeatureSettingsSerializer.readFrom(old.byteInputStream())
         assertEquals(FeatureSettings(onboardingDone = true, firstOpenAt = 42L), decoded)
     }
+
+    @Test
+    fun `theme fields default to the system key sound and no pending premium theme`() = runTest {
+        val d = FeatureSettings()
+        assertEquals("system", d.keySound)
+        assertEquals("", d.pendingPremiumThemeId)
+        val store = FeatureSettingsStore(app)
+        store.update { it.copy(keySound = "wood", pendingPremiumThemeId = "sunset_borderless") }
+        val file = File(app.filesDir, "datastore/feature_settings.json")
+        val decoded = file.inputStream().use { FeatureSettingsSerializer.readFrom(it) }
+        assertEquals("wood", decoded.keySound)
+        assertEquals("sunset_borderless", decoded.pendingPremiumThemeId)
+        val old = FeatureSettingsSerializer.readFrom("""{"onboardingDone":true}""".byteInputStream())
+        assertEquals("system", old.keySound)
+        assertEquals("", old.pendingPremiumThemeId)
+    }
 }

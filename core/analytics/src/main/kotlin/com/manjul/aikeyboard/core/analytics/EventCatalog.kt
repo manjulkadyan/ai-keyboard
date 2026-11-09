@@ -60,6 +60,7 @@ object EventCatalog {
     const val PAYWALL_CLOSE = "paywall_close"
     const val AD_PAID_EVENT = "ad_paid_event"
     const val UPDATE_PROMPT = "update_prompt"
+    const val THEME_APPLY = "theme_apply"
 
     /** User property: one of [ProStatus]. */
     const val USER_PROPERTY_PRO_STATUS = "pro_status"
@@ -108,6 +109,7 @@ object EventCatalog {
         PAYWALL_CLOSE to setOf("trigger", "seconds_bucket"),
         AD_PAID_EVENT to setOf("placement", "format", "value_micros", "currency", "precision"),
         UPDATE_PROMPT to setOf("type", "result"),
+        THEME_APPLY to setOf("theme_id", "premium"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -284,6 +286,16 @@ object EventCatalog {
     /** The Play in-app update prompt ended with [result] (S4 Task 8). Logged once per prompt. */
     fun updatePrompt(type: UpdateTypeParam, result: UpdateResultParam) =
         event(UPDATE_PROMPT, "type" to type.value, "result" to result.value)
+
+    /**
+     * The user applied a theme from the Themes screen (S4 Task 10), once per apply. [themeId] is a built-in preset
+     * id (snake_case, at most 40 characters); anything else is sent as `other`, so no free text can leave.
+     */
+    fun themeApply(themeId: String, premium: Boolean) = event(
+        THEME_APPLY,
+        "theme_id" to if (themeId.length <= 40 && SNAKE_CASE.matches(themeId)) themeId else "other",
+        "premium" to premium,
+    )
 
     /**
      * The ad SDK reported revenue for one impression (S4 Task 7, GMA `OnPaidEventListener`). [placement] is a

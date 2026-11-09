@@ -4,8 +4,10 @@
  */
 
 // :tools:themegen (S4-themes, plan Task 9): writes the com.manjul.aikeyboard.themes extension (extension.json and
-// stylesheets/<id>{,_borderless}.json) from :core:theme. A developer tool, never packaged in the APK.
-//   ./gradlew :tools:themegen:run --args="$PWD/app/src/main/assets/ime/theme/com.manjul.aikeyboard.themes"
+// stylesheets/<id>{,_borderless}.json) from :core:theme, and the key sounds res/raw/key_{soft,crisp,wood,pop}.wav
+// (S4 Task 10). A developer tool, never packaged in the APK.
+//   ./gradlew :tools:themegen:run --args="$PWD/app/src/main/assets/ime/theme/com.manjul.aikeyboard.themes \
+//     $PWD/app/src/main/res/raw"
 
 plugins {
     alias(libs.plugins.aikeyboard.jvm.library)

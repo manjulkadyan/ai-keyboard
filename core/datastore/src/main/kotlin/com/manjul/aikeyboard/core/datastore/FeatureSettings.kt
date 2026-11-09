@@ -87,6 +87,16 @@ data class FeatureSettings(
     val winBackLastShownAt: Long = 0L,
     /** When the Play in-app update check last finished (S4 Task 8, epoch ms); 0 = never. Local only. */
     val updateCheckedAt: Long = 0L,
+    /**
+     * The keyboard click sound (S4 Task 10): `off`, `system` (the platform key click, upstream behaviour) or one of
+     * the bundled sounds `soft`, `crisp`, `wood`, `pop`. An unknown value plays like `system`. Local only.
+     */
+    val keySound: String = "system",
+    /**
+     * The stylesheet id (`<preset>` or `<preset>_borderless`) a non-Pro user tried to apply from the Themes
+     * screen. It is applied and cleared when Pro turns on; empty = none. Local only.
+     */
+    val pendingPremiumThemeId: String = "",
 ) {
     /** True while any AI consent is on record, so Settings can offer to withdraw it. */
     val hasAnyAiConsent: Boolean get() = consentAiAt > 0L || consentAutoPolishAt > 0L

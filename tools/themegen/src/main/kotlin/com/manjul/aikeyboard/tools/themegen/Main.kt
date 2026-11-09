@@ -13,10 +13,17 @@ import java.io.File
 /**
  * Writes the `com.manjul.aikeyboard.themes` extension (plan Task 9): `extension.json` and
  * `stylesheets/<id>.json` plus `stylesheets/<id>_borderless.json` for every preset. Stale stylesheets are removed,
- * so the directory always matches [ThemePresets.all]. Output is deterministic and committed.
+ * so the directory always matches [ThemePresets.all]. It also writes the four key sounds (S4 Task 10,
+ * [KeySoundSynth]) into the `res/raw` directory. Output is deterministic and committed.
+ *
+ * Only `stylesheets/` inside a directory named [SnyggGenerator.EXTENSION_ID] is ever cleaned, so a wrong argument
+ * cannot delete anything else. In the raw directory only the four `key_*.wav` files are written.
  */
 object Main {
-    fun run(outDir: File, presets: List<ThemePreset> = ThemePresets.all) {
+    fun run(outDir: File, rawDir: File, presets: List<ThemePreset> = ThemePresets.all) {
+        require(outDir.name == SnyggGenerator.EXTENSION_ID) {
+            "theme dir must be named ${SnyggGenerator.EXTENSION_ID}, was ${outDir.name}"
+        }
         val stylesheets = File(outDir, "stylesheets")
         stylesheets.mkdirs()
         stylesheets.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.forEach { it.delete() }
@@ -28,10 +35,12 @@ object Main {
         }
         File(outDir, "extension.json").writeText(SnyggGenerator.extension(presets))
         println("themegen: wrote ${presets.size * 2} stylesheets and extension.json to $outDir")
+        KeySoundSynth.write(rawDir)
+        println("themegen: wrote ${KeySoundSynth.NAMES.size} key sounds to $rawDir")
     }
 }
 
 fun main(args: Array<String>) {
-    require(args.size == 1) { "Usage: themegen <theme extension dir>" }
-    Main.run(File(args[0]))
+    require(args.size == 2) { "Usage: themegen <theme extension dir> <res/raw dir>" }
+    Main.run(File(args[0]), File(args[1]))
 }
