@@ -82,6 +82,9 @@ class FeatureSettingsStore(
                 lastSourceLang = new.lastSourceLang?.takeIf { it.isNotBlank() },
                 consentAiAt = new.consentAiAt.coerceAtLeast(0L),
                 consentAutoPolishAt = new.consentAutoPolishAt.coerceAtLeast(0L),
+                paywallOnboardingShownAt = new.paywallOnboardingShownAt.coerceAtLeast(0L),
+                winBackShownCount = new.winBackShownCount.coerceAtLeast(0),
+                winBackLastShownAt = new.winBackLastShownAt.coerceAtLeast(0L),
                 polishOutputScript = FeatureSettings.normalizeOutputScript(new.polishOutputScript),
                 autocorrectLocales = new.autocorrectLocales.filterTo(LinkedHashSet()) { it in FeatureSettings.MVP_LANGUAGES },
             )

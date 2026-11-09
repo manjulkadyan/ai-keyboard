@@ -44,6 +44,7 @@ import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.fork.billing.HomeFixPaymentBanner // FORK(S4-billing)
+import com.manjul.aikeyboard.fork.paywall.HomeWinBackCard // FORK(S4-paywall)
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.lib.util.InputMethodUtils
 import dev.patrickgold.jetpref.datastore.model.observeAsState
@@ -64,6 +65,8 @@ fun HomeScreen() = FlorisScreen {
     content {
         // FORK(S4-billing): "Fix payment" in Play grace and account hold
         HomeFixPaymentBanner()
+        // FORK(S4-paywall): T8 win-back card on day 3 and day 10
+        HomeWinBackCard()
         val isCollapsed by prefs.internal.homeIsBetaToolboxCollapsed.observeAsState()
 
         val isFlorisBoardEnabled by InputMethodUtils.observeIsFlorisboardEnabled(foregroundOnly = true)

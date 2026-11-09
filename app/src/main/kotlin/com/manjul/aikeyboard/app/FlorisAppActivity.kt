@@ -194,7 +194,10 @@ class FlorisAppActivity : ComponentActivity() {
         // FORK(S2-routes): open_screen and ui:// / app:// links go through RouteRegistry (unknown -> Home and
         // deeplink_unknown). The activity keeps a bare intent so the nav library never handles the raw one
         // (its own deep-link handling would bypass the allow-list), and a rotation does not navigate again.
-        intentToBeHandled = AppIntents.classify(intent) { appContext.analytics.value.log(it) }
+        // FORK(S4-paywall): no paywall link before onboarding is done (FR-32 AC3)
+        intentToBeHandled = AppIntents.classify(intent, onboardingDone = featureSettingsStore.current.onboardingDone) {
+            appContext.analytics.value.log(it)
+        }
         setIntent(Intent(Intent.ACTION_MAIN))
     }
 

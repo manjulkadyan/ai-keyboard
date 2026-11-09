@@ -65,9 +65,13 @@ interface OfflinePackOffer {
 private fun Pair<String, String>.toLangPair() = LangPair(Lang.of(first), Lang.of(second))
 
 /**
- * State machine behind O1-O5. Progress is persisted in [store] after every step so a killed process resumes
+ * State machine behind O1-O6. Progress is persisted in [store] after every step so a killed process resumes
  * where it left off; ENABLE and SELECT advance by themselves when [imeStatus] reports the change. Events carry
  * enums, buckets and language tags only.
+ *
+ * O6 (S4 plan Task 5): when O5 ends, [claimPaywall] decides, with the keyboard-selected state, whether the paywall
+ * shows (once ever, Remote Config on). `onboarding_complete` is logged when O5 ends; `onboardingDone` is written
+ * when the paywall closes. A process killed on O6 resumes as done and never shows the paywall again.
  */
 class OnboardingViewModel(
     private val store: FeatureSettingsStore,
@@ -79,6 +83,7 @@ class OnboardingViewModel(
     systemLocaleTags: List<String> = emptyList(),
     private val source: OnboardingSource = OnboardingSource.LAUNCHER,
     private val offlinePacks: OfflinePackOffer? = null,
+    private val claimPaywall: (suspend (imeSelected: Boolean) -> Boolean)? = null,
 ) {
     private val _state = MutableStateFlow(OnboardingUiState(defaultLanguageTags = defaultLanguageSelection(systemLocaleTags)))
     val state: StateFlow<OnboardingUiState> = _state.asStateFlow()
@@ -88,6 +93,8 @@ class OnboardingViewModel(
     private var reentry = false
     private var lastEnabled = false
     private var lastSelected = false
+    /** O5 ended and the O6 claim is being decided: further taps do nothing. */
+    private var finishing = false
 
     init {
         scope.launch {
@@ -117,7 +124,13 @@ class OnboardingViewModel(
                 else -> OnboardingStep.DONE
             }
         } else {
-            OnboardingStep.entries[settings.onboardingStep.coerceIn(0, OnboardingStep.DONE.ordinal)]
+            OnboardingStep.entries[settings.onboardingStep.coerceIn(0, OnboardingStep.entries.lastIndex)]
+        }
+        if (step == OnboardingStep.PAYWALL) {
+            // Killed on O6: onboarding_complete was logged when O5 ended, and the paywall was claimed already.
+            markDone()
+            _state.update { it.copy(loaded = true, step = OnboardingStep.DONE) }
+            return
         }
         _state.update { it.copy(loaded = true, step = step) }
         logStepView(step)
@@ -144,13 +157,14 @@ class OnboardingViewModel(
                 // The keyboard may already be enabled or selected: no new status emission will tell us.
                 onImeStatus(lastEnabled, lastSelected)
             }
-            OnboardingStep.TRY_IT -> finish(skipped = false)
+            OnboardingStep.TRY_IT -> if (!finishing) finish(skipped = false)
             else -> Unit
         }
     }
 
     /** Leaves onboarding from the language or try-it step; earlier steps cannot be skipped (no keyboard yet). */
     fun skip() {
+        if (finishing) return
         if (_state.value.step == OnboardingStep.LANGUAGES || _state.value.step == OnboardingStep.TRY_IT) {
             finish(skipped = true)
         }
@@ -182,10 +196,35 @@ class OnboardingViewModel(
         logStepView(step)
     }
 
-    private fun finish(skipped: Boolean) {
+    /** O6 closed (close button, Back, or Pro arrived): onboarding is done. */
+    fun onPaywallClosed() {
+        if (_state.value.step != OnboardingStep.PAYWALL) return
         _state.update { it.copy(step = OnboardingStep.DONE) }
-        scope.launch { store.update { it.copy(onboardingDone = true, onboardingStep = OnboardingStep.DONE.ordinal) } }
+        markDone()
+    }
+
+    private fun finish(skipped: Boolean) {
         if (!reentry) analytics(EventCatalog.onboardingComplete(skipped))
+        val claim = claimPaywall
+        if (reentry || claim == null) {
+            _state.update { it.copy(step = OnboardingStep.DONE) }
+            markDone()
+            return
+        }
+        finishing = true
+        scope.launch {
+            if (claim(lastSelected)) {
+                goTo(OnboardingStep.PAYWALL)
+            } else {
+                _state.update { it.copy(step = OnboardingStep.DONE) }
+                markDone()
+            }
+            finishing = false
+        }
+    }
+
+    private fun markDone() {
+        scope.launch { store.update { it.copy(onboardingDone = true, onboardingStep = OnboardingStep.DONE.ordinal) } }
     }
 
     /** Funnel timing is measured from `firstOpenAt` (ruling R16), not from the current session. */
@@ -199,7 +238,8 @@ class OnboardingViewModel(
             OnboardingStep.SELECT -> StepEvent.THREE
             OnboardingStep.TRY_IT -> StepEvent.TRY
             // LANGUAGES is reported through languages_set; the closed step set has no value for it.
-            OnboardingStep.LANGUAGES, OnboardingStep.DONE -> return
+            // PAYWALL is reported through paywall_view{trigger=onboarding}.
+            OnboardingStep.LANGUAGES, OnboardingStep.DONE, OnboardingStep.PAYWALL -> return
         }
         analytics(EventCatalog.onboardingStepView(event))
     }

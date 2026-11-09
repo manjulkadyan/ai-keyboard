@@ -78,6 +78,13 @@ data class FeatureSettings(
     val proSignature: String = "",
     /** When kb-api last answered (epoch ms); 0 = never. */
     val proCheckedAt: Long = 0L,
+    /**
+     * Paywall frequency caps (S4 Task 5, PRD §10.4). When the onboarding paywall (T1) showed (epoch ms, 0 = never),
+     * and how often and when the Home win-back card (T8) showed. Read only by `PaywallFrequency`.
+     */
+    val paywallOnboardingShownAt: Long = 0L,
+    val winBackShownCount: Int = 0,
+    val winBackLastShownAt: Long = 0L,
 ) {
     /** True while any AI consent is on record, so Settings can offer to withdraw it. */
     val hasAnyAiConsent: Boolean get() = consentAiAt > 0L || consentAutoPolishAt > 0L

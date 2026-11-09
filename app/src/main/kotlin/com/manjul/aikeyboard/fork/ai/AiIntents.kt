@@ -13,7 +13,7 @@ import androidx.core.net.toUri
 import com.manjul.aikeyboard.app.FlorisAppActivity
 import com.manjul.aikeyboard.fork.routes.RouteRegistry
 
-/** The Pro placeholder screen in the app ("See Pro" on the quota card). Explicit component, never a chooser. */
+/** The paywall with the AI quota trigger ("See Pro" on the quota card, via the `pro` alias). Explicit component. */
 internal fun proIntent(context: Context): Intent =
     Intent(Intent.ACTION_VIEW, PRO_DEEPLINK.toUri(), context, FlorisAppActivity::class.java)
         .addCategory(Intent.CATEGORY_BROWSABLE)

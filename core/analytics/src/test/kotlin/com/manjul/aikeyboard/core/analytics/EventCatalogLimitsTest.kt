@@ -55,6 +55,8 @@ class EventCatalogLimitsTest {
         EventCatalog.purchaseFail(PurchaseFailCode.NETWORK_ERROR),
         EventCatalog.subscriptionState(SubscriptionStateParam.REVOKED),
         EventCatalog.restorePurchases(false),
+        EventCatalog.paywallView(PaywallTriggerParam.ONBOARDING),
+        EventCatalog.paywallClose(PaywallTriggerParam.WIN_BACK, Long.MAX_VALUE),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -160,7 +162,7 @@ class EventCatalogLimitsTest {
             "ai_request", "ai_rewrite_done", "ai_polish_done", "ai_quota_hit", "ai_error", "ai_output_reported",
             "consent_result", "consent_withdrawn",
             "purchase_start", "trial_start", "purchase_success", "purchase_fail", "subscription_state",
-            "restore_purchases",
+            "restore_purchases", "paywall_view", "paywall_close",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)

@@ -77,7 +77,8 @@ import com.manjul.aikeyboard.fork.settings.TypingSettingsScreen // FORK(S3-userd
 import com.manjul.aikeyboard.fork.settings.OfflineLanguagesScreen // FORK(S2-packs)
 import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
-import com.manjul.aikeyboard.fork.ai.ProPlaceholderScreen // FORK(S3-ai)
+import com.manjul.aikeyboard.fork.paywall.PaywallRoute // FORK(S4-paywall)
+import com.manjul.aikeyboard.fork.paywall.PaywallTrigger // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.settings.AiSettingsScreen // FORK(S3-polish)
 import com.manjul.aikeyboard.featureSettingsStore // FORK(S4-billing)
 import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
@@ -124,10 +125,11 @@ object Routes {
     @Deeplink("translator/history")
     object TranslatorHistory // FORK(S2-translator)
 
-    // FORK(S3-ai): Pro placeholder, opened by "See Pro" on the AI quota card (no billing yet)
+    // FORK(S4-paywall): the paywall (S-03) replaces the S3 Pro placeholder. RouteRegistry maps "pro" to
+    // "paywall?trigger=ai_quota"; an unknown trigger shows the AI quota header.
     @Serializable
-    @Deeplink("pro")
-    object Pro
+    @Deeplink("paywall")
+    data class Paywall(val trigger: String = "ai_quota")
 
     object Settings {
         @Serializable
@@ -359,7 +361,13 @@ object Routes {
             composableWithDeepLink(Settings.Suggestions::class) { TypingSettingsScreen() } // FORK(S3-userdict)
             composableWithDeepLink(Translator::class) { TranslatorScreen() } // FORK(S2-translator)
             composableWithDeepLink(TranslatorHistory::class) { HistoryScreen() } // FORK(S2-translator)
-            composableWithDeepLink(Pro::class) { ProPlaceholderScreen() } // FORK(S3-ai)
+            // FORK(S4-paywall): the paywall route; close goes back, or to Home when it was the first screen
+            composableWithDeepLink(Paywall::class) { entry ->
+                val trigger = PaywallTrigger.fromWire(entry.toRoute<Paywall>().trigger) ?: PaywallTrigger.AI_QUOTA
+                PaywallRoute(trigger) {
+                    if (!navController.popBackStack()) navController.navigate(Settings.Home)
+                }
+            }
             composableWithDeepLink(Settings.Ai::class) { // FORK(S3-polish)
                 // FORK(S4-billing): auto-polish unlocks from the signed Pro cache
                 val store = LocalContext.current.featureSettingsStore().value

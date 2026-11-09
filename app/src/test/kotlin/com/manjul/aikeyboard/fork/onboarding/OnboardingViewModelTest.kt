@@ -74,7 +74,14 @@ class OnboardingViewModelTest {
         scope.cancel()
     }
 
-    private fun vm(ime: FakeIme, locales: List<String> = emptyList(), offer: OfflinePackOffer? = null) =
+    private val paywallAsks = mutableListOf<Boolean>()
+
+    private fun vm(
+        ime: FakeIme,
+        locales: List<String> = emptyList(),
+        offer: OfflinePackOffer? = null,
+        paywall: Boolean? = null,
+    ) =
         OnboardingViewModel(
             store = store,
             imeStatus = ime,
@@ -84,6 +91,10 @@ class OnboardingViewModelTest {
             scope = scope,
             systemLocaleTags = locales,
             offlinePacks = offer,
+            claimPaywall = paywall?.let { show ->
+                val claim: suspend (Boolean) -> Boolean = { selected -> paywallAsks += selected; show }
+                claim
+            },
         )
 
     private fun named(name: String) = events.filter { it.name == name }
@@ -297,6 +308,55 @@ class OnboardingViewModelTest {
         vm.next()
         assertEquals(OnboardingStep.DONE, vm.state.value.step)
         assertFalse(named("onboarding_complete").single().params["skipped"] as Boolean)
+    }
+
+    @Test
+    fun o6PaywallFollowsO5WhenClaimedThenCloseFinishes() = runTest {
+        val vm = vm(FakeIme(enabled = true, selected = true), paywall = true)
+        vm.next()
+        vm.onLanguagesChosen(listOf("en-US"), "en" to "es")
+        vm.next()
+        vm.next() // a second tap while the claim is decided does nothing
+        assertEquals(OnboardingStep.PAYWALL, vm.state.value.step)
+        assertEquals(listOf(true), paywallAsks)
+        assertEquals(mapOf<String, Any>("skipped" to false), named("onboarding_complete").single().params)
+        assertFalse(store.flow.first().onboardingDone, "the paywall is still part of onboarding")
+        vm.onPaywallClosed()
+        assertEquals(OnboardingStep.DONE, vm.state.value.step)
+        assertTrue(store.flow.first { it.onboardingDone }.onboardingDone)
+        assertEquals(1, named("onboarding_complete").size)
+    }
+
+    @Test
+    fun o6IsSkippedWhenTheClaimSaysNo() = runTest {
+        val vm = vm(FakeIme(enabled = true, selected = true), paywall = false)
+        vm.next()
+        vm.onLanguagesChosen(listOf("en-US"), "en" to "es")
+        vm.skip()
+        assertEquals(OnboardingStep.DONE, vm.state.value.step)
+        assertEquals(mapOf<String, Any>("skipped" to true), named("onboarding_complete").single().params)
+    }
+
+    @Test
+    fun o6ClosedOnlyFromThePaywallStep() = runTest {
+        val vm = vm(FakeIme(), paywall = true)
+        vm.onPaywallClosed()
+        assertEquals(OnboardingStep.WELCOME, vm.state.value.step)
+    }
+
+    @Test
+    fun aProcessKilledOnO6ResumesAsDone() = runTest {
+        store.update { it.copy(firstOpenAt = 5L, onboardingStep = OnboardingStep.PAYWALL.ordinal) }
+        val vm = vm(FakeIme(enabled = true, selected = true), paywall = true)
+        assertEquals(OnboardingStep.DONE, vm.state.value.step)
+        assertTrue(store.flow.first { it.onboardingDone }.onboardingDone)
+        assertTrue(paywallAsks.isEmpty())
+    }
+
+    @Test
+    fun storedStepOrdinalsAreStable() {
+        assertEquals(5, OnboardingStep.DONE.ordinal)
+        assertEquals(6, OnboardingStep.PAYWALL.ordinal)
     }
 
     @Test

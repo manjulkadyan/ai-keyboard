@@ -73,6 +73,13 @@ enum class AiErrorReason(val value: String) {
 /** PRD §10.6 consent classes that have an Agree screen this sprint. */
 enum class ConsentKind(val value: String) { AI("ai"), AUTO_POLISH("auto_polish") }
 
+/** `paywall_view{trigger}` and `paywall_close{trigger}`: the PRD §10.4 trigger ids T1 to T8. */
+enum class PaywallTriggerParam(val value: String) {
+    ONBOARDING("onboarding"), AI_QUOTA("ai_quota"), PREMIUM_THEME("premium_theme"), REMOVE_ADS("remove_ads"),
+    CLOUD_QUALITY("cloud_quality"), PREMIUM_STICKER("premium_sticker"), AUTO_POLISH("auto_polish"),
+    WIN_BACK("win_back"),
+}
+
 /** The Pro plan (`purchase_start`, `trial_start`, `purchase_success`). */
 enum class ProPlanParam(val value: String) { MONTHLY("monthly"), ANNUAL("annual") }
 

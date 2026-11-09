@@ -47,7 +47,8 @@ class RouteRegistryTest {
     @Test
     fun everyEntryMapsToADestinationRegisteredInTheNavGraph() {
         for ((name, path) in RouteRegistry.routes) {
-            val destination = deeplinks[path]
+            // A query (`paywall?trigger=x`) is a default-valued argument of the destination, not part of its path.
+            val destination = deeplinks[path.substringBefore('?')]
             if (destination == null) fail("Route '$name' -> '$path' has no @Deeplink destination in Routes")
             assertTrue(
                 "composableWithDeepLink($destination::class)" in routesSource,
@@ -61,11 +62,15 @@ class RouteRegistryTest {
         assertEquals(
             setOf(
                 "home", "translator", "settings/home", "settings/voice", "settings/offline-languages",
-                "settings/privacy/private-apps", "pro",
+                "settings/privacy/private-apps", "pro", "paywall?trigger=ai_quota", "paywall?trigger=premium_theme",
+                "paywall?trigger=remove_ads", "paywall?trigger=cloud_quality", "paywall?trigger=premium_sticker",
+                "paywall?trigger=auto_polish", "paywall?trigger=win_back",
             ),
             RouteRegistry.routes.keys,
         )
-        assertTrue(RouteRegistry.routes.values.none { it.startsWith("devtools") || it.startsWith("ext") || "paywall" in it })
+        assertTrue(RouteRegistry.routes.values.none { it.startsWith("devtools") || it.startsWith("ext") })
+        // S4-paywall: T1 opens inside onboarding (O6) only.
+        assertTrue("paywall?trigger=onboarding" !in RouteRegistry.routes.values)
     }
 
     @Test
@@ -78,8 +83,8 @@ class RouteRegistryTest {
         assertEquals("translator", RouteRegistry.resolve(null, Uri.parse("app://translator?x=1#y")).path)
         assertEquals(RouteRegistry.Home, RouteRegistry.resolve("home", null))
         assertEquals(RouteRegistry.Home, RouteRegistry.resolve(null, null))
-        // S3-ai: the Pro placeholder (the quota card's "See Pro"); the paywall stays unknown.
-        assertEquals("pro", RouteRegistry.resolve(null, Uri.parse("ui://florisboard/pro")).path)
+        // S4-paywall: `pro` (the quota card's "See Pro") is the ai_quota paywall; a bare `paywall` is unknown.
+        assertEquals("paywall?trigger=ai_quota", RouteRegistry.resolve(null, Uri.parse("ui://florisboard/pro")).path)
         assertTrue(RouteRegistry.resolve("paywall", null).unknown)
     }
 

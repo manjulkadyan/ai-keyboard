@@ -56,6 +56,8 @@ object EventCatalog {
     const val PURCHASE_FAIL = "purchase_fail"
     const val SUBSCRIPTION_STATE = "subscription_state"
     const val RESTORE_PURCHASES = "restore_purchases"
+    const val PAYWALL_VIEW = "paywall_view"
+    const val PAYWALL_CLOSE = "paywall_close"
 
     /** User property: one of [ProStatus]. */
     const val USER_PROPERTY_PRO_STATUS = "pro_status"
@@ -99,6 +101,8 @@ object EventCatalog {
         PURCHASE_FAIL to setOf("code"),
         SUBSCRIPTION_STATE to setOf("state"),
         RESTORE_PURCHASES to setOf("found"),
+        PAYWALL_VIEW to setOf("trigger"),
+        PAYWALL_CLOSE to setOf("trigger", "seconds_bucket"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -261,4 +265,14 @@ object EventCatalog {
 
     /** "Restore purchases" finished; [found] is true when kb-api returned Pro. */
     fun restorePurchases(found: Boolean) = event(RESTORE_PURCHASES, "found" to found)
+
+    /** The paywall opened from [trigger] (PRD §10.4). Logged once per open. */
+    fun paywallView(trigger: PaywallTriggerParam) = event(PAYWALL_VIEW, "trigger" to trigger.value)
+
+    /** The paywall closed after [seconds] on screen. Only the bucket is sent. */
+    fun paywallClose(trigger: PaywallTriggerParam, seconds: Long) = event(
+        PAYWALL_CLOSE,
+        "trigger" to trigger.value,
+        "seconds_bucket" to Buckets.seconds(seconds),
+    )
 }

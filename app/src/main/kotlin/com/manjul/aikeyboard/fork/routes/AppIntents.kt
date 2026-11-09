@@ -31,23 +31,24 @@ sealed interface AppIntent {
  *
  * - An `open_screen` extra, or a `VIEW` of a `ui://` or `app://` link (or any BROWSABLE `VIEW`), goes through
  *   [RouteRegistry]; a value that is not allow-listed opens Home and logs `deeplink_unknown`.
+ * - Before [onboardingDone] (read by the caller) every paywall route opens Home (PRD FR-32 AC3).
  * - Other `VIEW` intents with data and `SEND` with a clip URI keep upstream's extension import.
  */
 object AppIntents {
     private val routeSchemes = setOf("ui", "app")
 
-    fun classify(intent: Intent?, log: (AnalyticsEvent) -> Unit): AppIntent? {
+    fun classify(intent: Intent?, onboardingDone: Boolean = true, log: (AnalyticsEvent) -> Unit): AppIntent? {
         intent ?: return null
-        val request = runCatching { read(intent) }.getOrNull()
+        val request = runCatching { read(intent, onboardingDone) }.getOrNull()
         if (request is AppIntent.OpenRoute && request.route.unknown) log(EventCatalog.deeplinkUnknown())
         return request
     }
 
-    private fun read(intent: Intent): AppIntent? {
+    private fun read(intent: Intent, onboardingDone: Boolean): AppIntent? {
         if (intent.hasExtra(RouteRegistry.EXTRA_OPEN_SCREEN)) {
             // A non-String value reads as null: not allow-listed.
             val name = runCatching { intent.getStringExtra(RouteRegistry.EXTRA_OPEN_SCREEN) }.getOrNull()
-            val route = RouteRegistry.resolve(name ?: "", null)
+            val route = RouteRegistry.resolve(name ?: "", null, onboardingDone)
             return AppIntent.OpenRoute(route, translatorText(intent, route))
         }
         val data = intent.data
@@ -55,7 +56,7 @@ object AppIntents {
             Intent.ACTION_VIEW -> {
                 val browsable = intent.categories?.contains(Intent.CATEGORY_BROWSABLE) == true
                 if (browsable || data?.scheme in routeSchemes) {
-                    return AppIntent.OpenRoute(RouteRegistry.resolve(null, data ?: Uri.EMPTY))
+                    return AppIntent.OpenRoute(RouteRegistry.resolve(null, data ?: Uri.EMPTY, onboardingDone))
                 }
                 if (data != null) return AppIntent.ImportExtension(data)
             }

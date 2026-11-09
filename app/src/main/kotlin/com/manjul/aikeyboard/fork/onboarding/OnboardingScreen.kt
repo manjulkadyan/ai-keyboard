@@ -52,9 +52,14 @@ import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.appContext
+import com.manjul.aikeyboard.core.config.ConfigKeys
 import com.manjul.aikeyboard.core.translate.LangPair
 import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelStore
 import com.manjul.aikeyboard.featureSettingsStore
+import com.manjul.aikeyboard.firebaseGraph
+import com.manjul.aikeyboard.fork.paywall.PaywallFrequency
+import com.manjul.aikeyboard.fork.paywall.PaywallRoute
+import com.manjul.aikeyboard.fork.paywall.PaywallTrigger
 import com.manjul.aikeyboard.fork.subtypes.MVP_LANGUAGE_TAGS
 import com.manjul.aikeyboard.lib.util.InputMethodUtils
 import com.manjul.aikeyboard.subtypeManager
@@ -80,8 +85,10 @@ internal class OnboardingHolder(context: Context) : ViewModel() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val imeStatus = InputMethodImeStatus(context, scope)
     val packs: TranslateModelStore = context.translateModelStore().value
+    private val store = context.featureSettingsStore().value
+    private val paywallFrequency = PaywallFrequency(store, System::currentTimeMillis)
     val vm = OnboardingViewModel(
-        store = context.featureSettingsStore().value,
+        store = store,
         imeStatus = imeStatus,
         analytics = context.appContext().value.analytics.value::log,
         ensureSubtypes = context.subtypeManager().value::ensureDefaultSubtypes,
@@ -91,6 +98,11 @@ internal class OnboardingHolder(context: Context) : ViewModel() {
         offlinePacks = object : OfflinePackOffer {
             override fun missingBytes(pair: LangPair) = packs.missingBytes(pair)
             override fun download(pair: LangPair) = packs.download(pair)
+        },
+        // O6: once ever, after ime_selected, while Remote Config paywall_onboarding_enabled is on (OD-05)
+        claimPaywall = { selected ->
+            val enabled = context.firebaseGraph().value.remoteConfig.bool(ConfigKeys.PAYWALL_ONBOARDING_ENABLED)
+            paywallFrequency.claimOnboarding(imeSelected = selected, rcEnabled = enabled)
         },
     )
 
@@ -104,7 +116,7 @@ internal class OnboardingHolder(context: Context) : ViewModel() {
     }
 }
 
-/** O1-O5 route content: builds the view model on the app singletons and leaves for Home when it reaches DONE. */
+/** O1-O6 route content: builds the view model on the app singletons and leaves for Home when it reaches DONE. */
 @Composable
 fun OnboardingScreen(navController: NavController = LocalNavController.current) {
     val context = LocalContext.current.applicationContext
@@ -124,6 +136,11 @@ fun OnboardingScreen(navController: NavController = LocalNavController.current) 
     }
     val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission(), vm::onMicPermissionResult)
 
+    if (state.step == OnboardingStep.PAYWALL) {
+        // O6 has its own scrolling layout, close button and Back handling.
+        PaywallRoute(PaywallTrigger.ONBOARDING, onClosed = vm::onPaywallClosed)
+        return
+    }
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())) {
         if (!state.loaded) return@Column
         when (state.step) {
@@ -162,7 +179,7 @@ fun OnboardingScreen(navController: NavController = LocalNavController.current) 
                 onSkip = vm::skip,
                 onDone = vm::next,
             )
-            OnboardingStep.DONE -> Unit
+            OnboardingStep.DONE, OnboardingStep.PAYWALL -> Unit
         }
     }
 }

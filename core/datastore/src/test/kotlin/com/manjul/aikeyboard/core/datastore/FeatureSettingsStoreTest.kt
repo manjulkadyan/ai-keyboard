@@ -201,4 +201,25 @@ class FeatureSettingsStoreTest {
         assertEquals(0L, s.consentAiAt)
         assertEquals(0L, s.consentAutoPolishAt)
     }
+
+    @Test
+    fun `paywall frequency fields default to never shown and are clamped on write`() = runTest {
+        val d = FeatureSettings()
+        assertEquals(0L, d.paywallOnboardingShownAt)
+        assertEquals(0, d.winBackShownCount)
+        assertEquals(0L, d.winBackLastShownAt)
+        val store = FeatureSettingsStore(app)
+        store.update { it.copy(paywallOnboardingShownAt = -1L, winBackShownCount = -2, winBackLastShownAt = -5L) }
+        val s = store.flow.first()
+        assertEquals(0L, s.paywallOnboardingShownAt)
+        assertEquals(0, s.winBackShownCount)
+        assertEquals(0L, s.winBackLastShownAt)
+    }
+
+    @Test
+    fun `sprint 3 files without the paywall keys load with defaults`() = runTest {
+        val old = """{"onboardingDone":true,"firstOpenAt":42}"""
+        val decoded = FeatureSettingsSerializer.readFrom(old.byteInputStream())
+        assertEquals(FeatureSettings(onboardingDone = true, firstOpenAt = 42L), decoded)
+    }
 }
