@@ -55,6 +55,8 @@ kotlin {
     }
 }
 
+// FORK(S4-ads): Google's published sample AdMob app id. It serves test ads only (no real ad unit id is in the repo).
+val ADMOB_SAMPLE_APP_ID = "ca-app-pub-3940256099942544~3347511713"
 android {
     namespace = "com.manjul.aikeyboard"
     compileSdk = projectCompileSdk.toInt()
@@ -102,6 +104,9 @@ android {
         // FORK(S4-billing): kb-api's entitlement public key (base64 X.509, ECDSA P-256), aikb.entitlement.publicKey.
         // Empty by default. Debug accepts an unsigned cache, a release package fails below when it is empty.
         buildConfigField("String", "ENTITLEMENT_PUBLIC_KEY", "\"${aikbProperty("aikb.entitlement.publicKey")}\"")
+        // FORK(S4-ads): AdMob app id for the manifest, from aikb.admob.appId. Debug and beta fall back to Google's
+        // sample app id (test ads only). Release takes the property alone and its packaging fails below when empty.
+        manifestPlaceholders["admobAppId"] = aikbProperty("aikb.admob.appId").ifEmpty { ADMOB_SAMPLE_APP_ID }
 
         sourceSets {
             maybeCreate("main").apply {
@@ -179,6 +184,7 @@ android {
             // FORK(S1-whisper): no language uses Whisper in release until each is checked (decision 5)
             buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"\"")
             buildConfigField("boolean", "AI_DEV_AUTH", "false") // FORK(S3-net): dev auth never outside debug
+            manifestPlaceholders["admobAppId"] = aikbProperty("aikb.admob.appId") // FORK(S4-ads): no sample id
         }
 
         create("benchmark") {
@@ -351,8 +357,10 @@ dependencies {
 // fails early. Only the release packaging tasks check it, so assembleDebug, test, lint and CI run without the key.
 tasks.matching { it.name == "packageRelease" || it.name == "bundleRelease" }.configureEach {
     val key = aikbProperty("aikb.entitlement.publicKey")
+    val admobAppId = aikbProperty("aikb.admob.appId") // FORK(S4-ads): the release AdMob app id, never the sample
     doFirst {
         check(key.isNotEmpty()) { "Set the Gradle property aikb.entitlement.publicKey for a release build" }
+        check(admobAppId.isNotEmpty()) { "Set the Gradle property aikb.admob.appId for a release build" }
     }
 }
 

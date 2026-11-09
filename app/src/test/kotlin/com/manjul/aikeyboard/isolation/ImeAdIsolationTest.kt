@@ -46,8 +46,8 @@ class ImeAdIsolationTest {
         )
 
         /**
-         * `:app` packages allowed to use the ads stack (Activity-only code). Empty in Sprint 0: nothing
-         * calls `:core:ads` yet. Adding one needs a reason and must keep it out of IME reach.
+         * `:app` packages allowed to use the ads stack (Activity-only code). Called only from [AD_HOST_CALLERS].
+         * Adding one needs a reason and must keep it out of IME reach.
          */
         val AD_HOST_PACKAGES: List<String> = listOf(
             "com.manjul.aikeyboard.app.ads",
@@ -55,11 +55,14 @@ class ImeAdIsolationTest {
 
         /**
          * `:app` files outside [AD_HOST_PACKAGES] that may call into them, as paths relative to the
-         * `:app` Kotlin source root. Only Activity code that the IME never loads belongs here (e.g.
-         * `com/manjul/aikeyboard/app/FlorisAppActivity.kt` once it starts consent); each entry needs a
-         * reason. Empty in Sprint 0: nothing calls the ad host packages yet.
+         * `:app` Kotlin source root. Only Activity code that the IME never loads belongs here; each entry
+         * needs a reason. A caller may reference the host packages only, never an ad SDK or `:core:ads`.
          */
-        val AD_HOST_CALLERS: Map<String, String> = emptyMap()
+        val AD_HOST_CALLERS: Map<String, String> = mapOf(
+            "com/manjul/aikeyboard/app/FlorisAppActivity.kt" to
+                "S4 Task 6: the main Activity starts UMP consent and GMA through AdsAppGraph on its cold start " +
+                "(TRD §4.11). The IME never starts or loads this Activity.",
+        )
 
         /** Root-package files that start with, or are part of, the IME process start. */
         val IME_ROOT_FILES = listOf("FlorisImeService.kt", "FlorisSpellCheckerService.kt", "FlorisApplication.kt")

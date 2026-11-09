@@ -245,6 +245,20 @@
              Google Sign-In here, so it is removed too. -->
         <service android:name="com.google.android.gms.auth.api.signin.RevocationBoundService" tools:ignore="MissingClass" tools:node="remove"/>
 
+        <!-- FORK(S4-ads): AdMob app id (Gradle aikb.admob.appId; debug and beta use Google's sample id). GMA starts
+             only from the main Activity after UMP consent (TRD §11.1 1.1): its init provider is removed, so it never
+             runs at process start, also not when the keyboard starts the process. Guarded by ManifestAdsTest and
+             verify<Variant>NoAdAutoInit. The flags move SDK init and ad loading off the main thread. -->
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${admobAppId}"/>
+        <meta-data android:name="com.google.android.gms.ads.flag.OPTIMIZE_INITIALIZATION" android:value="true"/>
+        <meta-data android:name="com.google.android.gms.ads.flag.OPTIMIZE_AD_LOADING" android:value="true"/>
+        <provider
+            android:name="com.google.android.gms.ads.MobileAdsInitProvider"
+            android:authorities="${applicationId}.mobileadsinitprovider"
+            android:exported="false"
+            tools:ignore="MissingClass"
+            tools:node="remove"/>
+
     </application>
 
 </manifest>

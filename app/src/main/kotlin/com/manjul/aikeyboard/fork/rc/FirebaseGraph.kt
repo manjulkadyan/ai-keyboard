@@ -91,6 +91,14 @@ class FirebaseGraph(context: Context, private val optOut: () -> Boolean, fallbac
         )
     }
 
+    /**
+     * Consent Mode v2 signals from the UMP result (S4 Task 6, TRD §4.11), set by the app's ads stack on each cold
+     * start that gathers consent. Does nothing without Firebase options.
+     */
+    fun setConsentMode(adStorage: Boolean, adUserData: Boolean, adPersonalization: Boolean, analyticsStorage: Boolean) {
+        firebaseSink?.setConsent(adStorage, adUserData, adPersonalization, analyticsStorage)
+    }
+
     /** Applies a change of the analytics opt-out to Analytics and Crashlytics collection. */
     fun onOptOutChanged(optedOut: Boolean) {
         analyticsSink.onOptOutChanged(optedOut)

@@ -45,6 +45,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.manjul.aikeyboard.R
+import com.manjul.aikeyboard.app.ads.AdsAppGraph // FORK(S4-ads)
 import com.manjul.aikeyboard.app.apptheme.FlorisAppTheme
 import com.manjul.aikeyboard.app.ext.ExtensionImportScreenType
 import com.manjul.aikeyboard.app.setup.NotificationPermissionState
@@ -166,6 +167,11 @@ class FlorisAppActivity : ComponentActivity() {
                 }
             }
             onNewIntent(intent)
+            // FORK(S4-ads): UMP consent, then GMA, once per Activity cold start (not on a recreate) after onboarding.
+            // AdsAppGraph skips Pro users and ads_enabled_global = false. Never reached from the IME.
+            if (savedInstanceState == null) {
+                AdsAppGraph.get(application).onAppStart(this, onboardingDone = settings?.onboardingDone == true)
+            }
         }
     }
 
