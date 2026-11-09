@@ -57,6 +57,13 @@ kotlin {
 
 // FORK(S4-ads): Google's published sample AdMob app id. It serves test ads only (no real ad unit id is in the repo).
 val ADMOB_SAMPLE_APP_ID = "ca-app-pub-3940256099942544~3347511713"
+// FORK(S4-ads): app-only icon resValues of the debug build type, replaced in the test APK (see androidComponents)
+val TEST_APK_ICON_RES_VALUES = listOf(
+    "mipmap" to "floris_app_icon",
+    "mipmap" to "floris_app_icon_round",
+    "drawable" to "floris_app_icon_foreground",
+)
+
 android {
     namespace = "com.manjul.aikeyboard"
     compileSdk = projectCompileSdk.toInt()
@@ -248,6 +255,20 @@ androidComponents {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// FORK(S4-ads): the debug build type's icon resValues point at app resources that the test APK does not have, so
+// processDebugAndroidTestResources failed (no instrumented test could build). The test APK points them at a framework icon.
+androidComponents {
+    onVariants { variant ->
+        val testApk = (variant as? com.android.build.api.variant.HasAndroidTest)?.androidTest ?: return@onVariants
+        for ((type, name) in TEST_APK_ICON_RES_VALUES) {
+            testApk.resValues.put(
+                testApk.makeResValueKey(type, name),
+                com.android.build.api.variant.ResValue("@android:drawable/sym_def_app_icon"),
+            )
+        }
+    }
 }
 
 // FORK(S4-rc): ManifestAnalyticsDefaultsTest reads the debug and the release merged manifests
