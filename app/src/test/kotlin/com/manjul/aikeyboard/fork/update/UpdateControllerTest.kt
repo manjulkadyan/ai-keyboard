@@ -13,6 +13,7 @@ import com.google.android.play.core.appupdate.AppUpdateInfo
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateOptions
 import com.google.android.play.core.appupdate.testing.FakeAppUpdateManager
+import com.google.android.play.core.install.InstallStateUpdatedListener
 import com.google.android.play.core.install.model.AppUpdateType
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.common.entry.EntrySource
@@ -22,6 +23,7 @@ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -46,7 +48,24 @@ import kotlin.test.assertTrue
  */
 private class CountingManager(val fake: FakeAppUpdateManager) : AppUpdateManager by fake {
     var infoRequests = 0
+    var flowStarts = 0
     var declineNext = false
+    var failNext = false
+    var completeFails = false
+    val registered = mutableListOf<InstallStateUpdatedListener>()
+
+    override fun registerListener(listener: InstallStateUpdatedListener) {
+        registered += listener
+        fake.registerListener(listener)
+    }
+
+    override fun unregisterListener(listener: InstallStateUpdatedListener) {
+        registered -= listener
+        fake.unregisterListener(listener)
+    }
+
+    override fun completeUpdate(): Task<Void> =
+        if (completeFails) Tasks.forException(IllegalStateException("boom")) else fake.completeUpdate()
 
     override fun getAppUpdateInfo(): Task<AppUpdateInfo> {
         infoRequests++
@@ -54,6 +73,8 @@ private class CountingManager(val fake: FakeAppUpdateManager) : AppUpdateManager
     }
 
     override fun startUpdateFlow(info: AppUpdateInfo, activity: Activity, options: AppUpdateOptions): Task<Int> {
+        flowStarts++
+        if (failNext) return Tasks.forException(IllegalStateException("boom"))
         val started = fake.startUpdateFlow(info, activity, options)
         if (!declineNext) return started
         fake.userRejectsUpdate()
@@ -146,22 +167,22 @@ class UpdateControllerTest {
     }
 
     @Test
-    fun secondResumeWithin24HoursDoesNotCheck() = runTest {
+    fun secondResumeWithin24HoursDoesNotPromptAgain() = runTest {
         onboarded()
         fake.setUpdateAvailable(11)
         val c = controller()
         var job = resumeUntilPrompt(c)
         fake.userRejectsUpdate()
         pump(job)
-        assertEquals(1, manager.infoRequests)
+        assertEquals(1, manager.flowStarts)
         now += 23 * 3_600_000L
         job = launch(start = CoroutineStart.UNDISPATCHED) { c.onHomeResumed(activity, EntrySource.RESUME) }
         pump(job)
-        assertEquals(1, manager.infoRequests)
+        assertEquals(1, manager.flowStarts)
         now += 2 * 3_600_000L
         job = launch(start = CoroutineStart.UNDISPATCHED) { c.onHomeResumed(activity, EntrySource.RESUME) }
         pump(job)
-        assertEquals(2, manager.infoRequests)
+        assertEquals(2, manager.flowStarts)
     }
 
     @Test
@@ -247,5 +268,93 @@ class UpdateControllerTest {
         pump(job)
         assertTrue(events.isEmpty())
         assertEquals(now, store.flow.first().updateCheckedAt)
+    }
+
+    private fun events() = events.map { it.params["type"] to it.params["result"] }
+
+    @Test
+    fun declinedFlexibleLogsOnceStampsAndUnregistersListener() = runTest {
+        onboarded()
+        fake.setUpdateAvailable(11)
+        manager.declineNext = true
+        val job = resumeUntilPrompt(controller())
+        pump(job)
+        assertEquals(listOf("flexible" to "declined"), events())
+        assertEquals(now, store.flow.first().updateCheckedAt)
+        assertTrue(manager.registered.isEmpty())
+    }
+
+    @Test
+    fun failedFlowLogsOnceAsFailed() = runTest {
+        onboarded()
+        fake.setUpdateAvailable(11)
+        manager.failNext = true
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { controller().onHomeResumed(activity, EntrySource.LAUNCHER) }
+        pump(job)
+        assertEquals(listOf("flexible" to "failed"), events())
+        assertEquals(now, store.flow.first().updateCheckedAt)
+        assertTrue(manager.registered.isEmpty())
+    }
+
+    @Test
+    fun immediateNotAllowedByPlayFallsBackToFlexible() = runTest {
+        onboarded()
+        config.minSupported = 11L
+        fake.setUpdateAvailable(11, AppUpdateType.FLEXIBLE)
+        val job = resumeUntilPrompt(controller(versionCode = 10L))
+        assertTrue(fake.isConfirmationDialogVisible)
+        assertFalse(fake.isImmediateFlowVisible)
+        fake.userAcceptsUpdate()
+        pump(job)
+        assertEquals(listOf("flexible" to "accepted"), events())
+    }
+
+    @Test
+    fun restartWhenCompleteUpdateFailsDoesNotCrash() = runTest {
+        manager.completeFails = true
+        controller().restart()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+    }
+
+    @Test
+    fun inProgressImmediateResumesWithinTheDayWithoutAPromptEvent() = runTest {
+        onboarded()
+        config.minSupported = 11L
+        fake.setUpdateAvailable(11)
+        val c = controller(versionCode = 10L)
+        // The forced update screen is up; the app dies or the user backs out before Play answers: no event, no stamp.
+        val first = resumeUntilPrompt(c)
+        assertTrue(fake.isImmediateFlowVisible)
+        fake.userAcceptsUpdate() // Play now reports DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS
+        first.cancelAndJoin()
+        assertEquals(1, manager.flowStarts)
+        assertTrue(events.isEmpty())
+        // The next resume, a minute later and well inside 24 h, resumes the same immediate flow.
+        now += 60_000L
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { c.onHomeResumed(activity, EntrySource.RESUME) }
+        pump(job)
+        assertEquals(2, manager.flowStarts)
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun downloadedFlexibleAfterProcessRestartSetsReadyToRestartWithoutAPromptEvent() = runTest {
+        onboarded()
+        fake.setUpdateAvailable(11)
+        val before = controller()
+        val job = resumeUntilPrompt(before)
+        fake.userAcceptsUpdate()
+        pump(job)
+        val promptEvents = events.size
+        fake.downloadStarts()
+        fake.downloadCompletes()
+        // "Process restart": a new controller with no listener; the stamp is fresh (within 24 h).
+        now += 60_000L
+        val after = controller()
+        assertFalse(after.readyToRestart.value)
+        val job2 = launch(start = CoroutineStart.UNDISPATCHED) { after.onHomeResumed(activity, EntrySource.LAUNCHER) }
+        pump(job2)
+        assertTrue(after.readyToRestart.value)
+        assertEquals(promptEvents, events.size)
     }
 }

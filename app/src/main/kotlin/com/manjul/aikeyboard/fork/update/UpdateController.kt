@@ -88,7 +88,8 @@ class UpdateController(
         val state = settings.flow.first()
         if (!state.onboardingDone) return
         val now = clock()
-        if (state.updateCheckedAt > 0L && now - state.updateCheckedAt < CHECK_INTERVAL_MS) return
+        // One info call per unblocked resume. The 24 h limit below applies to new prompts only, so an interrupted
+        // IMMEDIATE update or a download that survived process death is picked up on the very next Home resume.
         val info = try {
             manager.requestAppUpdateInfo()
         } catch (e: CancellationException) {
@@ -99,13 +100,22 @@ class UpdateController(
         }
         if (info.installStatus() == InstallStatus.DOWNLOADED) {
             _readyToRestart.value = true
-            stamp(now)
             return
         }
         val available = info.updateAvailability()
-        if (available != UpdateAvailability.UPDATE_AVAILABLE &&
-            available != UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS
-        ) {
+        if (available == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) {
+            // Resume an interrupted IMMEDIATE flow. It is not a new prompt: no update_prompt event, no stamp.
+            // Play's documented recovery: this availability with no flexible download running is an interrupted
+            // IMMEDIATE update, so start the immediate flow again.
+            // A flexible download in progress (DOWNLOADING) is left alone. Play does not list IMMEDIATE as "allowed"
+            // while it is already running, so the flow is started without that check.
+            if (info.installStatus() != InstallStatus.DOWNLOADING) {
+                startFlow(info, activity, AppUpdateType.IMMEDIATE)
+            }
+            return
+        }
+        if (state.updateCheckedAt > 0L && now - state.updateCheckedAt < CHECK_INTERVAL_MS) return
+        if (available != UpdateAvailability.UPDATE_AVAILABLE) {
             stamp(now)
             return
         }
@@ -126,24 +136,27 @@ class UpdateController(
     }
 
     private suspend fun startFlow(info: AppUpdateInfo, activity: Activity, type: Int): UpdateResultParam {
+        var accepted = false
         if (type == AppUpdateType.FLEXIBLE) manager.registerListener(installListener)
-        val code = try {
-            manager.startUpdateFlow(info, activity, AppUpdateOptions.newBuilder(type).build()).await()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "update flow failed: ${e.javaClass.simpleName}")
-            null
+        try {
+            val code = try {
+                manager.startUpdateFlow(info, activity, AppUpdateOptions.newBuilder(type).build()).await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "update flow failed: ${e.javaClass.simpleName}")
+                null
+            }
+            val result = when (code) {
+                Activity.RESULT_OK -> UpdateResultParam.ACCEPTED
+                Activity.RESULT_CANCELED -> UpdateResultParam.DECLINED
+                else -> UpdateResultParam.FAILED
+            }
+            accepted = result == UpdateResultParam.ACCEPTED
+            return result
+        } finally {
+            if (type == AppUpdateType.FLEXIBLE && !accepted) manager.unregisterListener(installListener)
         }
-        val result = when (code) {
-            Activity.RESULT_OK -> UpdateResultParam.ACCEPTED
-            Activity.RESULT_CANCELED -> UpdateResultParam.DECLINED
-            else -> UpdateResultParam.FAILED
-        }
-        if (type == AppUpdateType.FLEXIBLE && result != UpdateResultParam.ACCEPTED) {
-            manager.unregisterListener(installListener)
-        }
-        return result
     }
 
     /** Installs the downloaded FLEXIBLE update. The app restarts. */
