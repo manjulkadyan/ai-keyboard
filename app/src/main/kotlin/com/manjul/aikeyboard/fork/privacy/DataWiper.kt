@@ -131,7 +131,10 @@ class DataWiper(
         private suspend fun deleteModels(app: Context) {
             val whisper = app.whisperVoice().value
             // The model manager may only be built when this build serves Whisper (see WhisperVoice).
-            if (whisper.gate.anyEnabled) WhisperModelSpec.entries.forEach(whisper.models::delete)
+            // delete() removes files; the wipe is driven from the main thread.
+            if (whisper.gate.anyEnabled) {
+                withContext(Dispatchers.IO) { WhisperModelSpec.entries.forEach(whisper.models::delete) }
+            }
             val store = app.translateModelStore().value
             store.refresh()
             // English is the pivot: it can be deleted only after every other language.
