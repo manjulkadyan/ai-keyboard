@@ -27,6 +27,10 @@ pluginManagement {
         mavenCentral()
     }
 }
+// FORK(S4-build): foojay resolver so Gradle can provision the pinned JDK 17 daemon and toolchains
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
 
 dependencyResolutionManagement {
     repositories {

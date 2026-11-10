@@ -190,7 +190,7 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `gradle/libs.versions.toml` | S4-update | `app-update` version (2.1.0) and `play-app-update-ktx` library, inside the `# --- AI Keyboard ---` blocks |
 | `app/build.gradle.kts` | S4-update | `implementation(libs.play.app.update.ktx)`: Play in-app update, used by `fork/update` |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S4-update | Home composes `fork/update/HomeUpdatePrompt`: the update check on resume (with the ad entry source from `AdsAppGraph.currentEntry`) and the "Restart" snackbar. Already on the `ImeAdIsolationTest.AD_HOST_CALLERS` list |
-| `settings.gradle.kts` | S4-perf | `include(":benchmark")` (was commented out upstream) |
+| `settings.gradle.kts` | S4-perf, S4-build | `include(":benchmark")` (was commented out upstream); S4-build: `plugins { id("org.gradle.toolchains.foojay-resolver-convention") }` 1.0.0, the foojay toolchain resolver, so Gradle can provision the pinned JDK 17 daemon (`gradle/gradle-daemon-jvm.properties`) and toolchains |
 | `benchmark/build.gradle.kts` | S4-perf | SDK levels from `gradle.properties` (`projectCompileSdk`, `projectMinSdk`, `projectTargetSdk`), Java and Kotlin JVM target 11 through `compilerOptions` (the removed `kotlinOptions` block no longer compiles) |
 | `benchmark/src/main/AndroidManifest.xml` | S4-perf | Declares the exported `ImeHostActivity` (a text field for `ImeShowBenchmark`). Was an empty `<manifest/>` |
 | `benchmark/src/main/kotlin/com/manjul/aikeyboard/benchmark/StartupBenchmark.kt` | S4-perf | `TARGET_PACKAGE` and `IME_ID` constants shared with the new benchmarks. The TRD §6.4 cold start budget in the KDoc |
