@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Looper
 import android.provider.Settings
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
@@ -63,6 +64,14 @@ class MicPermissionActivityTest {
 
     private fun launch(): ActivityScenario<MicPermissionActivity> {
         val scenario = ActivityScenario.launch<MicPermissionActivity>(MicPermissionActivity.intent(app, "en-US"))
+        idle()
+        // onCreate picks the first screen only after the store read on Dispatchers.IO. Draining the main looper does
+        // not wait for that, so wait until the activity has finished, asked for the permission or shown the notice.
+        compose.waitUntil(timeoutMillis = 5_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            scenario.isFinishing() || scenario.requestedPermissions() != null ||
+                compose.onAllNodesWithText(NOTICE_TITLE).fetchSemanticsNodes().isNotEmpty()
+        }
         idle()
         return scenario
     }
@@ -233,5 +242,6 @@ class MicPermissionActivityTest {
     private companion object {
         /** PackageManager.ACTION_REQUEST_PERMISSIONS, which is hidden API. */
         const val ACTION_REQUEST_PERMISSIONS = "android.content.pm.action.REQUEST_PERMISSIONS"
+        const val NOTICE_TITLE = "Before you speak"
     }
 }
