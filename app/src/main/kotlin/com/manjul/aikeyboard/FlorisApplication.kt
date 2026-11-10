@@ -122,6 +122,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
         FirebaseGraph(
             context = this,
             optOut = { featureSettingsStore.value.current.analyticsOptOut },
+            // FORK(S4-rc): no Firebase Analytics call before the UMP result granted analytics_storage (I-1)
+            analyticsAllowed = { featureSettingsStore.value.current.analyticsAllowed },
             fallbackSink = if (BuildConfig.DEBUG) LogcatSink else NoopSink,
         )
     }
@@ -226,10 +228,15 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
 
     fun init() {
         featureSettingsStore.value // FORK(S1-policy): start loading the fork settings at process start
-        // FORK(S4-rc): an opt-out change turns Analytics and Crashlytics collection off (or back on) at once
+        // FORK(S4-rc): an opt-out change turns Crashlytics collection off (or back on) at once
         scope.launch {
             featureSettingsStore.value.flow.map { it.analyticsOptOut }.distinctUntilChanged().drop(1)
                 .collect { firebaseGraph.value.onOptOutChanged(it) }
+        }
+        // FORK(S4-rc): losing Analytics consent or opting out turns Analytics collection off at once (I-1)
+        scope.launch {
+            featureSettingsStore.value.flow.map { it.analyticsAllowed }.distinctUntilChanged().drop(1)
+                .collect { firebaseGraph.value.onAnalyticsAllowedChanged(it) }
         }
         cacheDir?.deleteContentsRecursively()
         scope.launch {

@@ -5,6 +5,7 @@
 
 package com.manjul.aikeyboard.isolation
 
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
@@ -26,6 +27,10 @@ import org.junit.runner.RunWith
  * start. (`am force-stop` on the app would kill this test, because the instrumentation runs in the app process.)
  * The test enables and selects the keyboard, opens a text field in the test APK's own process and types for 30 s.
  * Then no GMA class is loaded in the app process and the package declares no GMA provider.
+ *
+ * I-1 (S4 final review): on a fresh install no Analytics consent is stored, so the same session must not start the
+ * default FirebaseApp (Analytics, Crashlytics and Remote Config use it). `FirebaseApp` is read through reflection,
+ * because Firebase is not on the `:app` compile classpath.
  */
 @RunWith(AndroidJUnit4::class)
 class ImeOnlyColdStartTest {
@@ -86,10 +91,19 @@ class ImeOnlyColdStartTest {
             .map { it.name }
             .filter { it.startsWith("com.google.android.gms.ads.") || it.endsWith(".MobileAdsInitProvider") }
         assertEquals(emptyList<String>(), providers)
+        assertTrue("The default FirebaseApp started before consent", !hasDefaultFirebaseApp())
+    }
+
+    private fun hasDefaultFirebaseApp(): Boolean {
+        if (!isLoaded(FIREBASE_APP)) return false
+        val firebaseApp = Class.forName(FIREBASE_APP, false, app.classLoader)
+        val apps = firebaseApp.getMethod("getApps", Context::class.java).invoke(null, app) as List<*>
+        return apps.any { firebaseApp.getMethod("getName").invoke(it) == "[DEFAULT]" }
     }
 
     private companion object {
         const val TYPING_MS = 30_000L
+        const val FIREBASE_APP = "com.google.firebase.FirebaseApp"
         val GMA_CLASSES = listOf(
             "com.google.android.gms.ads.MobileAds",
             "com.manjul.aikeyboard.core.ads.gma.GoogleMobileAdsFacade",

@@ -59,6 +59,11 @@ class ManifestAnalyticsDefaultsTest {
             "firebase_analytics_collection_enabled",
             "google_analytics_adid_collection_enabled",
             "firebase_crashlytics_collection_enabled",
+            // I-1: Consent Mode v2 defaults are denied until the UMP result sets them
+            "google_analytics_default_allow_analytics_storage",
+            "google_analytics_default_allow_ad_storage",
+            "google_analytics_default_allow_ad_user_data",
+            "google_analytics_default_allow_ad_personalization_signals",
         )
     }
 }

@@ -104,7 +104,17 @@ data class FeatureSettings(
     val aiDefaultTone: String = DEFAULT_AI_TONE,
     /** When the user agreed to cloud translation (`consent_cloud_translate`, RN-09); 0 = no consent. */
     val consentCloudTranslateAt: Long = 0L,
+    /**
+     * When the last UMP result granted `analytics_storage` (epoch ms); 0 = no Analytics consent known. Firebase
+     * Analytics gets no event, and is never started for one, while this is 0 (S4 decision 17, TRD §4.14 "Consent").
+     * Set and cleared only by the app's ads stack from the UMP result. Pro and ads-off users never run UMP, so they
+     * stay at 0 (treated as "consent required, denied").
+     */
+    val analyticsConsentAt: Long = 0L,
 ) {
+    /** Firebase Analytics may collect: Analytics consent is known and the user did not opt out. */
+    val analyticsAllowed: Boolean get() = analyticsConsentAt > 0L && !analyticsOptOut
+
     /** True while any AI consent is on record, so Settings can offer to withdraw it. */
     val hasAnyAiConsent: Boolean get() = consentAiAt > 0L || consentAutoPolishAt > 0L
 

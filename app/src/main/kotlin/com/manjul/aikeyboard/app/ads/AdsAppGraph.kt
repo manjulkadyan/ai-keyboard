@@ -34,6 +34,7 @@ import com.manjul.aikeyboard.core.ads.rules.AdUnitIds
 import com.manjul.aikeyboard.core.common.NonFatalReporter
 import com.manjul.aikeyboard.core.common.entry.EntrySource
 import com.manjul.aikeyboard.core.config.ConfigKeys
+import com.manjul.aikeyboard.core.datastore.FeatureSettings
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.firebaseGraph
 import com.manjul.aikeyboard.fork.billing.proGate
@@ -209,7 +210,11 @@ class AdsAppGraph(private val app: Application) {
 
     private fun adsAllowed(): Boolean = !isPro() && firebase.remoteConfig.bool(ConfigKeys.ADS_ENABLED_GLOBAL)
 
-    /** Consent Mode v2 for Analytics from the UMP result and the TCF strings UMP stored (TRD §4.11). */
+    /**
+     * Consent Mode v2 for Analytics from the UMP result and the TCF strings UMP stored (TRD §4.11), and the stored
+     * Analytics consent that gates every Firebase Analytics event (I-1, TRD §4.14 "Consent"): set when
+     * `analytics_storage` is granted, cleared when it is denied.
+     */
     private fun onConsent(result: ConsentResult) {
         val signals = ConsentModeSignals.read(app, result.canRequestAds)
         firebase.setConsentMode(
@@ -218,10 +223,22 @@ class AdsAppGraph(private val app: Application) {
             adPersonalization = signals.adPersonalization,
             analyticsStorage = signals.analyticsStorage,
         )
+        scope.launch {
+            settings.update { analyticsConsentFrom(it, signals.analyticsStorage, System.currentTimeMillis()) }
+            firebase.syncAnalyticsCollection()
+        }
     }
 
     companion object {
         private const val SAVED_STATE_KEY = AdEntryTracker.SAVED_STATE_KEY
+
+        /** [old] with the Analytics consent of one UMP result: the first grant time is kept, a denial clears it. */
+        internal fun analyticsConsentFrom(old: FeatureSettings, analyticsStorage: Boolean, now: Long): FeatureSettings =
+            when {
+                !analyticsStorage -> old.copy(analyticsConsentAt = 0L)
+                old.analyticsConsentAt > 0L -> old
+                else -> old.copy(analyticsConsentAt = now)
+            }
 
         @Volatile
         private var instance: AdsAppGraph? = null

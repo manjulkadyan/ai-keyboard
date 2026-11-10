@@ -31,18 +31,20 @@ import kotlinx.coroutines.launch
  * Creating it does not start Firebase: each SDK starts on its first use, and only when Firebase options are set.
  *
  * - [remoteConfig] reads the IME mirror. The IME and the app both read it; only [onAppActivityCreated] writes it.
- * - [analyticsSink] sends to Firebase Analytics only when Firebase is configured and the user did not opt out.
+ * - [analyticsSink] sends to Firebase Analytics only when Firebase is configured and [analyticsAllowed] is true:
+ *   the UMP result granted `analytics_storage` and the user did not opt out (`FeatureSettings.analyticsAllowed`).
+ *   Before that it never touches FirebaseApp, so an IME-only cold start before consent starts no Firebase SDK.
  * - [reporter] sends non-fatal errors to Crashlytics (class name and stack only).
  */
-class FirebaseGraph(context: Context, private val optOut: () -> Boolean, fallbackSink: AnalyticsSink) {
+class FirebaseGraph(
+    context: Context,
+    private val optOut: () -> Boolean,
+    private val analyticsAllowed: () -> Boolean,
+    fallbackSink: AnalyticsSink,
+    val firebaseConfig: FirebaseConfig = buildConfigFirebase(),
+) {
     private val appContext = context.applicationContext
 
-    val firebaseConfig = FirebaseConfig(
-        projectId = BuildConfig.FIREBASE_PROJECT_ID,
-        appId = BuildConfig.FIREBASE_APP_ID,
-        apiKey = BuildConfig.FIREBASE_API_KEY,
-        projectNumber = BuildConfig.FIREBASE_PROJECT_NUMBER,
-    )
     val bootstrap = FirebaseBootstrap(appContext, firebaseConfig)
     val mirror = RemoteConfigMirror(appContext)
     val remoteConfig: RemoteConfig = MirroredRemoteConfig(mirror)
@@ -53,7 +55,8 @@ class FirebaseGraph(context: Context, private val optOut: () -> Boolean, fallbac
 
     private val firebaseSink: FirebaseAnalyticsSink? =
         if (firebaseConfig.isConfigured) FirebaseAnalyticsSink(appContext, bootstrap, reporter) else null
-    val analyticsSink = AnalyticsSinkSelector(firebaseSink, fallbackSink, optOut, { firebaseSink?.setCollection(it) })
+    val analyticsSink =
+        AnalyticsSinkSelector(firebaseSink, fallbackSink, analyticsAllowed, { firebaseSink?.setCollection(it) })
 
     private val rcSource by lazy {
         FirebaseRemoteConfigSource(bootstrap, mirror, BuildConfig.DEBUG, R.xml.remote_config_defaults, reporter)
@@ -72,6 +75,8 @@ class FirebaseGraph(context: Context, private val optOut: () -> Boolean, fallbac
             owner.lifecycleScope.launch {
                 rcSource.activateAndMirror()
                 startCrashlytics()
+                // Remote Config started the default app; turn off a collection flag an earlier process persisted.
+                syncAnalyticsCollection()
             }
             firstFrame(Runnable { rcSource.fetchInBackground() })
         }
@@ -99,10 +104,22 @@ class FirebaseGraph(context: Context, private val optOut: () -> Boolean, fallbac
         firebaseSink?.setConsent(adStorage, adUserData, adPersonalization, analyticsStorage)
     }
 
-    /** Applies a change of the analytics opt-out to Analytics and Crashlytics collection. */
+    /** Applies a change of the analytics opt-out to Crashlytics collection. */
     fun onOptOutChanged(optedOut: Boolean) {
-        analyticsSink.onOptOutChanged(optedOut)
         if (crashlyticsStarted.get()) crashlytics?.setCollection(!optedOut)
+    }
+
+    /**
+     * App process only (an app Activity start or a UMP result), where the default app may already run: while
+     * [analyticsAllowed] is false, turns Analytics collection off, also a flag that an earlier process persisted.
+     */
+    fun syncAnalyticsCollection() {
+        if (firebaseConfig.isConfigured) analyticsSink.syncWhenDisallowed()
+    }
+
+    /** Applies a change of [analyticsAllowed] (Analytics consent and the opt-out) to Analytics collection. */
+    fun onAnalyticsAllowedChanged(allowed: Boolean) {
+        analyticsSink.onAllowedChanged(allowed)
     }
 
     private fun startCrashlytics() {
@@ -113,15 +130,25 @@ class FirebaseGraph(context: Context, private val optOut: () -> Boolean, fallbac
     }
 }
 
+/** The Firebase options from the `aikb.firebase.*` Gradle properties (empty by default). */
+private fun buildConfigFirebase() = FirebaseConfig(
+    projectId = BuildConfig.FIREBASE_PROJECT_ID,
+    appId = BuildConfig.FIREBASE_APP_ID,
+    apiKey = BuildConfig.FIREBASE_API_KEY,
+    projectNumber = BuildConfig.FIREBASE_PROJECT_NUMBER,
+)
+
 /**
- * Picks the analytics sink per event: Firebase when it exists and the user did not opt out, else [fallback]
- * (Logcat in debug, no-op in release). Collection is turned on lazily before the first Firebase event, and off at
- * once when the user opts out (the SDK keeps that setting across launches).
+ * Picks the analytics sink per event: Firebase when it exists and [allowed] is true (Analytics consent is known and
+ * the user did not opt out), else [fallback] (Logcat in debug, no-op in release). While [allowed] is false the
+ * Firebase sink gets no call at all, so FirebaseApp is never started for analytics before consent. Collection is
+ * turned on lazily before the first Firebase event, and off at once when [allowed] turns false (the SDK keeps that
+ * setting across launches).
  */
 class AnalyticsSinkSelector(
     private val firebase: AnalyticsSink?,
     private val fallback: AnalyticsSink,
-    private val optOut: () -> Boolean,
+    private val allowed: () -> Boolean,
     private val setCollection: (Boolean) -> Unit,
 ) : AnalyticsSink {
     private val lock = Any()
@@ -129,7 +156,7 @@ class AnalyticsSinkSelector(
 
     override fun log(event: AnalyticsEvent) {
         val sink = firebase
-        if (sink == null || optOut()) {
+        if (sink == null || !allowed()) {
             fallback.log(event)
             return
         }
@@ -139,12 +166,25 @@ class AnalyticsSinkSelector(
 
     override fun setUserProperty(name: String, value: String?) {
         val sink = firebase
-        if (sink == null || optOut()) fallback.setUserProperty(name, value) else sink.setUserProperty(name, value)
+        if (sink == null || !allowed()) fallback.setUserProperty(name, value) else sink.setUserProperty(name, value)
     }
 
-    fun onOptOutChanged(optedOut: Boolean) {
+    /**
+     * Turns collection off when this process turned it on and [allowed] became false, and back on when it was
+     * turned off here. Never starts Firebase only to keep it off.
+     */
+    fun onAllowedChanged(allowed: Boolean) {
         if (firebase == null) return
-        if (optedOut) apply(false) else if (synchronized(lock) { collecting == false }) apply(true)
+        val state = synchronized(lock) { collecting }
+        if (!allowed && state == true) apply(false) else if (allowed && state == false) apply(true)
+    }
+
+    /**
+     * For the app Activity start, where Remote Config already started the default app: while [allowed] is false,
+     * turns off a collection flag that an earlier process persisted.
+     */
+    fun syncWhenDisallowed() {
+        if (firebase != null && !allowed()) apply(false)
     }
 
     private fun apply(enabled: Boolean) {

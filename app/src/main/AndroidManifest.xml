@@ -227,6 +227,11 @@
         <meta-data android:name="firebase_analytics_collection_enabled" android:value="false"/>
         <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false"/>
         <meta-data android:name="firebase_crashlytics_collection_enabled" android:value="false"/>
+        <!-- FORK(S4-rc): Consent Mode v2 defaults are denied until the UMP result sets them (I-1, TRD §4.14) -->
+        <meta-data android:name="google_analytics_default_allow_analytics_storage" android:value="false"/>
+        <meta-data android:name="google_analytics_default_allow_ad_storage" android:value="false"/>
+        <meta-data android:name="google_analytics_default_allow_ad_user_data" android:value="false"/>
+        <meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false"/>
 
         <!-- FORK(S3-net): Firebase never starts with the process (TRD §2.3). :core:firebase initialises its own
              FirebaseApp on the first AI request, and only when Firebase options are configured (decision 6).

@@ -87,6 +87,7 @@ class FeatureSettingsStore(
                 consentAutoPolishAt = new.consentAutoPolishAt.coerceAtLeast(0L),
                 consentCloudTranslateAt = new.consentCloudTranslateAt.coerceAtLeast(0L),
                 consentVoiceNoticeAt = new.consentVoiceNoticeAt.coerceAtLeast(0L),
+                analyticsConsentAt = new.analyticsConsentAt.coerceAtLeast(0L),
                 paywallOnboardingShownAt = new.paywallOnboardingShownAt.coerceAtLeast(0L),
                 winBackShownCount = new.winBackShownCount.coerceAtLeast(0),
                 winBackLastShownAt = new.winBackLastShownAt.coerceAtLeast(0L),
