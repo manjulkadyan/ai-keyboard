@@ -143,6 +143,9 @@ Then do these steps:
 
 If one of the four `aikb.signing.*` values is missing, the build signs with the debug key. Play refuses that bundle.
 If `aikb.entitlement.publicKey` or `aikb.admob.appId` is missing, `bundleRelease` fails.
+The beta build type has no such check. Without `aikb.entitlement.publicKey` a beta build fails closed: it trusts
+no Pro cache, so every user stays free. Without `aikb.admob.appId` it uses Google's sample AdMob app id, which
+serves only test ads. Set both values before you hand a beta build to testers who need Pro or real ads.
 
 The Crashlytics Gradle plugin does not upload the R8 mapping file, because the build has no Google Services plugin.
 Each build writes a new random mapping file id into the bundle. Crashlytics uses this id to find the mapping file.

@@ -402,6 +402,8 @@ dependencies {
     implementation(projects.core.firebase)
     implementation(libs.play.app.update.ktx) // FORK(S4-update): Play in-app update
     implementation(projects.ime.aiUi) // FORK(S3-ai): the in-keyboard AI rewrite sheet and its controller
+    // FORK(S4-themes): the presets behind the Themes screen and the premium guard
+    implementation(projects.core.theme)
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)
@@ -413,8 +415,6 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(testFixtures(projects.core.ai)) // FORK(S3-ai): FakeAiEngine, FakeTokenSource
-    // FORK(S4-themes): the presets behind the Themes screen and the premium guard
-    implementation(projects.core.theme)
     testRuntimeOnly(libs.junit.vintage.engine)
     // FORK(S1-onboarding): onboarding view model and screen tests
     testImplementation(libs.turbine)

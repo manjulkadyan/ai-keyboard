@@ -21,6 +21,7 @@ import com.manjul.aikeyboard.firebaseGraph
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFileStorage
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFilesDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
+import com.manjul.aikeyboard.ime.dictionary.DictionaryManager
 import com.manjul.aikeyboard.ime.dictionary.FlorisUserDictionaryDatabase
 import com.manjul.aikeyboard.translateModelStore
 import com.manjul.aikeyboard.translationHistory
@@ -110,11 +111,15 @@ class DataWiper(
         /**
          * Empties the upstream FlorisBoard user dictionary (`floris_user_dictionary`). `DictionaryManager` opens it
          * only once its screen or the IME loaded it, and only while `enableFlorisUserDictionary` is on, so this
-         * opens the database file on its own, whatever that setting is. It shares the SQLite file with a loaded
-         * instance, so the IME sees the empty table. Without a database file there is nothing to clear.
+         * opens the database file on its own, whatever that setting is. Without a database file there is nothing to
+         * clear. When `DictionaryManager` has it loaded, the delete goes through that instance, so Room's
+         * invalidation tracker tells its observers at once (final review M-3); a second instance would not.
          */
         internal suspend fun clearFlorisUserDictionary(app: Context) = withContext(Dispatchers.IO) {
             if (!app.getDatabasePath(FlorisUserDictionaryDatabase.DB_FILE_NAME).exists()) return@withContext
+            // A missing manager, or an instance closed meanwhile, falls back to a short-lived instance below.
+            val loaded = runCatching { DictionaryManager.default().florisUserDictionaryDatabase() }.getOrNull()
+            if (loaded != null && runCatching { loaded.userDictionaryDao().deleteAll() }.isSuccess) return@withContext
             val db = Room.databaseBuilder(
                 app,
                 FlorisUserDictionaryDatabase::class.java,

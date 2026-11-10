@@ -66,7 +66,9 @@ class DeleteDataViewModel(
             val client = account()
             val result = client?.delete(AccountClient.newRequestId())
             if (result != AccountResult.Deleted) {
-                Log.e(TAG, "account delete failed: ${(result as? AccountResult.Err)?.error ?: "no client"}")
+                // The error's class name only, so the message stays stable (final review M-6).
+                val reason = (result as? AccountResult.Err)?.error?.let { it::class.simpleName } ?: "no client"
+                Log.e(TAG, "account delete failed: $reason")
                 _state.value = DeleteDataState.Failed
                 return@launch
             }

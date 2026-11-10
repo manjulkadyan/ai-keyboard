@@ -76,6 +76,25 @@ class ImeAdIsolationTest {
                 "S4 Task 7: the native_history slot as the last list item. Activity screen only.",
         )
 
+        /**
+         * Final review M-2: files under `fork/` (relative to the `:app` Kotlin source root) that may use billing. The
+         * IME loads fork code (`ProGate`, `PremiumThemeGuard`, the sessions), so every other fork file is scanned.
+         * Only app-process screens and graphs that the IME never loads belong here; each entry needs a reason.
+         */
+        val BILLING_FORK_FILES: Map<String, String> = mapOf(
+            "com/manjul/aikeyboard/fork/billing/BillingAppGraph.kt" to "S4 Task 2: the app-process billing graph.",
+            "com/manjul/aikeyboard/fork/billing/FixPaymentBanner.kt" to "S4 Task 11: a Settings banner, app only.",
+            "com/manjul/aikeyboard/fork/billing/PlayLinks.kt" to "S4 Task 11: Play subscription links, app only.",
+            "com/manjul/aikeyboard/fork/paywall/PaywallScreen.kt" to "S4 Task 5: the paywall screen, app only.",
+            "com/manjul/aikeyboard/fork/paywall/PaywallViewModel.kt" to "S4 Task 5: the paywall state, app only.",
+            "com/manjul/aikeyboard/fork/paywall/PaywallTrigger.kt" to "S4 Task 5: paywall triggers, app only.",
+            "com/manjul/aikeyboard/fork/paywall/PaywallFrequency.kt" to "S4 Task 5: paywall caps, app only.",
+            "com/manjul/aikeyboard/fork/settings/SubscriptionSettingsScreen.kt" to
+                "S4 Task 11: Settings → Subscription, app only.",
+            "com/manjul/aikeyboard/fork/privacy/DeleteDataViewModel.kt" to
+                "S4 Task 12: Delete my data refreshes the entitlement, app only.",
+        )
+
         /** Root-package files that start with, or are part of, the IME process start. */
         val IME_ROOT_FILES = listOf("FlorisImeService.kt", "FlorisSpellCheckerService.kt", "FlorisApplication.kt")
 
@@ -244,6 +263,19 @@ class ImeAdIsolationTest {
     fun `ime code does not reference play billing or core billing`() {
         val found = violations(imeScopeFiles(), BILLING_PACKAGES)
         assertEquals(emptyList<String>(), found, "IME code must not use billing code (S4 plan, TRD §2.2)")
+    }
+
+    @Test
+    fun `fork code outside the billing allow-list does not reference play billing or core billing`() {
+        val forkRoot = File(appPackageRoot, "fork")
+        val files = forkRoot.kotlinAndJava()
+        assertTrue(files.size > 80, "Scanned only ${files.size} fork files")
+        val paths = files.map { it.relativeTo(appSourceRoot).invariantSeparatorsPath }.toSet()
+        assertEquals(emptySet<String>(), BILLING_FORK_FILES.keys - paths, "BILLING_FORK_FILES entries that no longer exist")
+        val scanned = files.filterNot { it.relativeTo(appSourceRoot).invariantSeparatorsPath in BILLING_FORK_FILES }
+        assertTrue(scanned.any { it.name == "ProGate.kt" } && scanned.any { it.name == "PremiumThemeGuard.kt" })
+        val found = violations(scanned, BILLING_PACKAGES)
+        assertEquals(emptyList<String>(), found, "Billing code in fork/ belongs in $BILLING_FORK_FILES (S4 plan)")
     }
 
     @Test
