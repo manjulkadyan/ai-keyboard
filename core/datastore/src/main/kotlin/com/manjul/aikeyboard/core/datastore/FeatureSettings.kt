@@ -107,8 +107,9 @@ data class FeatureSettings(
     /**
      * When the last UMP result granted `analytics_storage` (epoch ms); 0 = no Analytics consent known. Firebase
      * Analytics gets no event, and is never started for one, while this is 0 (S4 decision 17, TRD §4.14 "Consent").
-     * Set and cleared only by the app's ads stack from the UMP result. Pro and ads-off users never run UMP, so they
-     * stay at 0 (treated as "consent required, denied").
+     * Set and cleared only by the app's ads stack from the UMP result. Pro and ads-off users never run UMP, so the
+     * value does not change while they stay Pro: a user who never consented stays at 0 (treated as "consent
+     * required, denied"), and a user who consented before becoming Pro keeps the old timestamp.
      */
     val analyticsConsentAt: Long = 0L,
 ) {

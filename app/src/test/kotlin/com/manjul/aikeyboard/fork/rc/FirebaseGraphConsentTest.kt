@@ -17,6 +17,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -69,6 +70,30 @@ class FirebaseGraphConsentTest {
 
         assertEquals(listOf("ime_session_start"), fallback.events)
         assertEquals(emptyList<Any?>(), apps())
+        assertFalse(graph.isAnalyticsRunning())
+    }
+
+    @Test
+    fun `an opt-out after the UMP result started Analytics turns collection off before any event`() {
+        // A consented free user on a cold start: UMP sets Consent Mode, which starts Firebase Analytics with the
+        // collection flag an earlier process persisted. The relay has sent nothing yet.
+        var allowed = true
+        val collection = mutableListOf<Boolean>()
+        val graph = FirebaseGraph(
+            context,
+            optOut = { !allowed },
+            analyticsAllowed = { allowed },
+            fallbackSink = Recorder(),
+            firebaseConfig = configured,
+            onCollectionSet = { collection += it },
+        )
+        graph.setConsentMode(adStorage = true, adUserData = true, adPersonalization = true, analyticsStorage = true)
+        assertTrue(graph.isAnalyticsRunning())
+
+        allowed = false
+        graph.onAnalyticsAllowedChanged(false)
+
+        assertEquals(listOf(false), collection)
     }
 
     @Test

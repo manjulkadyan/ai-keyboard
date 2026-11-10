@@ -64,6 +64,13 @@ class FirebaseBootstrap(context: Context, private val config: FirebaseConfig) {
         }
     }
 
+    /** True when the default FirebaseApp already exists in this process. Never creates it. */
+    fun isDefaultAppRunning(): Boolean {
+        if (!config.isConfigured) return false
+        if (defaultApp != null) return true
+        return FirebaseApp.getApps(appContext).any { it.name == FirebaseApp.DEFAULT_APP_NAME }
+    }
+
     private fun initializeDefault(): FirebaseApp {
         val existing = FirebaseApp.getApps(appContext).firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
         return existing ?: FirebaseApp.initializeApp(appContext, options())

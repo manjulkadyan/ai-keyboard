@@ -42,6 +42,8 @@ class FirebaseGraph(
     private val analyticsAllowed: () -> Boolean,
     fallbackSink: AnalyticsSink,
     val firebaseConfig: FirebaseConfig = buildConfigFirebase(),
+    /** Sees each Analytics collection change after it went to the SDK. For tests; the default does nothing. */
+    private val onCollectionSet: (Boolean) -> Unit = {},
 ) {
     private val appContext = context.applicationContext
 
@@ -55,8 +57,16 @@ class FirebaseGraph(
 
     private val firebaseSink: FirebaseAnalyticsSink? =
         if (firebaseConfig.isConfigured) FirebaseAnalyticsSink(appContext, bootstrap, reporter) else null
-    val analyticsSink =
-        AnalyticsSinkSelector(firebaseSink, fallbackSink, analyticsAllowed, { firebaseSink?.setCollection(it) })
+    val analyticsSink = AnalyticsSinkSelector(
+        firebase = firebaseSink,
+        fallback = fallbackSink,
+        allowed = analyticsAllowed,
+        firebaseRunning = ::isAnalyticsRunning,
+        setCollection = {
+            firebaseSink?.setCollection(it)
+            onCollectionSet(it)
+        },
+    )
 
     private val rcSource by lazy {
         FirebaseRemoteConfigSource(bootstrap, mirror, BuildConfig.DEBUG, R.xml.remote_config_defaults, reporter)
@@ -122,6 +132,12 @@ class FirebaseGraph(
         analyticsSink.onAllowedChanged(allowed)
     }
 
+    /**
+     * True when Firebase already runs in this process: the sink holds a `FirebaseAnalytics` instance (for example
+     * after [setConsentMode]) or the default app exists (Remote Config). Reading this never starts Firebase.
+     */
+    internal fun isAnalyticsRunning(): Boolean = firebaseSink?.isStarted == true || bootstrap.isDefaultAppRunning()
+
     private fun startCrashlytics() {
         val reporter = crashlytics ?: return
         if (!crashlyticsStarted.compareAndSet(false, true)) return
@@ -142,26 +158,25 @@ private fun buildConfigFirebase() = FirebaseConfig(
  * Picks the analytics sink per event: Firebase when it exists and [allowed] is true (Analytics consent is known and
  * the user did not opt out), else [fallback] (Logcat in debug, no-op in release). While [allowed] is false the
  * Firebase sink gets no call at all, so FirebaseApp is never started for analytics before consent. Collection is
- * turned on lazily before the first Firebase event, and off at once when [allowed] turns false (the SDK keeps that
- * setting across launches).
+ * turned on lazily before the first Firebase event, and off at once when [allowed] turns false while Firebase runs
+ * ([firebaseRunning]; the SDK keeps that setting across launches).
+ *
+ * One lock covers the [allowed] check in [log], every collection change and [onAllowedChanged], so an opt-out can
+ * never land between the check and turning collection on.
  */
 class AnalyticsSinkSelector(
     private val firebase: AnalyticsSink?,
     private val fallback: AnalyticsSink,
     private val allowed: () -> Boolean,
+    private val firebaseRunning: () -> Boolean,
     private val setCollection: (Boolean) -> Unit,
 ) : AnalyticsSink {
     private val lock = Any()
     private var collecting: Boolean? = null
 
     override fun log(event: AnalyticsEvent) {
-        val sink = firebase
-        if (sink == null || !allowed()) {
-            fallback.log(event)
-            return
-        }
-        apply(true)
-        sink.log(event)
+        val sink = firebase?.takeIf { synchronized(lock) { allowed().also { ok -> if (ok) apply(true) } } }
+        (sink ?: fallback).log(event)
     }
 
     override fun setUserProperty(name: String, value: String?) {
@@ -170,13 +185,19 @@ class AnalyticsSinkSelector(
     }
 
     /**
-     * Turns collection off when this process turned it on and [allowed] became false, and back on when it was
-     * turned off here. Never starts Firebase only to keep it off.
+     * On false, turns collection off whenever Firebase already runs: this process turned it on, or the UMP result
+     * (Consent Mode) or Remote Config started it, which keeps a flag that an earlier process persisted. On true,
+     * turns it back on only when it was turned off here. Never starts Firebase only to turn it off.
      */
     fun onAllowedChanged(allowed: Boolean) {
         if (firebase == null) return
-        val state = synchronized(lock) { collecting }
-        if (!allowed && state == true) apply(false) else if (allowed && state == false) apply(true)
+        synchronized(lock) {
+            if (!allowed && (collecting == true || firebaseRunning())) {
+                apply(false)
+            } else if (allowed && collecting == false) {
+                apply(true)
+            }
+        }
     }
 
     /**
@@ -184,13 +205,14 @@ class AnalyticsSinkSelector(
      * turns off a collection flag that an earlier process persisted.
      */
     fun syncWhenDisallowed() {
-        if (firebase != null && !allowed()) apply(false)
+        if (firebase == null) return
+        synchronized(lock) { if (!allowed()) apply(false) }
     }
 
-    private fun apply(enabled: Boolean) {
-        val changed = synchronized(lock) {
-            (collecting != enabled).also { collecting = enabled }
+    private fun apply(enabled: Boolean) = synchronized(lock) {
+        if (collecting != enabled) {
+            collecting = enabled
+            setCollection(enabled)
         }
-        if (changed) setCollection(enabled)
     }
 }

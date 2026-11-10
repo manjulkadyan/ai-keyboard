@@ -131,7 +131,8 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     // FORK(S1-analytics): batched, consent-aware analytics relay (Logcat in debug, no-op in release)
     val analytics = lazy {
         BatchingRelay(
-            // FORK(S4-rc): Firebase only when configured and not opted out, else Logcat (debug) or no-op
+            // FORK(S4-rc): Firebase only when configured, Analytics consent is known and not opted out, else
+            // Logcat (debug) or no-op
             sink = firebaseGraph.value.analyticsSink,
             clock = System::currentTimeMillis,
             scope = scope,

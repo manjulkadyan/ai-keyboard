@@ -27,6 +27,9 @@ class FirebaseAnalyticsSink(
 
     @Volatile private var instance: FirebaseAnalytics? = null
 
+    /** True once this sink holds a `FirebaseAnalytics` instance. Reading it never starts Firebase. */
+    val isStarted: Boolean get() = instance != null
+
     private fun analytics(): FirebaseAnalytics? {
         instance?.let { return it }
         bootstrap.defaultApp() ?: return null
