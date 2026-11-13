@@ -66,6 +66,8 @@ firebase-crashlytics-plugin = "3.0.8"
 billing = "9.1.0"
 # FORK(S4-update): Play In-App Updates (app-update-ktx 2.1.0)
 app-update = "2.1.0"
+# FORK(S5-content): SQLite JDBC for :tools:packbuild only (never in the APK; latest on Maven Central, checked 2026-11-14)
+sqlite-jdbc = "3.54.1.0"
 
 
 
@@ -166,6 +168,8 @@ firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
 billing-ktx = { module = "com.android.billingclient:billing-ktx", version.ref = "billing" }
 # FORK(S4-update): in-app update (flexible, and immediate when min_supported_version is above the installed build)
 play-app-update-ktx = { module = "com.google.android.play:app-update-ktx", version.ref = "app-update" }
+# FORK(S5-content): :tools:packbuild writes the dictionary pack and the phrasebook DB
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 
 
 

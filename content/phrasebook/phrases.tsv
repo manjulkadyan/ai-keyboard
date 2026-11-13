@@ -1,0 +1,37 @@
+category_key	sort	phrase_id	lang	text
+greetings	10	1	en	Hello, nice to meet you.
+greetings	10	2	en	Good morning!
+greetings	10	3	en	See you later.
+basics	20	4	en	Yes, please.
+basics	20	5	en	No, thank you.
+basics	20	6	en	I don't understand.
+directions	30	7	en	Where is the nearest station?
+directions	30	8	en	Is it far from here?
+directions	30	9	en	Please show me on the map.
+transport	40	10	en	One ticket to the city centre, please.
+transport	40	11	en	When does the next bus leave?
+transport	40	12	en	Please take me to this address.
+hotel	50	13	en	I have a reservation.
+hotel	50	14	en	What time is checkout?
+hotel	50	15	en	Can I leave my bags here?
+food	60	16	en	A table for two, please.
+food	60	17	en	Can I see the menu?
+food	60	18	en	The bill, please.
+shopping	70	19	en	How much does this cost?
+shopping	70	20	en	Do you take cards?
+shopping	70	21	en	I'm just looking, thanks.
+emergency	80	22	en	Please call an ambulance.
+emergency	80	23	en	I need a doctor.
+emergency	80	24	en	Where is the police station?
+health	90	25	en	I feel sick.
+health	90	26	en	Where is the pharmacy?
+health	90	27	en	I am allergic to nuts.
+numbers_time	100	28	en	What time is it?
+numbers_time	100	29	en	Can we meet at three?
+numbers_time	100	30	en	Just one minute, please.
+small_talk	110	31	en	Where are you from?
+small_talk	110	32	en	What do you do?
+small_talk	110	33	en	The weather is lovely today.
+phone_internet	120	34	en	What is the Wi-Fi password?
+phone_internet	120	35	en	Can I charge my phone here?
+phone_internet	120	36	en	My phone has no signal.

@@ -1,0 +1,52 @@
+{"word":"run","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To move quickly on foot, with both feet off the ground at times."],"examples":[{"text":"She runs to the bus stop every morning."}]},{"glosses":["To manage or be in charge of something."],"examples":[{"text":"He runs a small bakery."}]},{"glosses":["To work or operate."],"examples":[{"text":"The engine runs on electricity."}]},{"glosses":["To flow, as a liquid does."]}],"synonyms":[{"word":"sprint"},{"word":"jog"}]}
+{"word":"run","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["An act of running."],"examples":[{"text":"I went for a run before work."}]}],"synonyms":[{"word":"jog"}]}
+{"word":"walk","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To move on foot at a normal pace."],"examples":[{"text":"We walked to the park."}]}],"synonyms":[{"word":"stroll"}]}
+{"word":"walk","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A trip made on foot."],"examples":[{"text":"Let's take a walk after dinner."}]}]}
+{"word":"book","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A set of printed pages bound together."],"examples":[{"text":"I am reading a good book."}]}],"synonyms":[{"word":"volume"}]}
+{"word":"book","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To reserve a seat, room or ticket in advance."],"examples":[{"text":"We booked a table for two."}]}],"synonyms":[{"word":"reserve"}]}
+{"word":"light","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["The brightness that lets us see things."],"examples":[{"text":"The room gets a lot of light."}]}]}
+{"word":"light","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Not heavy."],"examples":[{"text":"This bag is light enough to carry."}]}]}
+{"word":"fast","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Moving or able to move quickly."],"examples":[{"text":"This is a fast train."}]}],"synonyms":[{"word":"quick"},{"word":"rapid"}]}
+{"word":"fast","lang":"English","lang_code":"en","pos":"adv","senses":[{"glosses":["At high speed."],"examples":[{"text":"Don't drive so fast."}]}],"synonyms":[{"word":"quickly"}]}
+{"word":"water","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["The clear liquid that falls as rain and fills rivers and seas."],"examples":[{"text":"Can I have a glass of water?"}]}]}
+{"word":"house","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A building where people live."],"examples":[{"text":"Their house has a red door."}]}],"synonyms":[{"word":"home"}]}
+{"word":"friend","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A person you know well and like."],"examples":[{"text":"She is my oldest friend."}]}],"synonyms":[{"word":"pal"}]}
+{"word":"happy","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Feeling or showing pleasure."],"examples":[{"text":"The children were happy to see snow."}]}],"synonyms":[{"word":"glad"},{"word":"cheerful"}]}
+{"word":"slow","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Taking a long time; not fast."],"examples":[{"text":"The queue was very slow."}]}]}
+{"word":"read","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To look at written words and understand them."],"examples":[{"text":"He reads the news on his phone."}]}]}
+{"word":"write","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To put words or letters on a surface or a screen."],"examples":[{"text":"Please write your name here."}]}]}
+{"word":"speak","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To say words aloud."],"examples":[{"text":"Do you speak French?"}]}],"synonyms":[{"word":"talk"}]}
+{"word":"listen","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To pay attention to a sound."],"examples":[{"text":"Listen to the music."}]}]}
+{"word":"open","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To move something so that it is no longer closed."],"examples":[{"text":"Open the window, please."}]}]}
+{"word":"open","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Not closed."],"examples":[{"text":"The shop is open until nine."}]}]}
+{"word":"close","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To move something so that it is no longer open."],"examples":[{"text":"Close the door behind you."}]}],"synonyms":[{"word":"shut"}]}
+{"word":"close","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Near in space or time."],"examples":[{"text":"The hotel is close to the station."}]}],"synonyms":[{"word":"near"}]}
+{"word":"keyboard","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A set of keys used to type on a computer or phone."],"examples":[{"text":"The phone shows a keyboard when you tap the box."}]}]}
+{"word":"phone","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A device used to call and send messages to other people."],"examples":[{"text":"My phone is out of battery."}]}],"synonyms":[{"word":"telephone"}]}
+{"word":"message","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A short piece of written or spoken information sent to someone."],"examples":[{"text":"I sent you a message."}]}],"synonyms":[{"word":"note"}]}
+{"word":"translate","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To change words from one language into another."],"examples":[{"text":"Can you translate this sign?"}]}]}
+{"word":"dictionary","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A book or app that lists words and explains what they mean."],"examples":[{"text":"Look the word up in the dictionary."}]}]}
+{"word":"word","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A single unit of language that has a meaning."],"examples":[{"text":"What does this word mean?"}]}]}
+{"word":"language","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["The system of words that people use to talk and write."],"examples":[{"text":"English is her second language."}]}]}
+{"word":"travel","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To go from one place to another, often far away."],"examples":[{"text":"They travel by train."}]}],"synonyms":[{"word":"journey"}]}
+{"word":"ticket","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A small card or paper that lets you travel or enter a place."],"examples":[{"text":"I lost my train ticket."}]}]}
+{"word":"station","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A place where trains or buses stop for passengers."],"examples":[{"text":"Meet me at the station."}]}]}
+{"word":"airport","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A place where planes take off and land."],"examples":[{"text":"The airport is an hour away."}]}]}
+{"word":"market","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A place where people buy and sell goods."],"examples":[{"text":"We bought fruit at the market."}]}]}
+{"word":"price","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["The amount of money needed to buy something."],"examples":[{"text":"What is the price of this hat?"}]}],"synonyms":[{"word":"cost"}]}
+{"word":"cheap","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Costing little money."],"examples":[{"text":"The bus is cheap."}]}],"synonyms":[{"word":"inexpensive"}]}
+{"word":"hotel","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A building where you pay to stay the night."],"examples":[{"text":"Our hotel has a pool."}]}]}
+{"word":"doctor","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A person trained to treat people who are ill."],"examples":[{"text":"You should see a doctor."}]}]}
+{"word":"help","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To make something easier for someone."],"examples":[{"text":"Can you help me carry this?"}]}],"synonyms":[{"word":"assist"}]}
+{"word":"help","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["Support given to someone."],"examples":[{"text":"Thanks for your help."}]}]}
+{"word":"morning","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["The early part of the day, before noon."],"examples":[{"text":"I drink coffee every morning."}]}]}
+{"word":"coffee","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A hot drink made from roasted beans."],"examples":[{"text":"Two coffees, please."}]}]}
+{"word":"bread","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A food made from flour and water and baked."],"examples":[{"text":"We need a loaf of bread."}]}]}
+{"word":"rain","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["Water that falls from clouds in drops."],"examples":[{"text":"The rain stopped at noon."}]}]}
+{"word":"rain","lang":"English","lang_code":"en","pos":"verb","senses":[{"glosses":["To fall as drops of water from clouds."],"examples":[{"text":"It rained all day."}]}]}
+{"word":"warm","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["A little hot, in a pleasant way."],"examples":[{"text":"The sea is warm in July."}]}]}
+{"word":"small","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Little in size."],"examples":[{"text":"A small coffee, please."}]}],"synonyms":[{"word":"little"},{"word":"tiny"}]}
+{"word":"early","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Happening before the usual or expected time."],"examples":[{"text":"We took an early flight."}]}]}
+{"word":"late","lang":"English","lang_code":"en","pos":"adj","senses":[{"glosses":["Happening after the usual or expected time."],"examples":[{"text":"Sorry I am late."}]}]}
+{"word":"café","lang":"English","lang_code":"en","pos":"noun","senses":[{"glosses":["A small place that sells drinks and light meals."],"examples":[{"text":"Let's meet at the café."}]}]}
+{"word":"colour","lang":"English","lang_code":"en","pos":"noun","senses":[{"tags":["no-gloss"]}]}

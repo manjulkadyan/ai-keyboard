@@ -104,6 +104,8 @@ include(":ime:ai-ui")
 // FORK(S4-themes): ThemeSpec, presets and Snygg generator (pure JVM); JVM tool that writes the theme extension
 include(":core:theme")
 include(":tools:themegen")
+// FORK(S5-content): JVM tool that builds the dictionary pack, phrasebook DB, sticker art and the signed manifest
+include(":tools:packbuild")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")
