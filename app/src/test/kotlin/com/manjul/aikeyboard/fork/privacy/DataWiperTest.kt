@@ -9,7 +9,12 @@ import android.app.Application
 import androidx.room.Room
 import com.manjul.aikeyboard.core.datastore.FeatureSettings
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+import com.manjul.aikeyboard.core.content.ContentDirs
 import com.manjul.aikeyboard.core.database.AppDatabase
+import com.manjul.aikeyboard.core.database.DictionaryEntryEntity
+import com.manjul.aikeyboard.core.database.StickerEntity
+import com.manjul.aikeyboard.core.database.StickerPackEntity
+import com.manjul.aikeyboard.core.database.UserPhraseEntity
 import com.manjul.aikeyboard.core.database.TranslationHistoryEntity
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository
@@ -30,6 +35,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -66,6 +72,7 @@ class DataWiperTest {
         deleteModels = { modelDeletes++ },
         firebase = resetter,
         clearUpstreamDictionary = { DataWiper.clearFlorisUserDictionary(app) },
+        clearContent = { DataWiper.clearContent(db, app) },
     )
 
     @After
@@ -121,6 +128,47 @@ class DataWiperTest {
         assertEquals(0, db.userWordDao().count())
         assertEquals(0, db.userWordDao().bigramCount())
         assertEquals(emptyList(), clipDb.clipboardItemDao().getAll())
+    }
+
+    @Test
+    fun `wipe empties the content tables and deletes the downloaded packs and the manifest cache`() = runBlocking {
+        val phraseId = db.phraseDao().insert(
+            UserPhraseEntity(text = "see you", translation = null, targetLang = null, createdAt = 1, updatedAt = 1),
+        )
+        db.phraseDao().toggleFavourite(UserPhraseEntity.ref(phraseId), now = 2)
+        db.phraseDao().toggleFavourite("c:greet-1", now = 2)
+        db.dictionaryDao().insert(
+            listOf(
+                DictionaryEntryEntity(
+                    lang = "en", headword = "zork", headwordNorm = "zork", pos = "noun", definition = "d",
+                    example = null, source = DictionaryEntryEntity.SOURCE_ONLINE, fetchedAt = 1,
+                ),
+            ),
+        )
+        db.stickerDao().upsertPack(
+            StickerPackEntity("p1", "P", 1, isPremium = false, manifestUrl = "m", downloaded = true, updatedAt = 1),
+        )
+        db.stickerDao().upsertStickers(listOf(StickerEntity("p1/01", "p1", "/f", "image/png", "k")))
+        val pack = File(ContentDirs.packs(app), "stickers/p1/1/01.png").apply { parentFile!!.mkdirs(); writeText("x") }
+        val manifest = File(ContentDirs.manifest(app), "manifest.json").apply { parentFile!!.mkdirs(); writeText("{}") }
+
+        assertTrue(wiper.wipeLocal(includeModels = false))
+
+        assertEquals(emptyList(), db.phraseDao().observePhrases().first())
+        assertFalse(db.phraseDao().isFavourite("c:greet-1"))
+        assertEquals(emptyList(), db.dictionaryDao().find("en", "zork"))
+        assertEquals(emptyList(), db.stickerDao().packs())
+        assertEquals(emptyList(), db.stickerDao().stickers("p1"))
+        assertFalse(pack.exists())
+        assertFalse(manifest.exists())
+        assertFalse(ContentDirs.packs(app).exists())
+    }
+
+    @Test
+    fun `contentWifiOnly goes back to its default`() = runBlocking {
+        settings.update { it.copy(contentWifiOnly = false) }
+        wiper.wipeLocal(includeModels = false)
+        assertEquals(true, settings.current.contentWifiOnly)
     }
 
     @Test
@@ -203,6 +251,7 @@ class DataWiperTest {
             deleteModels = { modelDeletes++ },
             firebase = resetter,
             clearUpstreamDictionary = {},
+            clearContent = { DataWiper.clearContent(db, app) },
         )
         assertEquals(false, failing.wipeLocal(includeModels = false))
         assertEquals(0, db.translationHistoryDao().count())

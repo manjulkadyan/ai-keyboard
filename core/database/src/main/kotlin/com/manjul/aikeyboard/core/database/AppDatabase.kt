@@ -17,12 +17,23 @@ import androidx.room.RoomDatabase
  * of wiping the user's history.
  */
 @Database(
-    entities = [TranslationHistoryEntity::class, UserWordEntity::class, UserBigramEntity::class],
-    version = 2,
+    entities = [
+        TranslationHistoryEntity::class,
+        UserWordEntity::class,
+        UserBigramEntity::class,
+        DictionaryEntryEntity::class,
+        StickerPackEntity::class,
+        StickerEntity::class,
+        UserPhraseEntity::class,
+        PhraseFavouriteEntity::class,
+    ],
+    version = AppDatabase.VERSION,
     exportSchema = true,
     autoMigrations = [
         // v2 (Sprint 3): adds the user dictionary tables user_word and user_bigram.
         AutoMigration(from = 1, to = 2),
+        // v3 (Sprint 5): adds dictionary_entry, sticker_pack, sticker, user_phrase and phrase_favourite.
+        AutoMigration(from = 2, to = 3),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,8 +41,15 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun userWordDao(): UserWordDao
 
+    abstract fun dictionaryDao(): DictionaryDao
+
+    abstract fun stickerDao(): StickerDao
+
+    abstract fun phraseDao(): PhraseDao
+
     companion object {
         const val FILE_NAME = "app_database"
+        const val VERSION = 3
 
         fun new(context: Context): AppDatabase = Room
             .databaseBuilder(context.applicationContext, AppDatabase::class.java, FILE_NAME)

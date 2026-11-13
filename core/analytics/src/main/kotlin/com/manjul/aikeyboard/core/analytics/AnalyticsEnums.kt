@@ -22,9 +22,9 @@ enum class UnavailableReason(val value: String) {
     NO_SERVICE("no_service"), LANG_UNSUPPORTED("lang_unsupported"), OFFLINE_NO_MODEL("offline_no_model")
 }
 
-/** Kind of downloadable pack; [WHISPER] and [TRANSLATE] (ML Kit models) are downloaded so far. */
+/** Kind of downloadable pack: [WHISPER], [TRANSLATE] (ML Kit models), and [DICT] and [STICKERS] content packs. */
 enum class PackKind(val value: String) {
-    TRANSLATE("translate"), DICT("dict"), TRANSLIT("translit"), WHISPER("whisper")
+    TRANSLATE("translate"), DICT("dict"), TRANSLIT("translit"), WHISPER("whisper"), STICKERS("stickers")
 }
 
 enum class PackResult(val value: String) {

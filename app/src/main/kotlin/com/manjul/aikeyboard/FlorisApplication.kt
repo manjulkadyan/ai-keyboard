@@ -335,6 +335,9 @@ fun Context.ttsManager() = this.florisApplication().ttsManager
 // FORK(S3-userdict): accessor for the user dictionary
 fun Context.userWordRepository() = this.florisApplication().userWordRepository
 
+// FORK(S5-content): accessor for the fork Room database (Delete my data clears the Sprint 5 tables through it)
+fun Context.appDatabase() = this.florisApplication().appDatabase
+
 // FORK(S3-suggest): accessor for the suggestion field facts
 fun Context.suggestContext() = this.florisApplication().suggestContext
 

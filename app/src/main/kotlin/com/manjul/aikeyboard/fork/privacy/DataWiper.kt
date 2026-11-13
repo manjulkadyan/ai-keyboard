@@ -8,7 +8,10 @@ package com.manjul.aikeyboard.fork.privacy
 import android.content.Context
 import androidx.room.Room
 import com.manjul.aikeyboard.aiAppGraph
+import com.manjul.aikeyboard.appDatabase
 import com.manjul.aikeyboard.clipboardManager
+import com.manjul.aikeyboard.core.content.ContentDirs
+import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository
 import com.manjul.aikeyboard.core.datastore.FeatureSettings
@@ -33,7 +36,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * The on-device half of Delete my data and Clear data (S4 Task 12). [wipeLocal] clears:
- * - every Room table of `AppDatabase` (translation history, `user_word`, `user_bigram`) and the clipboard;
+ * - every Room table of `AppDatabase` (translation history, `user_word`, `user_bigram`, and from Sprint 5 the user
+ *   phrases, phrase favourites, the online dictionary cache and the sticker tables) and the clipboard;
+ * - the downloaded content packs (`files/content`) and the cached content manifest;
  * - [FeatureSettings], back to the defaults except `onboardingDone` (decision 20), the analytics opt-out and the
  *   signed entitlement cache (`pro*`), so a Pro user stays Pro until the next kb-api answer;
  * - the ad state (injected from `app.ads`, which owns `:core:ads`) and the in-memory AI LRU;
@@ -54,6 +59,7 @@ class DataWiper(
     private val deleteModels: suspend () -> Unit,
     private val firebase: FirebaseResetter,
     private val clearUpstreamDictionary: suspend () -> Unit,
+    private val clearContent: suspend () -> Unit,
 ) {
     /** Returns false when a step failed; the other steps still ran. */
     suspend fun wipeLocal(includeModels: Boolean): Boolean {
@@ -61,6 +67,7 @@ class DataWiper(
         ok = step { history.clearAll(keepFavorites = false) } && ok
         ok = step { userWords.clearAll() } && ok
         ok = step(clearUpstreamDictionary) && ok
+        ok = step(clearContent) && ok
         ok = step(clearClipboard) && ok
         ok = step { settings.update(::resetKeepingEntitlement) } && ok
         ok = step(clearAdState) && ok
@@ -105,7 +112,37 @@ class DataWiper(
                 deleteModels = { deleteModels(app) },
                 firebase = DefaultFirebaseResetter(FirebaseDataResetter(app, app.firebaseGraph().value.bootstrap)),
                 clearUpstreamDictionary = { clearFlorisUserDictionary(app) },
+                clearContent = { clearContent(app.appDatabase().value, app) },
             )
+        }
+
+        /**
+         * Empties the Sprint 5 tables (user phrases and favourites, the online dictionary cache, sticker packs and
+         * stickers) and deletes the downloaded packs and the cached manifest. Every part runs; the first error is
+         * rethrown at the end.
+         */
+        internal suspend fun clearContent(db: AppDatabase, app: Context) {
+            var error: Exception? = null
+            suspend fun part(block: suspend () -> Unit) {
+                try {
+                    block()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (error == null) error = e
+                }
+            }
+            part { db.phraseDao().clearAll() }
+            part { db.dictionaryDao().clearAll() }
+            part { db.stickerDao().clearAll() }
+            part {
+                withContext(Dispatchers.IO) {
+                    for (dir in listOf(ContentDirs.packs(app), ContentDirs.manifest(app))) {
+                        check(!dir.exists() || dir.deleteRecursively()) { "content files not deleted" }
+                    }
+                }
+            }
+            error?.let { throw it }
         }
 
         /**

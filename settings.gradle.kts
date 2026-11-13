@@ -106,6 +106,8 @@ include(":core:theme")
 include(":tools:themegen")
 // FORK(S5-content): JVM tool that builds the dictionary pack, phrasebook DB, sticker art and the signed manifest
 include(":tools:packbuild")
+// FORK(S5-content): signed content manifest, content sources and the pack downloader (plan Task 2)
+include(":core:content")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

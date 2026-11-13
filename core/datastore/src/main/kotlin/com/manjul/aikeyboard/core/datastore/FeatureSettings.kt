@@ -39,6 +39,8 @@ data class FeatureSettings(
     val barLiveComposingSet: Boolean = false,
     /** Translation model downloads wait for an unmetered network (Wi-Fi). */
     val translateWifiOnly: Boolean = true,
+    /** Content pack downloads (dictionary and sticker packs, Sprint 5) wait for an unmetered network (Wi-Fi). */
+    val contentWifiOnly: Boolean = true,
     val cloudTranslateOptIn: Boolean = false,
     val translateHistoryEnabled: Boolean = true,
     /** When first_translate was logged (sent once per install); 0 = never. */

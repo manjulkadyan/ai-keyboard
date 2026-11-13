@@ -59,6 +59,11 @@ kotlin {
 
 // FORK(S4-ads): Google's published sample AdMob app id. It serves test ads only (no real ad unit id is in the repo).
 val ADMOB_SAMPLE_APP_ID = "ca-app-pub-3940256099942544~3347511713"
+// FORK(S5-content): the public half of the test-only content signing key (tools/packbuild/src/test/resources,
+// decision 12). Debug and beta fall back to it, so they read the fixture manifest; release never does.
+val CONTENT_FIXTURE_PUBLIC_KEY =
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE0wlEsD2fhp9k05FdY2mo3v9Xh31f" +
+        "lBlsvrHqPGtcy3NxfghTwsV/A6L5kfw20zlXLBcxTHqMH7zjk0+MU0EC2g=="
 // FORK(S4-perf): Gradle properties of the release key. All four must be set, or release falls back to debug signing.
 val RELEASE_SIGNING_PROPS = listOf(
     "aikb.signing.storeFile",
@@ -123,6 +128,11 @@ android {
         // FORK(S4-ads): AdMob app id for the manifest, from aikb.admob.appId. Debug and beta fall back to Google's
         // sample app id (test ads only). Release takes the property alone and its packaging fails below when empty.
         manifestPlaceholders["admobAppId"] = aikbProperty("aikb.admob.appId").ifEmpty { ADMOB_SAMPLE_APP_ID }
+        // FORK(S5-content): content CDN base URL (aikb.content.baseUrl, empty: debug reads the fixture assets, beta
+        // and release have no content) and the manifest public key (aikb.content.publicKey, base64 X.509 P-256)
+        buildConfigField("String", "CONTENT_BASE_URL", "\"${aikbProperty("aikb.content.baseUrl")}\"")
+        val contentKey = aikbProperty("aikb.content.publicKey").ifEmpty { CONTENT_FIXTURE_PUBLIC_KEY }
+        buildConfigField("String", "CONTENT_PUBLIC_KEY", "\"$contentKey\"")
 
         sourceSets {
             maybeCreate("main").apply {
@@ -215,6 +225,8 @@ android {
             buildConfigField("String", "WHISPER_ENABLED_LANGS", "\"\"")
             buildConfigField("boolean", "AI_DEV_AUTH", "false") // FORK(S3-net): dev auth never outside debug
             manifestPlaceholders["admobAppId"] = aikbProperty("aikb.admob.appId") // FORK(S4-ads): no sample id
+            // FORK(S5-content): no fixture key in release; packaging fails below when the property is empty
+            buildConfigField("String", "CONTENT_PUBLIC_KEY", "\"${aikbProperty("aikb.content.publicKey")}\"")
             // FORK(S4-perf): the release key when aikb.signing.* is set, else the debug key (see signingConfigs)
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             if (signingConfigs.findByName("release") == null) {
@@ -404,6 +416,7 @@ dependencies {
     implementation(projects.ime.aiUi) // FORK(S3-ai): the in-keyboard AI rewrite sheet and its controller
     // FORK(S4-themes): the presets behind the Themes screen and the premium guard
     implementation(projects.core.theme)
+    implementation(projects.core.content) // FORK(S5-content): content manifest, sources and the pack downloader
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)
@@ -430,9 +443,11 @@ dependencies {
 tasks.matching { it.name == "packageRelease" || it.name == "bundleRelease" }.configureEach {
     val key = aikbProperty("aikb.entitlement.publicKey")
     val admobAppId = aikbProperty("aikb.admob.appId") // FORK(S4-ads): the release AdMob app id, never the sample
+    val contentKey = aikbProperty("aikb.content.publicKey") // FORK(S5-content): the release content manifest key
     doFirst {
         check(key.isNotEmpty()) { "Set the Gradle property aikb.entitlement.publicKey for a release build" }
         check(admobAppId.isNotEmpty()) { "Set the Gradle property aikb.admob.appId for a release build" }
+        check(contentKey.isNotEmpty()) { "Set the Gradle property aikb.content.publicKey for a release build" }
     }
 }
 
