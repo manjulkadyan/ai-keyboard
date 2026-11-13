@@ -7,7 +7,7 @@
 // the phrasebook DB (SQLite), the generated sticker art (PNG), and the content manifest with its ECDSA P-256
 // signature. A developer tool, never packaged in the APK.
 //   ./gradlew :tools:packbuild:run --args="dict $PWD/content/dictionary/en-fixture.jsonl \
-//     $PWD/app/src/debug/assets/content/v1/dict/en-fixture-1.db --lang en --version 1"
+//     $PWD/app/src/debug/assets/content/v1/dict/en-fixture-1.db --lang en --version 1 --fixture"
 
 plugins {
     alias(libs.plugins.aikeyboard.jvm.library)

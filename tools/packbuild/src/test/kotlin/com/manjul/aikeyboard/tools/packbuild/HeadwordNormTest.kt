@@ -21,18 +21,21 @@ class HeadwordNormTest {
     }
 
     companion object {
-        /** Input to expected output. Copy this list verbatim into `:core:content` `HeadwordNormTest`. */
+        /**
+         * Input to expected output. Copy this list verbatim into `:core:content` `HeadwordNormTest`. Every non-ASCII
+         * character is a `\u` escape, so an editor or a paste cannot normalise the NFD cases away.
+         */
         val CASES: List<Pair<String, String>> = listOf(
             "run" to "run",
             "Run" to "run",
             " run " to "run",
             "RUN\t\n" to "run",
-            "Café" to "café", // NFC input
-            "Café" to "café", // NFD input composes to NFC
-            "CAFÉ" to "café",
-            "İstanbul" to "i̇stanbul", // Locale.ROOT, not Turkish rules
-            "I" to "i", // Locale.ROOT: never dotless ı
-            "Straße" to "straße", // lower case only, no case folding to "ss"
+            "Caf\u00e9" to "caf\u00e9", // NFC input: precomposed e-acute
+            "Cafe\u0301" to "caf\u00e9", // NFD input (e + combining acute) composes to NFC
+            "CAFE\u0301" to "caf\u00e9", // NFD upper case
+            "\u0130stanbul" to "i\u0307stanbul", // Locale.ROOT, not Turkish: dotted capital I gives i + combining dot
+            "I" to "i", // Locale.ROOT: never dotless \u0131
+            "Stra\u00dfe" to "stra\u00dfe", // lower case only, no case folding to "ss"
             "ice cream" to "ice cream", // inner spaces stay
             "" to "",
             "   " to "",

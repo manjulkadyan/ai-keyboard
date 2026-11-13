@@ -27,7 +27,10 @@ object DictPackBuilder {
     const val FORMAT = 1
     const val MAX_SENSES = 3
 
-    /** The licence of the team-written fixture. A real extract passes its own (CC-BY-SA, R-08: never in the repo). */
+    /**
+     * The licence of the team-written fixture. A real extract passes its own (CC-BY-SA, R-08: never in the repo), so
+     * [build] has no default and the CLI needs `--fixture` or explicit licence flags.
+     */
     val FIXTURE_LICENCE: PackLicence = TEAM_LICENCE
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -43,7 +46,7 @@ object DictPackBuilder {
         val norm: String = HeadwordNorm.of(headword)
     }
 
-    fun build(input: File, out: File, lang: String, version: Int, licence: PackLicence = FIXTURE_LICENCE) {
+    fun build(input: File, out: File, lang: String, version: Int, licence: PackLicence) {
         require(lang.isNotBlank()) { "lang is empty" }
         require(version > 0) { "version must be positive" }
         val rows = read(input)

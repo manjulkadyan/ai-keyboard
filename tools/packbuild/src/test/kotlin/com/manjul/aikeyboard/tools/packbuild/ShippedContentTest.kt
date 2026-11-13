@@ -50,7 +50,8 @@ class ShippedContentTest {
 
     @Test fun `the committed dictionary pack matches its source`() {
         val out = File(tmp, "en.db")
-        DictPackBuilder.build(TestFiles.sourcesDir.resolve("dictionary/en-fixture.jsonl"), out, "en", 1)
+        val jsonl = TestFiles.sourcesDir.resolve("dictionary/en-fixture.jsonl")
+        DictPackBuilder.build(jsonl, out, "en", 1, DictPackBuilder.FIXTURE_LICENCE)
         assertContentEquals(out.readBytes(), File(content, "dict/en-fixture-1.db").readBytes())
     }
 

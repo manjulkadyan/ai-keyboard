@@ -149,6 +149,8 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/HomeScreen.kt` | S4-settings | One "Settings" entry after Appearance that opens `Routes.Settings.All`. The other Home entries stay |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/about/AboutScreen.kt` | S4-settings | Terms of service row (`terms_url`) and a Contact row (`mailto:` the placeholder `contact_email`, a toast when no email app exists) |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt` | S4-privacy | `Settings.DeleteData` route (`settings/privacy/delete-data`, not on the `RouteRegistry` allow-list) rendering `fork/privacy/DeleteDataScreen`, opened by Privacy's Clear data and Delete my data. It gets `AdsAppGraph.clearAdState`, so `fork.privacy` never references `:core:ads` |
+| `settings.gradle.kts` | S5-content | `include(":tools:packbuild")` (JVM tool that builds the dictionary pack, the phrasebook DB, the sticker art and the signed content manifest, never packaged) |
+| `gradle/libs.versions.toml` | S5-content | `sqlite-jdbc` version (3.54.1.0) and library for `:tools:packbuild` only, inside the `# --- AI Keyboard ---` blocks |
 
 ## Marker-exempt files
 
@@ -198,8 +200,6 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S4-perf | `onStartInputView` starts the `aikb_ime_show` async trace section (`fork/perf/ImeTrace`), which ends at the next draw of the input view. `onFinishInputView` closes it if the keyboard hides first |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S4-perf | `onInputKeyUp` runs inside `ImeTrace.keyCommit` (`aikb_key_commit` trace section, TRD §6.4 key press to commit). "Modified by" header line added |
 | `app/build.gradle.kts` | S4-perf | `signingConfigs.release` from `aikb.signing.storeFile`, `storePassword`, `keyAlias` and `keyPassword`. When one is missing, `release` signs with the debug key (see `docs/release/closed-testing.md`). A `logger.warn` line says when `release` falls back to the debug key |
-| `settings.gradle.kts` | S5-content | `include(":tools:packbuild")` (JVM tool that builds the dictionary pack, the phrasebook DB, the sticker art and the signed content manifest, never packaged) |
-| `gradle/libs.versions.toml` | S5-content | `sqlite-jdbc` version (3.54.1.0) and library for `:tools:packbuild` only, inside the `# --- AI Keyboard ---` blocks |
 | `app/build.gradle.kts` | S4-rc | Exit check fix: `firebaseCrashlytics.mappingFileUploadEnabled = false` on every build type. The upload task needs the Google-Services plugin, so every minified build (`bundleRelease`) failed at configuration. The mapping file is uploaded with the Firebase CLI. `InjectMappingFileIdTask` always runs and writes a new random mapping file id, not the blank id that the plugin writes when the upload is off |
 | `README.md` | Rewritten from scratch for the fork (S0-branding); no upstream hunk is left to annotate |
 

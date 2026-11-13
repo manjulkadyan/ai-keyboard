@@ -66,7 +66,7 @@ firebase-crashlytics-plugin = "3.0.8"
 billing = "9.1.0"
 # FORK(S4-update): Play In-App Updates (app-update-ktx 2.1.0)
 app-update = "2.1.0"
-# FORK(S5-content): SQLite JDBC for :tools:packbuild only (never in the APK; latest on Maven Central, checked 2026-11-14)
+# FORK(S5-content): SQLite JDBC for :tools:packbuild only (never in the APK; latest on Maven Central 2026-11-14)
 sqlite-jdbc = "3.54.1.0"
 
 

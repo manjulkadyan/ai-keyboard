@@ -18,7 +18,9 @@ class DictPackBuilderTest {
     private fun jsonl(vararg lines: String): File = File(tmp, "in.jsonl").apply { writeText(lines.joinToString("\n")) }
 
     private fun build(input: File, name: String = "out.db"): File =
-        File(tmp, name).also { DictPackBuilder.build(input, it, lang = "en", version = 3) }
+        File(tmp, name).also {
+            DictPackBuilder.build(input, it, lang = "en", version = 3, licence = DictPackBuilder.FIXTURE_LICENCE)
+        }
 
     @Test fun `two parts of speech of run give two rows with the right pos`() {
         val db = build(

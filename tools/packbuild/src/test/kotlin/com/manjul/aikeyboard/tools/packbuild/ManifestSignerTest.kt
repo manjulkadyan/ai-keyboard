@@ -29,7 +29,7 @@ class ManifestSignerTest {
 
     @BeforeEach fun content() {
         val jsonl = TestFiles.sourcesDir.resolve("dictionary/en-fixture.jsonl")
-        DictPackBuilder.build(jsonl, File(root, "dict/en-fixture-1.db"), "en", 1)
+        DictPackBuilder.build(jsonl, File(root, "dict/en-fixture-1.db"), "en", 1, DictPackBuilder.FIXTURE_LICENCE)
         StickerArt.buildPacks(packs, File(root, "stickers"), only = "starter_plus")
     }
 
