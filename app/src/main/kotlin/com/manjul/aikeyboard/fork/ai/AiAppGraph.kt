@@ -18,6 +18,7 @@ import com.manjul.aikeyboard.core.ai.AuthHeaders
 import com.manjul.aikeyboard.core.ai.CloudAiEngine
 import com.manjul.aikeyboard.core.ai.TokenSource
 import com.manjul.aikeyboard.core.ai.kb.AccountClient
+import com.manjul.aikeyboard.core.ai.kb.DictionaryClient
 import com.manjul.aikeyboard.core.ai.kb.QuotaClient
 import com.manjul.aikeyboard.core.config.DefaultsRemoteConfig
 import com.manjul.aikeyboard.core.config.RemoteConfig
@@ -67,6 +68,8 @@ class AiAppGraph(
     val quota: Lazy<QuotaClient?> = lazyOf(null),
     /** S4 Task 12: `POST /v1/account/delete` for Delete my data, on the same lazy OkHttp client. */
     val account: Lazy<AccountClient?> = lazyOf(null),
+    /** S5 Task 3: `POST /v1/dictionary` (OD-11 proxy), on the same lazy OkHttp client. No consent gate here. */
+    val dictionary: Lazy<DictionaryClient?> = lazyOf(null),
 ) {
     companion object {
         fun create(context: Context, config: RemoteConfig = DefaultsRemoteConfig()): AiAppGraph {
@@ -96,6 +99,7 @@ class AiAppGraph(
                 isConfigured = isConfigured(baseUrl, BuildConfig.AI_DEV_AUTH, firebase),
                 quota = lazy { QuotaClient(http.value, baseUrl, tokens) },
                 account = lazy { AccountClient(http.value, baseUrl, tokens) },
+                dictionary = lazy { DictionaryClient(http.value, baseUrl, tokens) },
             )
         }
 
