@@ -7,10 +7,14 @@ package com.manjul.aikeyboard.fork.privacy
 
 import android.content.Context
 import androidx.room.Room
+import androidx.work.WorkManager
 import com.manjul.aikeyboard.aiAppGraph
 import com.manjul.aikeyboard.appDatabase
 import com.manjul.aikeyboard.clipboardManager
+import com.manjul.aikeyboard.contentManifest
 import com.manjul.aikeyboard.core.content.ContentDirs
+import com.manjul.aikeyboard.core.content.download.PackDownloadWorker
+import com.manjul.aikeyboard.core.content.manifest.ManifestCache
 import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository
@@ -112,16 +116,30 @@ class DataWiper(
                 deleteModels = { deleteModels(app) },
                 firebase = DefaultFirebaseResetter(FirebaseDataResetter(app, app.firebaseGraph().value.bootstrap)),
                 clearUpstreamDictionary = { clearFlorisUserDictionary(app) },
-                clearContent = { clearContent(app.appDatabase().value, app) },
+                clearContent = {
+                    val manifest = app.contentManifest()
+                    clearContent(
+                        db = app.appDatabase().value,
+                        app = app,
+                        manifest = if (manifest.isInitialized()) manifest.value else null,
+                        workManager = { WorkManager.getInstance(app) },
+                    )
+                },
             )
         }
 
         /**
-         * Empties the Sprint 5 tables (user phrases and favourites, the online dictionary cache, sticker packs and
-         * stickers) and deletes the downloaded packs and the cached manifest. Every part runs; the first error is
-         * rethrown at the end.
+         * Cancels the pack downloads (tag [PackDownloadWorker.TAG]) first, so none of them writes a pack again after
+         * the wipe. Then it empties the Sprint 5 tables (user phrases and favourites, the online dictionary cache,
+         * sticker packs and stickers), clears the in-memory [manifest] when it exists, and deletes the downloaded packs
+         * and the cached manifest. Every part runs; the first error is rethrown at the end.
          */
-        internal suspend fun clearContent(db: AppDatabase, app: Context) {
+        internal suspend fun clearContent(
+            db: AppDatabase,
+            app: Context,
+            manifest: ManifestCache?,
+            workManager: () -> WorkManager,
+        ) {
             var error: Exception? = null
             suspend fun part(block: suspend () -> Unit) {
                 try {
@@ -132,9 +150,11 @@ class DataWiper(
                     if (error == null) error = e
                 }
             }
+            part { PackDownloadWorker.cancelAll(workManager()) }
             part { db.phraseDao().clearAll() }
             part { db.dictionaryDao().clearAll() }
             part { db.stickerDao().clearAll() }
+            part { manifest?.clear() }
             part {
                 withContext(Dispatchers.IO) {
                     for (dir in listOf(ContentDirs.packs(app), ContentDirs.manifest(app))) {

@@ -73,6 +73,11 @@ import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelDownloadWorkerFa
 import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelStore
 import kotlinx.coroutines.SupervisorJob
 // FORK(S2-translator): imports for Translator history and the shared TextToSpeech
+import com.manjul.aikeyboard.core.content.ContentDirs // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.manifest.ManifestCache // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.manifest.ManifestVerifier // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.source.AssetContentSource // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.source.ContentSources // FORK(S5-content)
 import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdict)
@@ -158,6 +163,17 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     val translation = lazy { TranslationCore(this) { translateModelStore.value } }
     // FORK(S2-translator): fork Room database (databases/app_database, never backed up), opened on first use
     val appDatabase = lazy { AppDatabase.new(this) }
+    // FORK(S5-content): the signed content manifest cache (CDN, or the debug assets); nothing is read until first use
+    val contentManifest = lazy {
+        ManifestCache(
+            dir = ContentDirs.manifest(this),
+            source = ContentSources.select(BuildConfig.CONTENT_BASE_URL, BuildConfig.DEBUG) {
+                AssetContentSource(assets)
+            },
+            verifier = ManifestVerifier(BuildConfig.CONTENT_PUBLIC_KEY),
+            clock = System::currentTimeMillis,
+        )
+    }
     val translationHistory = lazy { TranslationHistoryRepository(appDatabase.value.translationHistoryDao()) }
     // FORK(S3-userdict): on-device user dictionary (user_word); opened on first use, written on a background worker
     val userWordRepository = lazy {
@@ -337,6 +353,9 @@ fun Context.userWordRepository() = this.florisApplication().userWordRepository
 
 // FORK(S5-content): accessor for the fork Room database (Delete my data clears the Sprint 5 tables through it)
 fun Context.appDatabase() = this.florisApplication().appDatabase
+
+// FORK(S5-content): accessor for the content manifest cache (Delete my data clears its in-memory copy)
+fun Context.contentManifest() = this.florisApplication().contentManifest
 
 // FORK(S3-suggest): accessor for the suggestion field facts
 fun Context.suggestContext() = this.florisApplication().suggestContext

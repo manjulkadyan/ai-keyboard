@@ -152,7 +152,7 @@ Every upstream FlorisBoard file we edit is listed here (TRD §2.1). Each edited 
 | `settings.gradle.kts` | S5-content | `include(":tools:packbuild")` (JVM tool that builds the dictionary pack, the phrasebook DB, the sticker art and the signed content manifest, never packaged) |
 | `settings.gradle.kts` | S5-content | `include(":core:content")` (signed content manifest, content sources and the pack downloader) |
 | `app/build.gradle.kts` | S5-content | `CONTENT_BASE_URL` from `aikb.content.baseUrl` and `CONTENT_PUBLIC_KEY` from `aikb.content.publicKey` (debug and beta fall back to the public half of the test-only fixture key, decision 12; release does not, and `packageRelease`/`bundleRelease` fail when it is empty); `implementation(projects.core.content)` |
-| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S5-content | `Context.appDatabase()` accessor, used by `fork/privacy/DataWiper` to clear the Sprint 5 tables |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S5-content | `Context.appDatabase()` accessor, used by `fork/privacy/DataWiper` to clear the Sprint 5 tables. Lazy `contentManifest` (`:core:content` `ManifestCache` over the CDN, or the debug assets) and `Context.contentManifest()` accessor, so Delete my data can clear the in-memory manifest. Nothing is read until first use |
 | `gradle/libs.versions.toml` | S5-content | `sqlite-jdbc` version (3.54.1.0) and library for `:tools:packbuild` only, inside the `# --- AI Keyboard ---` blocks |
 
 ## Marker-exempt files

@@ -10,7 +10,9 @@ import java.io.File
 
 /** Where content lives in the app's private files. Neither folder is in the backup rules. */
 object ContentDirs {
-    /** The [com.manjul.aikeyboard.core.content.download.PackDownloader] root: `files/content/<kind>/<id>/<version>/`. */
+    /**
+     * The [com.manjul.aikeyboard.core.content.download.PackDownloader] root: `files/content/<kind>/<id>/<version>/`.
+     */
     fun packs(context: Context): File = File(context.filesDir, "content")
 
     /** The [com.manjul.aikeyboard.core.content.manifest.ManifestCache] folder. It holds the public manifest only. */

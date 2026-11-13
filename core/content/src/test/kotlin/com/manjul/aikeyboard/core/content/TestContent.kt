@@ -7,7 +7,11 @@ package com.manjul.aikeyboard.core.content
 
 import com.manjul.aikeyboard.core.content.source.ContentFetchException
 import com.manjul.aikeyboard.core.content.source.ContentSource
+import com.manjul.aikeyboard.core.content.source.copyBounded
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FilterInputStream
+import java.io.OutputStream
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.Signature
@@ -52,14 +56,26 @@ internal object TestContent {
     }
 }
 
-/** A [ContentSource] backed by a map, counting requests. A missing path throws like a 404. */
+/**
+ * A [ContentSource] backed by a map, counting requests. A missing path throws like a 404. [beforeFetch] runs before
+ * each fetch (a test can suspend or cancel there). [read] counts the bytes the source handed out, so a test sees that
+ * an oversized body was not read in full.
+ */
 internal class FakeContentSource(var files: Map<String, ByteArray> = emptyMap()) : ContentSource {
     val requests = mutableListOf<String>()
     var offline = false
+    var beforeFetch: suspend (String) -> Unit = {}
+    var read = 0L
 
-    override suspend fun fetch(path: String): ByteArray {
+    override suspend fun fetchTo(path: String, sink: OutputStream, maxBytes: Long): Long {
         requests += path
+        beforeFetch(path)
         if (offline) throw ContentFetchException("offline")
-        return files[path] ?: throw ContentFetchException("HTTP 404")
+        val bytes = files[path] ?: throw ContentFetchException("HTTP 404")
+        val counting = object : FilterInputStream(ByteArrayInputStream(bytes)) {
+            override fun read(b: ByteArray, off: Int, len: Int): Int =
+                super.read(b, off, len).also { if (it > 0) read += it }
+        }
+        return copyBounded(counting, sink, maxBytes)
     }
 }

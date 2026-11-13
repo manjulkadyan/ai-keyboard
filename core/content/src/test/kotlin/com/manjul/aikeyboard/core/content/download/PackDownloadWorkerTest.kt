@@ -12,6 +12,7 @@ import com.manjul.aikeyboard.core.content.manifest.PackLicence
 import com.manjul.aikeyboard.core.content.manifest.PackSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class PackDownloadWorkerTest {
     private fun pack(kind: PackKindSpec) =
@@ -27,5 +28,14 @@ class PackDownloadWorkerTest {
         assertEquals(PackKind.DICT, PackDownloadWorker.kind(pack(PackKindSpec.DICT)))
         assertEquals("mul", PackDownloadWorker.lang(pack(PackKindSpec.STICKERS)))
         assertEquals(PackKind.STICKERS, PackDownloadWorker.kind(pack(PackKindSpec.STICKERS)))
+    }
+
+    @Test fun `a download makes three attempts at most`() {
+        assertEquals(3, PackDownloadWorker.MAX_ATTEMPTS)
+        assertEquals(listOf(true, true, false, false), (0..3).map(PackDownloadWorker::shouldRetry))
+    }
+
+    @Test fun `every pack download carries the shared tag`() {
+        assertTrue(PackDownloadWorker.uniqueName("starter_plus").startsWith(PackDownloadWorker.TAG))
     }
 }

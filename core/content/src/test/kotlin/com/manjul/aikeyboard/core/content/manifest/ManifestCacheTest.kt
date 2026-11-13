@@ -13,8 +13,10 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ManifestCacheTest {
     @TempDir lateinit var dir: File
@@ -90,6 +92,39 @@ class ManifestCacheTest {
         source.requests.clear()
         assertEquals(old, c.current())
         assertEquals(emptyList(), source.requests)
+    }
+
+    @Test fun `a rejected first answer with no stored copy also waits 24 h`() = runTest {
+        source.files = source.files + (ManifestCache.SIGNATURE_PATH to "AAAA".toByteArray())
+        val c = cache()
+        assertNull(c.current())
+        assertEquals(2, source.requests.size)
+        now += ManifestCache.MAX_AGE_MS - 1
+        assertNull(c.current())
+        assertNull(cache().current()) // a new instance reads the same stamp
+        assertEquals(2, source.requests.size)
+        now += 1
+        source.files = mapOf(
+            ManifestCache.MANIFEST_PATH to TestContent.manifestBytes,
+            ManifestCache.SIGNATURE_PATH to TestContent.manifestSig.toByteArray(),
+        )
+        assertNotNull(c.current()) // after 24 h it asks again
+        assertEquals(4, source.requests.size)
+    }
+
+    @Test fun `an oversized manifest is rejected without being read in full`() = runTest {
+        source.files = source.files + (ManifestCache.MANIFEST_PATH to ByteArray(4 * 1024 * 1024))
+        assertNull(cache().current())
+        assertTrue(source.read <= ManifestCache.MAX_MANIFEST_BYTES + 1, "read ${source.read}")
+    }
+
+    @Test fun `clear forgets the in-memory copy and the stored files`() = runTest {
+        val c = cache()
+        assertNotNull(c.current())
+        c.clear()
+        assertFalse(dir.exists())
+        source.offline = true
+        assertNull(c.current())
     }
 
     @Test fun `with no network and no cache it returns null`() = runTest {

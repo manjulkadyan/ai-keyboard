@@ -15,6 +15,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
+import androidx.work.await
 import androidx.work.workDataOf
 import com.manjul.aikeyboard.core.analytics.AnalyticsSink
 import com.manjul.aikeyboard.core.analytics.EventCatalog
@@ -27,8 +28,9 @@ import com.manjul.aikeyboard.core.content.manifest.PackSpec
 
 /**
  * Downloads one pack of the current manifest. The input holds the pack id only: the paths and hashes come from the
- * signed manifest. It emits `pack_download_start` and `pack_download_done` with the kind and size bucket, never a URL
- * (plan F14). [onInstalled] lets the caller register the pack (for example the sticker tables).
+ * signed manifest. It emits `pack_download_start` once per download (on the first attempt) and `pack_download_done`
+ * once at the end, with the kind and size bucket, never a URL (plan F14). It makes at most [MAX_ATTEMPTS] attempts.
+ * [onInstalled] lets the caller register the pack (for example the sticker tables).
  */
 class PackDownloadWorker(
     context: Context,
@@ -46,7 +48,7 @@ class PackDownloadWorker(
         val id = inputData.getString(KEY_PACK_ID) ?: return Result.failure()
         val pack = deps.manifest.current()?.packs?.firstOrNull { it.id == id } ?: return Result.failure()
         val bytes = pack.files.sumOf { it.bytes }
-        deps.analytics.log(EventCatalog.packDownloadStart(lang(pack), kind(pack), bytes))
+        if (runAttemptCount == 0) deps.analytics.log(EventCatalog.packDownloadStart(lang(pack), kind(pack), bytes))
         return when (val outcome = deps.downloader.install(pack)) {
             is Outcome.Success -> {
                 deps.onInstalled(pack, outcome.value)
@@ -55,7 +57,7 @@ class PackDownloadWorker(
             }
             is Outcome.Failure -> {
                 val mismatch = outcome.error is PackHashMismatchException
-                val retry = !mismatch && runAttemptCount < MAX_ATTEMPTS
+                val retry = !mismatch && shouldRetry(runAttemptCount)
                 if (!retry) {
                     val result = if (mismatch) PackResult.HASH_MISMATCH else PackResult.FAILED
                     deps.analytics.log(EventCatalog.packDownloadDone(lang(pack), kind(pack), bytes, result))
@@ -69,7 +71,13 @@ class PackDownloadWorker(
         const val KEY_PACK_ID = "pack_id"
         const val MAX_ATTEMPTS = 3
 
-        fun uniqueName(packId: String) = "aikb-content-pack-$packId"
+        /** The tag of every pack download, so Delete my data can cancel them all. */
+        const val TAG = "aikb-content-pack"
+
+        fun uniqueName(packId: String) = "$TAG-$packId"
+
+        /** [runAttemptCount] counts from 0, so attempts 0 and 1 retry and the third attempt is the last. */
+        fun shouldRetry(runAttemptCount: Int) = runAttemptCount + 1 < MAX_ATTEMPTS
 
         /** Plan F14: dictionary packs report `en`, sticker packs `mul`. */
         fun lang(pack: PackSpec) = if (pack.kind == PackKindSpec.DICT) "en" else "mul"
@@ -81,10 +89,16 @@ class PackDownloadWorker(
             .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
             .build()
 
+        /** Cancels every pending and running pack download (Delete my data), and waits until WorkManager took it. */
+        suspend fun cancelAll(workManager: WorkManager) {
+            workManager.cancelAllWorkByTag(TAG).await()
+        }
+
         fun enqueue(context: Context, packId: String, wifiOnly: Boolean) {
             val request = OneTimeWorkRequestBuilder<PackDownloadWorker>()
                 .setInputData(workDataOf(KEY_PACK_ID to packId))
                 .setConstraints(constraints(wifiOnly))
+                .addTag(TAG)
                 .build()
             WorkManager.getInstance(context.applicationContext)
                 .enqueueUniqueWork(uniqueName(packId), ExistingWorkPolicy.REPLACE, request)

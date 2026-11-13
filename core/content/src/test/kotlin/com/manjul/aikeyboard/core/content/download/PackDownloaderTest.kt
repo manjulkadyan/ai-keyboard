@@ -11,6 +11,11 @@ import com.manjul.aikeyboard.core.content.manifest.PackFile
 import com.manjul.aikeyboard.core.content.manifest.PackKindSpec
 import com.manjul.aikeyboard.core.content.manifest.PackLicence
 import com.manjul.aikeyboard.core.content.manifest.PackSpec
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -129,5 +134,69 @@ class PackDownloaderTest {
         } finally {
             outside.delete()
         }
+    }
+
+    /** Every file and folder under [root], so a test also sees an empty `.staging-*` folder. */
+    private fun everything(): List<String> = root.walkTopDown().filter { it != root }.map { it.relativeTo(root).path }
+        .sorted().toList()
+
+    @Test fun `a cancelled install leaves no staging folder and no part file`() = runTest {
+        val downloader = PackDownloader(source, root)
+        val inSecondFetch = CompletableDeferred<Unit>()
+        source.beforeFetch = { path ->
+            if (path.endsWith("02.png")) {
+                inSecondFetch.complete(Unit)
+                awaitCancellation()
+            }
+        }
+        val job = launch { downloader.install(pack()) }
+        inSecondFetch.await()
+        assertTrue(everything().any { it.contains(".staging-1") }, "the first file is staged: ${everything()}")
+        job.cancelAndJoin()
+        assertEquals(emptyList(), everything())
+    }
+
+    @Test fun `a cancelled upgrade keeps the installed version and nothing else`() = runTest {
+        val downloader = PackDownloader(source, root)
+        downloader.install(pack())
+        source.beforeFetch = { path -> if (path.endsWith("02.png")) awaitCancellation() }
+        val job = launch { downloader.install(pack(version = 2)) }
+        testScheduler.advanceUntilIdle()
+        job.cancelAndJoin()
+        assertEquals(listOf("stickers/starter_plus/1/01.png", "stickers/starter_plus/1/02.png"), tree())
+        assertFalse(everything().any { it.contains(".staging") || it.endsWith(".part") }, "${everything()}")
+    }
+
+    @Test fun `an oversized file fails without being read in full`() = runTest {
+        val big = ByteArray(1_000_000) { 7 }
+        source.files = mapOf("stickers/starter_plus/01.png" to big)
+        val spec = pack(files = listOf(file("stickers/starter_plus/01.png", one)))
+        val result = PackDownloader(source, root).install(spec)
+        assertIs<PackHashMismatchException>(assertIs<Outcome.Failure>(result).error)
+        assertTrue(source.read <= one.size + 1L, "read ${source.read} bytes of ${big.size}")
+        assertEquals(emptyList(), everything())
+    }
+
+    @Test fun `an unsafe pack id fails before any folder is made`() = runTest {
+        val bad = pack().copy(id = "../escape")
+        assertIs<Outcome.Failure>(PackDownloader(source, root).install(bad))
+        assertEquals(emptyList(), source.requests)
+        assertEquals(emptyList(), everything())
+        assertFalse(File(root.parentFile, "escape").exists())
+    }
+
+    @Test fun `remove waits for a running install`() = runTest {
+        val downloader = PackDownloader(source, root)
+        val release = CompletableDeferred<Unit>()
+        source.beforeFetch = { path -> if (path.endsWith("02.png")) release.await() }
+        val install = async { downloader.install(pack()) }
+        testScheduler.advanceUntilIdle()
+        val remove = launch { downloader.remove("starter_plus") }
+        testScheduler.advanceUntilIdle()
+        assertFalse(remove.isCompleted, "remove must wait for the install lock")
+        release.complete(Unit)
+        assertIs<Outcome.Success<File>>(install.await())
+        remove.join()
+        assertFalse(File(root, "stickers/starter_plus").exists())
     }
 }

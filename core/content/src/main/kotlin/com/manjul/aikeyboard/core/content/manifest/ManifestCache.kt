@@ -7,6 +7,7 @@ package com.manjul.aikeyboard.core.content.manifest
 
 import com.manjul.aikeyboard.core.content.source.ContentSource
 import com.manjul.aikeyboard.core.content.source.UnavailableContentSource
+import com.manjul.aikeyboard.core.content.source.fetchBytes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -16,10 +17,11 @@ import java.io.File
 
 /**
  * The last good [ContentManifest], kept in [dir] with its signature. [current] asks [source] at most once per
- * [MAX_AGE_MS] once the source answered (a rejected answer counts); a fetch that got no answer is tried again on the
- * next call. A new manifest replaces the stored
- * one only when it verifies and is not older (`issued_at`); otherwise the last good copy stays. The stored copy is
- * verified again when read, so a changed file is not trusted.
+ * [MAX_AGE_MS] once the source answered (a rejected answer counts, also when there is no stored copy yet). A fetch that
+ * got no answer is tried again on the next call. A new manifest replaces the stored one only when it verifies and is
+ * not older (`issued_at`). Otherwise the last good copy stays. The stored copy is verified again when read, so a
+ * changed file is not trusted. The manifest and its signature are read with the size limits [MAX_MANIFEST_BYTES] and
+ * [MAX_SIGNATURE_BYTES].
  */
 class ManifestCache(
     private val dir: File,
@@ -41,14 +43,15 @@ class ManifestCache(
             val stored = stored()
             val fetchedAt = stampFile.takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
             val now = clock()
-            if (stored != null && fetchedAt != null && now >= fetchedAt && now - fetchedAt < MAX_AGE_MS) {
+            if (fetchedAt != null && now >= fetchedAt && now - fetchedAt < MAX_AGE_MS) {
+                // This day's answer came already: the stored copy, or null when that answer was rejected.
                 return@withContext stored
             }
             val bytes: ByteArray
             val signature: String
             try {
-                bytes = source.fetch(MANIFEST_PATH)
-                signature = source.fetch(SIGNATURE_PATH).decodeToString()
+                bytes = source.fetchBytes(MANIFEST_PATH, MAX_MANIFEST_BYTES)
+                signature = source.fetchBytes(SIGNATURE_PATH, MAX_SIGNATURE_BYTES).decodeToString()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -65,6 +68,18 @@ class ManifestCache(
             writeStamp(now)
             memory = manifest
             manifest
+        }
+    }
+
+    /**
+     * Forgets the manifest: the in-memory copy, the stored files and the stamp, so the next [current] fetches again.
+     * Delete my data calls it.
+     */
+    suspend fun clear(): Unit = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            memory = null
+            memoryLoaded = false
+            check(!dir.exists() || dir.deleteRecursively()) { "manifest cache not deleted" }
         }
     }
 
@@ -104,6 +119,8 @@ class ManifestCache(
         const val MANIFEST_PATH = "manifest.json"
         const val SIGNATURE_PATH = "manifest.json.sig"
         const val MAX_AGE_MS = 24L * 60 * 60 * 1000
+        const val MAX_MANIFEST_BYTES = 1L shl 20
+        const val MAX_SIGNATURE_BYTES = 1L shl 10
         private const val STAMP = "manifest.fetched"
     }
 }

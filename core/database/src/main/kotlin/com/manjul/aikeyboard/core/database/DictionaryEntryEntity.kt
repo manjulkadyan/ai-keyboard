@@ -29,7 +29,10 @@ data class DictionaryEntryEntity(
     @ColumnInfo(name = "example") val example: String?,
     @ColumnInfo(name = "source") val source: String,
     @ColumnInfo(name = "fetched_at") val fetchedAt: Long,
-    /** Comma separated, or null when the source gave none (plan F3). */
+    /**
+     * A JSON array of strings, the same format as the pack's `entry.synonyms` (`DictPackBuilder.encodeSynonyms`), for
+     * example `["pome"]`. Null when the source gave none (plan F3).
+     */
     @ColumnInfo(name = "synonyms") val synonyms: String? = null,
 ) {
     // Keeps the looked-up word out of any accidental log or exception message (PC-10).

@@ -15,11 +15,13 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
+import java.io.OutputStream
 
 /**
  * Reads content files from the CDN at [baseUrl] (`aikb.content.baseUrl`). Requests carry no user identifier
  * (FR-23 AC4): no auth header or App Check token (the client has no `AuthHeadersInterceptor`, and a network
  * interceptor strips them anyway), no cookie (no cookie jar), no query string, and the fixed User-Agent [USER_AGENT].
+ * The body is streamed and bounded: see [ContentSource.fetchTo].
  */
 class HttpContentSource(
     baseUrl: String,
@@ -42,14 +44,17 @@ class HttpContentSource(
         }
         .build()
 
-    override suspend fun fetch(path: String): ByteArray {
+    override suspend fun fetchTo(path: String, sink: OutputStream, maxBytes: Long): Long {
         if (!ContentPaths.isSafePath(path)) throw ContentFetchException("unsafe path")
         val url = base.newBuilder().addPathSegments(path).build()
         return withContext(Dispatchers.IO) {
             try {
                 client.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
                     if (!response.isSuccessful) throw ContentFetchException("HTTP ${response.code}")
-                    response.body?.bytes() ?: throw ContentFetchException("empty body")
+                    val body = response.body ?: throw ContentFetchException("empty body")
+                    // A declared length over the limit fails before any byte of the body is read.
+                    if (body.contentLength() > maxBytes) throw ContentTooLargeException()
+                    body.byteStream().use { copyBounded(it, sink, maxBytes) }
                 }
             } catch (e: IOException) {
                 // The IOException message can name the host; only its type is kept.

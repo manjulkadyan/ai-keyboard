@@ -7,17 +7,28 @@ package com.manjul.aikeyboard.fork.privacy
 
 import android.app.Application
 import androidx.room.Room
-import com.manjul.aikeyboard.core.datastore.FeatureSettings
-import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
+import androidx.work.Configuration
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.core.content.ContentDirs
+import com.manjul.aikeyboard.core.content.download.PackDownloadWorker
+import com.manjul.aikeyboard.core.content.manifest.ManifestCache
+import com.manjul.aikeyboard.core.content.manifest.ManifestVerifier
+import com.manjul.aikeyboard.core.content.source.AssetContentSource
+import com.manjul.aikeyboard.core.content.source.ContentFetchException
+import com.manjul.aikeyboard.core.content.source.ContentSource
 import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.database.DictionaryEntryEntity
 import com.manjul.aikeyboard.core.database.StickerEntity
 import com.manjul.aikeyboard.core.database.StickerPackEntity
-import com.manjul.aikeyboard.core.database.UserPhraseEntity
 import com.manjul.aikeyboard.core.database.TranslationHistoryEntity
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
+import com.manjul.aikeyboard.core.database.UserPhraseEntity
 import com.manjul.aikeyboard.core.database.UserWordRepository
+import com.manjul.aikeyboard.core.datastore.FeatureSettings
+import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
 import com.manjul.aikeyboard.ime.clipboard.provider.ItemType
@@ -36,6 +47,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
+import java.io.OutputStream
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -62,6 +75,33 @@ class DataWiperTest {
         }
     }
 
+    /** The debug fixture content, readable until [offline] is set. */
+    private val contentSource = object : ContentSource {
+        var offline = false
+        private val assets = AssetContentSource(app.assets)
+
+        override suspend fun fetchTo(path: String, sink: OutputStream, maxBytes: Long): Long {
+            if (offline) throw ContentFetchException("offline")
+            return assets.fetchTo(path, sink, maxBytes)
+        }
+    }
+    private val manifest = ManifestCache(
+        ContentDirs.manifest(app),
+        contentSource,
+        ManifestVerifier(BuildConfig.CONTENT_PUBLIC_KEY),
+        clock = System::currentTimeMillis,
+    )
+    private val workManager: WorkManager by lazy {
+        // WorkManager is a process singleton and may already exist from an earlier test.
+        runCatching { WorkManager.initialize(app, Configuration.Builder().build()) }
+        WorkManager.getInstance(app).also {
+            it.cancelAllWork().result.get()
+            it.pruneWork().result.get()
+        }
+    }
+
+    private suspend fun clearContent() = DataWiper.clearContent(db, app, manifest) { workManager }
+
     private val wiper = DataWiper(
         settings = settings,
         history = history,
@@ -72,7 +112,7 @@ class DataWiperTest {
         deleteModels = { modelDeletes++ },
         firebase = resetter,
         clearUpstreamDictionary = { DataWiper.clearFlorisUserDictionary(app) },
-        clearContent = { DataWiper.clearContent(db, app) },
+        clearContent = { clearContent() },
     )
 
     @After
@@ -165,6 +205,24 @@ class DataWiperTest {
     }
 
     @Test
+    fun `wipe cancels the pack downloads and forgets the in-memory manifest`() = runBlocking {
+        val request = OneTimeWorkRequestBuilder<PackDownloadWorker>()
+            .addTag(PackDownloadWorker.TAG)
+            .setInitialDelay(1, TimeUnit.DAYS) // stays enqueued: only the wipe can stop it
+            .build()
+        workManager.enqueue(request).result.get()
+        assertTrue(manifest.current() != null, "the fixture manifest loads")
+
+        assertTrue(wiper.wipeLocal(includeModels = false))
+
+        assertEquals(WorkInfo.State.CANCELLED, workManager.getWorkInfoById(request.id).get()!!.state)
+        // With no network, a manifest still held in memory would come back here.
+        contentSource.offline = true
+        assertEquals(null, manifest.current())
+        assertFalse(ContentDirs.manifest(app).exists())
+    }
+
+    @Test
     fun `contentWifiOnly goes back to its default`() = runBlocking {
         settings.update { it.copy(contentWifiOnly = false) }
         wiper.wipeLocal(includeModels = false)
@@ -251,7 +309,7 @@ class DataWiperTest {
             deleteModels = { modelDeletes++ },
             firebase = resetter,
             clearUpstreamDictionary = {},
-            clearContent = { DataWiper.clearContent(db, app) },
+            clearContent = { clearContent() },
         )
         assertEquals(false, failing.wipeLocal(includeModels = false))
         assertEquals(0, db.translationHistoryDao().count())
