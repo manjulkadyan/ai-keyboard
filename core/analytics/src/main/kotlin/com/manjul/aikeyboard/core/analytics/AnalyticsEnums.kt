@@ -31,7 +31,7 @@ enum class PackResult(val value: String) {
     OK("ok"), FAILED("failed"), HASH_MISMATCH("hash_mismatch"), CANCELLED("cancelled")
 }
 
-/** Where a translation happened; conversation and camera arrive in S5. */
+/** Where a translation happened. Conversation and camera are out of scope for this app (docs/decisions/od-21). */
 enum class TranslateSurface(val value: String) {
     BAR("bar"), TRANSLATOR("translator"), PROCESS_TEXT("process_text")
 }

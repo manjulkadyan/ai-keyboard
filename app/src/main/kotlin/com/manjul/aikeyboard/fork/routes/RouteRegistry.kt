@@ -23,8 +23,8 @@ import com.manjul.aikeyboard.fork.settings.SettingsSection
  * The paywall is `paywall?trigger=<wire>` for every link-able [PaywallTrigger] (S4-paywall). `pro`, which the AI
  * quota card opens, is an alias of `paywall?trigger=ai_quota` (plan decision 23). Before onboarding is done every
  * paywall route opens Home (PRD FR-32 AC3). `themes` opens the Themes screen (S4-themes). `settings/all` opens the
- * Settings tree and `settings/<slug>` each of its [SettingsSection]s (S4-settings, PRD FR-09). PRD FR-32 also lists
- * `conversation` and `camera`; their sprints add them.
+ * Settings tree and `settings/<slug>` each of its [SettingsSection]s (S4-settings, PRD FR-09). There is no
+ * `conversation` or `camera` route: both features are out of scope for this app (docs/decisions/od-21).
  */
 object RouteRegistry {
     /** The `FlorisAppActivity` extra naming a route (a key of [routes]). */
