@@ -61,6 +61,8 @@ class EventCatalogLimitsTest {
         EventCatalog.updatePrompt(UpdateTypeParam.FLEXIBLE, UpdateResultParam.FAILED),
         EventCatalog.themeApply(big, premium = true),
         EventCatalog.deleteData(),
+        EventCatalog.dictionaryLookup(offline = false, found = true),
+        EventCatalog.stickerSend(big, premium = true, StickerMethod.CLIPBOARD),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -173,10 +175,16 @@ class EventCatalogLimitsTest {
             "consent_result", "consent_withdrawn",
             "purchase_start", "trial_start", "purchase_success", "purchase_fail", "subscription_state",
             "restore_purchases", "paywall_view", "paywall_close", "ad_paid_event", "update_prompt", "theme_apply",
-            "delete_data",
+            "delete_data", "dictionary_lookup", "sticker_send",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)
+    }
+
+    @Test fun dictionaryLookupCarriesOfflineAndFoundOnly() {
+        val e = EventCatalog.dictionaryLookup(offline = true, found = false)
+        assertEquals("dictionary_lookup", e.name)
+        assertEquals(mapOf("offline" to true, "found" to false), e.params)
     }
 
     @Test fun themeApplyCarriesThemeIdAndPremiumOnly() {
@@ -188,5 +196,12 @@ class EventCatalogLimitsTest {
     @Test fun themeApplyDropsAnIdThatIsNotACatalogId() {
         assertEquals("other", EventCatalog.themeApply("Not A Theme!", premium = false).params["theme_id"])
         assertEquals("other", EventCatalog.themeApply("a".repeat(41), premium = false).params["theme_id"])
+    }
+
+    @Test fun stickerSendCarriesPackPremiumAndMethodOnly() {
+        val e = EventCatalog.stickerSend("starter_plus", premium = true, StickerMethod.COMMIT_CONTENT)
+        assertEquals("sticker_send", e.name)
+        assertEquals(mapOf("pack_id" to "starter_plus", "premium" to true, "method" to "commit_content"), e.params)
+        assertEquals("other", EventCatalog.stickerSend("com.example.chat", false, StickerMethod.SHARE).params["pack_id"])
     }
 }

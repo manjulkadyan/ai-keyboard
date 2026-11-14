@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S5-clipboard): clipboard history text encrypted at rest
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +20,19 @@ package com.manjul.aikeyboard.ime.clipboard
 import android.content.ClipData
 import android.content.Context
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
-import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.editorInstance
 import com.manjul.aikeyboard.fork.clipboard.ClipboardCaptureGate // FORK(S1-clipboard)
+// FORK(S5-clipboard): imports for the encrypted clipboard history
+import com.manjul.aikeyboard.fork.clipboard.ClipboardCipher
+import com.manjul.aikeyboard.fork.clipboard.CompactionMark
+import com.manjul.aikeyboard.fork.clipboard.ClipboardEncryptionMigrator
+import com.manjul.aikeyboard.fork.clipboard.ClipboardHistoryVault
+import com.manjul.aikeyboard.fork.clipboard.ClipboardWipe
+import com.manjul.aikeyboard.fork.clipboard.KeyProvider
+import com.manjul.aikeyboard.fork.clipboard.KeystoreKeyProvider
+import com.manjul.aikeyboard.fork.clipboard.compactClipboardDatabase
+import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFileStorage
+import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFilesDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDao
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
@@ -46,6 +57,7 @@ import org.florisboard.lib.android.showShortToastSync
 import org.florisboard.lib.android.systemService
 import org.florisboard.lib.kotlin.tryOrNull
 import java.io.Closeable
+import java.io.File
 
 /**
  * [ClipboardManager] manages the clipboard and clipboard history.
@@ -59,10 +71,15 @@ class ClipboardManager(
     context: Context,
     // FORK(S1-clipboard): fail-closed capture gate (policy + sensitivity); injectable for tests
     private val captureGate: ClipboardCaptureGate = ClipboardCaptureGate(),
+    // FORK(S5-clipboard): the history key; AndroidKeyStore in production, replaceable in tests
+    keyProvider: KeyProvider = KeystoreKeyProvider(),
 ) : AndroidClipboardManager_OnPrimaryClipChangedListener, Closeable {
     companion object {
         // 1 minute
         private const val INTERVAL = 60 * 1000L
+
+        // FORK(S5-clipboard): present while a compaction after the encryption migration is still owed (no content)
+        const val COMPACTION_MARK_FILE = "clipboard_compaction.pending"
 
         /**
          * Taken from ClipboardDescription.java from the AOSP
@@ -92,14 +109,29 @@ class ClipboardManager(
     }
 
     private val prefs by FlorisPreferenceStore
-    private val appContext by context.appContext()
-    private val editorInstance by context.editorInstance()
+    // FORK(S5-clipboard): the app context directly, and the editor on first use, so tests can build the real manager
+    // on a plain Application (Robolectric cannot load FlorisApplication's native library). In production the
+    // context is FlorisApplication, so these are the same objects as upstream's.
+    private val appContext: Context = context.applicationContext
+    private val editorInstance by lazy { context.editorInstance().value }
     private val systemClipboardManager = context.systemService(AndroidClipboardManager::class)
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var cleanUpJob: Job
     private var clipHistoryDb: ClipboardHistoryDatabase? = null
     private val clipHistoryDao: ClipboardHistoryDao? get() = clipHistoryDb?.clipboardItemDao()
+
+    // FORK(S5-clipboard): text is sealed before each DAO write and opened after each DAO read; in-memory items hold
+    // plain text. A lost key wipes rows, files and the key alias, once per key generation; an unavailable key
+    // hides sealed rows and deletes nothing. Reads are opened off the main thread, in order.
+    private val historyCipher = ClipboardCipher(keyProvider)
+    private val historyWipe = ClipboardWipe(
+        deleteRows = { clipHistoryDao?.deleteAll() },
+        deleteFiles = { deleteAllClipFiles() },
+        keys = keyProvider,
+    )
+    private val historyVault = ClipboardHistoryVault(historyCipher, historyWipe) { wipe -> ioScope.launch { wipe() } }
+    private val historyReadDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     private val _historyFlow = MutableStateFlow(ClipboardHistory.EMPTY)
     val historyFlow = _historyFlow.asStateFlow()
@@ -129,10 +161,30 @@ class ClipboardManager(
     fun initializeForContext(context: Context) {
         ioScope.launch {
             if (clipHistoryDb == null) {
-                clipHistoryDb = ClipboardHistoryDatabase.new(context.applicationContext)
+                val db = ClipboardHistoryDatabase.new(context.applicationContext)
+                clipHistoryDb = db
+                // FORK(S5-clipboard): seal pre-S5 plaintext rows once per process; reads pass them through meanwhile.
+                // A compaction that fails stays owed in a no_backup marker file and is retried at the next start.
+                ioScope.launch {
+                    ClipboardEncryptionMigrator(
+                        dao = db.clipboardItemDao(),
+                        cipher = historyCipher,
+                        wipe = historyWipe,
+                        pendingCompaction = CompactionMark.FileMark(
+                            File(context.applicationContext.noBackupFilesDir, COMPACTION_MARK_FILE),
+                        ),
+                        compact = { compactClipboardDatabase(db.openHelper.writableDatabase) },
+                    ).runOnce()
+                }
                 withContext(Dispatchers.Main) {
-                    clipHistoryDao?.getAllLive()?.observeForever { items ->
-                        updateHistory(items)
+                    clipHistoryDao?.getAllLive()?.observeForever { _ ->
+                        // FORK(S5-clipboard): each emission only triggers a re-query on the serial IO dispatcher.
+                        // The vault takes the wipe generation before that query, so rows from before a wipe
+                        // cannot wipe again. Sealed rows are opened off the main thread, in order.
+                        ioScope.launch(historyReadDispatcher) {
+                            val dao = clipHistoryDao ?: return@launch
+                            updateHistory(historyVault.read { dao.getAll() })
+                        }
                     }
                 }
             }
@@ -301,14 +353,16 @@ class ClipboardManager(
 
     private fun moveToTheBeginning(oldItem: ClipboardItem, newItem: ClipboardItem) {
         ioScope.launch {
+            val sealed = historyVault.sealForWrite(newItem) ?: return@launch // FORK(S5-clipboard): no key, no write
             clipHistoryDao?.delete(oldItem.id)
-            clipHistoryDao?.insert(newItem)
+            clipHistoryDao?.insert(sealed) // FORK(S5-clipboard): sealed text only
         }
     }
 
     fun insertClip(item: ClipboardItem) {
         ioScope.launch {
-            val id = clipHistoryDao?.insert(item)
+            val sealed = historyVault.sealForWrite(item) ?: return@launch // FORK(S5-clipboard): no key, no write
+            val id = clipHistoryDao?.insert(sealed) // FORK(S5-clipboard): sealed text only
             item.id = id ?: 0
         }
     }
@@ -381,14 +435,27 @@ class ClipboardManager(
 
     fun pinClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.update(item.copy(isPinned = true))
+            // FORK(S5-clipboard): sealed text only; with no key the row is left as it is
+            historyVault.sealForWrite(item.copy(isPinned = true))?.let { clipHistoryDao?.update(it) }
         }
     }
 
     fun unpinClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.update(item.copy(isPinned = false))
+            // FORK(S5-clipboard): sealed text only; with no key the row is left as it is
+            historyVault.sealForWrite(item.copy(isPinned = false))?.let { clipHistoryDao?.update(it) }
         }
+    }
+
+    // FORK(S5-clipboard): media rows and files go with a lost key, as Delete my data clears them
+    private fun deleteAllClipFiles() {
+        val files = ClipboardFilesDatabase.new(appContext)
+        try {
+            files.clearAllTables()
+        } finally {
+            files.close()
+        }
+        ClipboardFileStorage.resetClipboardFileStorage(appContext)
     }
 
     fun pasteItem(item: ClipboardItem) {

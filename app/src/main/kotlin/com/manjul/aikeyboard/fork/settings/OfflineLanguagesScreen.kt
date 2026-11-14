@@ -39,11 +39,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.manjul.aikeyboard.R
+import com.manjul.aikeyboard.core.content.dictionary.PackState
 import com.manjul.aikeyboard.core.translate.Lang
 import com.manjul.aikeyboard.core.translate.mlkit.ModelUiState
 import com.manjul.aikeyboard.core.voice.platform.PlatformRecognizerCapabilities
 import com.manjul.aikeyboard.core.voice.whisper.ModelState
 import com.manjul.aikeyboard.core.voice.whisper.WhisperModelSpec
+import com.manjul.aikeyboard.dictionary
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.translateModelStore
@@ -69,6 +71,7 @@ internal class OfflineLanguagesHolder(context: Context) : ViewModel() {
         whisperOffered = if (whisperOffered) whisper.models.offered() else emptyList(),
         onDeviceRecognizer = PlatformRecognizerCapabilities(context).isOnDeviceAvailable(),
         scope = scope,
+        dictionaryPack = context.dictionary().value.packManager,
     )
 
     fun downloadWhisper(spec: WhisperModelSpec, wifiOnly: Boolean) = whisper.models.download(spec, wifiOnly)
@@ -106,6 +109,8 @@ fun OfflineLanguagesScreen() = FlorisScreen {
             onWifiOnly = vm::setWifiOnly,
             onWhisperDownload = { holder.downloadWhisper(it, state.wifiOnly) },
             onWhisperDelete = holder::deleteWhisper,
+            onDictionaryDownload = vm::installDictionary,
+            onDictionaryDelete = vm::removeDictionary,
             onRecognizerSettings = {
                 try {
                     context.startActivity(OfflineLanguagesViewModel.recognizerSettingsIntent())
@@ -127,6 +132,8 @@ internal fun OfflineLanguagesContent(
     onWhisperDownload: (WhisperModelSpec) -> Unit,
     onWhisperDelete: (WhisperModelSpec) -> Unit,
     onRecognizerSettings: () -> Unit,
+    onDictionaryDownload: () -> Unit = {},
+    onDictionaryDelete: () -> Unit = {},
 ) {
     val context = LocalContext.current
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -178,7 +185,46 @@ internal fun OfflineLanguagesContent(
         items(state.whisper, key = { "whisper-" + it.first.name }) { (spec, modelState) ->
             WhisperRow(spec, modelState, onWhisperDownload, onWhisperDelete)
         }
+        state.dictionary?.let { pack ->
+            item(key = "dictionary") {
+                Header(stringRes(R.string.offline_languages__dictionary))
+                DictionaryPackRow(pack, onDictionaryDownload, onDictionaryDelete)
+            }
+        }
     }
+}
+
+/** S5-dict: the English dictionary pack (FR-21, FR-36). WorkManager gives no byte progress, so it is indeterminate. */
+@Composable
+private fun DictionaryPackRow(state: PackState, onDownload: () -> Unit, onDelete: () -> Unit) {
+    val name = stringRes(R.string.offline_languages__dictionary_name)
+    val status = when (state) {
+        PackState.NotInstalled -> stringRes(R.string.offline_languages__dictionary_absent)
+        is PackState.Downloading -> stringRes(R.string.offline_languages__dictionary_downloading)
+        is PackState.Installed -> stringRes(R.string.offline_languages__dictionary_ready, "version" to state.version)
+        PackState.Unavailable -> stringRes(R.string.offline_languages__dictionary_unavailable)
+    }
+    ListItem(
+        headlineContent = { Text(name) },
+        supportingContent = { Text(status) },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                when (state) {
+                    PackState.NotInstalled -> TextButton(onClick = onDownload) {
+                        Text(stringRes(R.string.offline_languages__download))
+                    }
+                    is PackState.Downloading -> {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        TextButton(onClick = onDelete) { Text(stringRes(R.string.offline_languages__stop)) }
+                    }
+                    is PackState.Installed -> TextButton(onClick = onDelete) {
+                        Text(stringRes(R.string.offline_languages__delete))
+                    }
+                    PackState.Unavailable -> Unit
+                }
+            }
+        },
+    )
 }
 
 @Composable

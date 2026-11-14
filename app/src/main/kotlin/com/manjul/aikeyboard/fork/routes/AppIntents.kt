@@ -5,8 +5,10 @@
 
 package com.manjul.aikeyboard.fork.routes
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.manjul.aikeyboard.app.FlorisAppActivity
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.EventCatalog
 import com.manjul.aikeyboard.fork.processtext.ProcessTextInput
@@ -14,10 +16,17 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** What `FlorisAppActivity` does with an incoming intent. */
 sealed interface AppIntent {
-    /** Open an allow-listed route; [translatorText] (user content, never logged) prefills the Translator. */
-    data class OpenRoute(val route: RouteRegistry.Resolved, val translatorText: String? = null) : AppIntent {
+    /**
+     * Open an allow-listed route; [translatorText] prefills the Translator and [dictionaryWord] the Dictionary. Both
+     * are user content and never logged.
+     */
+    data class OpenRoute(
+        val route: RouteRegistry.Resolved,
+        val translatorText: String? = null,
+        val dictionaryWord: String? = null,
+    ) : AppIntent {
         override fun toString(): String = "OpenRoute(route=${route.name}, unknown=${route.unknown}, " +
-            "translatorChars=${translatorText?.length})"
+            "translatorChars=${translatorText?.length}, dictionaryChars=${dictionaryWord?.length})"
     }
 
     /** Upstream's extension import (VIEW of a content URI, or SEND with a clip). */
@@ -49,7 +58,7 @@ object AppIntents {
             // A non-String value reads as null: not allow-listed.
             val name = runCatching { intent.getStringExtra(RouteRegistry.EXTRA_OPEN_SCREEN) }.getOrNull()
             val route = RouteRegistry.resolve(name ?: "", null, onboardingDone)
-            return AppIntent.OpenRoute(route, translatorText(intent, route))
+            return AppIntent.OpenRoute(route, translatorText(intent, route), dictionaryWord(intent, route))
         }
         val data = intent.data
         when (intent.action) {
@@ -74,6 +83,25 @@ object AppIntents {
         val text = runCatching { intent.getCharSequenceExtra(RouteRegistry.EXTRA_TRANSLATOR_TEXT) }.getOrNull()
         return text?.toString()?.takeIf { it.isNotBlank() }?.let(ProcessTextInput::truncate)
     }
+
+    /** S5-dict: the trimmed word of `open_screen=dictionary`, at most [MAX_DICTIONARY_WORD_CHARS] chars. */
+    private fun dictionaryWord(intent: Intent, route: RouteRegistry.Resolved): String? {
+        if (route.unknown || route.name != RouteRegistry.DICTIONARY) return null
+        val word = runCatching { intent.getCharSequenceExtra(RouteRegistry.EXTRA_DICTIONARY_WORD) }.getOrNull()
+        return word?.toString()?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_DICTIONARY_WORD_CHARS }
+    }
+
+    /**
+     * S5-dict: the one intent that opens the Dictionary screen with [word] through the route allow-list. The
+     * Define action and the keyboard card both use it; [dictionaryWord] reads it back.
+     */
+    fun dictionaryIntent(context: Context, word: String): Intent =
+        Intent(context, FlorisAppActivity::class.java)
+            .putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, RouteRegistry.DICTIONARY)
+            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, word)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+
+    const val MAX_DICTIONARY_WORD_CHARS = 64
 }
 
 /**
@@ -84,6 +112,15 @@ object TranslatorHandoff {
     private val pending = AtomicReference<String?>(null)
 
     fun offer(text: String) = pending.set(text)
+
+    fun take(): String? = pending.getAndSet(null)
+}
+
+/** Hands the keyboard card's word to the Dictionary screen, once (S5-dict). It lives only in memory. */
+object DictionaryHandoff {
+    private val pending = AtomicReference<String?>(null)
+
+    fun offer(word: String) = pending.set(word)
 
     fun take(): String? = pending.getAndSet(null)
 }

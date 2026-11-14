@@ -37,6 +37,11 @@
         <intent>
             <action android:name="android.speech.RecognitionService"/>
         </intent>
+        <!-- FORK(S5-stickers): share targets of the host app, for the sticker ACTION_SEND fallback on API 30+ -->
+        <intent>
+            <action android:name="android.intent.action.SEND"/>
+            <data android:mimeType="image/png"/>
+        </intent>
     </queries>
 
     <!-- dataExtractionRules (API 31+) gets its own file in the <data-extraction-rules> format (upstream
@@ -183,6 +188,22 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+        </activity>
+
+        <!-- FORK(S5-dict): the "Define" text-selection action (PRD FR-21). Exported with one PROCESS_TEXT filter,
+             text/plain only, no data URIs (ExportedComponentRules); it never returns text. -->
+        <activity
+            android:name="com.manjul.aikeyboard.fork.dictionary.DefineTextActivity"
+            android:label="@string/dictionary__define_label"
+            android:theme="@style/FlorisAppTheme.Transparent"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>

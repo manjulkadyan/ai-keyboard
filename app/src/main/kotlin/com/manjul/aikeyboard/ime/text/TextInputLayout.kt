@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.fork.ai.AiSheetOverlay // FORK(S3-ai)
+import com.manjul.aikeyboard.fork.dictionary.DefinitionCardOverlay // FORK(S5-dict)
 import com.manjul.aikeyboard.ime.smartbar.IncognitoDisplayMode
 import com.manjul.aikeyboard.ime.smartbar.InlineSuggestionsStyleCache
 import com.manjul.aikeyboard.ime.smartbar.Smartbar
@@ -82,6 +83,7 @@ fun TextInputLayout(
                     }
                     TextKeyboardLayout(evaluator = evaluator)
                     AiSheetOverlay() // FORK(S3-ai): the ✦ sheet covers the keys while open, nothing when hidden
+                    DefinitionCardOverlay() // FORK(S5-dict): the definition card, offline only, nothing when hidden
                 }
             }
         }

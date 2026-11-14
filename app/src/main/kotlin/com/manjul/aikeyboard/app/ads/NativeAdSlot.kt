@@ -47,7 +47,11 @@ fun TranslatorNativeAdSlot() = NativeAdSlot(Placement.TRANSLATOR)
 @Composable
 fun HistoryNativeAdSlot() = NativeAdSlot(Placement.HISTORY)
 
-internal enum class Placement { TRANSLATOR, HISTORY }
+/** The Dictionary screen's native slot, below the attribution footer (S5-dict). */
+@Composable
+fun DictionaryNativeAdSlot() = NativeAdSlot(Placement.DICTIONARY)
+
+internal enum class Placement { TRANSLATOR, HISTORY, DICTIONARY }
 
 /**
  * A native ad below the fold, as the last item of a screen. The ad view carries an "Ad" label. The "Remove ads"
@@ -59,6 +63,7 @@ internal fun NativeAdSlot(placement: Placement) {
     val id = when (placement) {
         Placement.TRANSLATOR -> AdPlacements.NATIVE_TRANSLATOR
         Placement.HISTORY -> AdPlacements.NATIVE_HISTORY
+        Placement.DICTIONARY -> AdPlacements.NATIVE_DICTIONARY
     }
     val graph = LocalAdsAppGraph.current ?: return
     val visible by graph.controller.adsVisible.collectAsState()

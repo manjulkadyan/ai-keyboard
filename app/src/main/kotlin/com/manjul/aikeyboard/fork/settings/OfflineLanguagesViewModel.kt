@@ -7,6 +7,8 @@ package com.manjul.aikeyboard.fork.settings
 
 import android.content.Intent
 import android.provider.Settings
+import com.manjul.aikeyboard.core.content.dictionary.DictionaryPackManager
+import com.manjul.aikeyboard.core.content.dictionary.PackState
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.translate.CloudTranslationEngine
 import com.manjul.aikeyboard.core.translate.Lang
@@ -45,6 +47,8 @@ data class OfflineLanguagesUiState(
     val whisper: List<Pair<WhisperModelSpec, ModelState>> = emptyList(),
     /** Whether the platform has an on-device speech recognizer (its languages are managed in system settings). */
     val onDeviceRecognizer: Boolean = false,
+    /** S5-dict: the English dictionary pack row; null when the screen has no pack manager (tests). */
+    val dictionary: PackState? = null,
 )
 
 /**
@@ -63,6 +67,7 @@ class OfflineLanguagesViewModel(
     private val scope: CoroutineScope,
     catalog: Set<Lang> = MlKitLanguages.all,
     displayLocale: Locale = Locale.getDefault(),
+    private val dictionaryPack: DictionaryPackManager? = null,
 ) {
     private val order: List<Lang> = languageOrder(catalog, displayLocale)
 
@@ -70,7 +75,8 @@ class OfflineLanguagesViewModel(
         store.states,
         settings.flow,
         whisperStates ?: flowOf(emptyMap()),
-    ) { models, s, whisper ->
+        dictionaryPack?.state ?: flowOf(null),
+    ) { models, s, whisper, dictionary ->
         val readyOthers = models.any { (lang, state) -> lang != Lang.English && state == ModelUiState.READY }
         OfflineLanguagesUiState(
             languages = order.map { lang ->
@@ -85,12 +91,24 @@ class OfflineLanguagesViewModel(
             wifiOnly = s.translateWifiOnly,
             whisper = whisperOffered.mapNotNull { spec -> whisper[spec]?.let { spec to it } },
             onDeviceRecognizer = onDeviceRecognizer,
+            dictionary = dictionary,
         )
     }.stateIn(scope, SharingStarted.Eagerly, OfflineLanguagesUiState(onDeviceRecognizer = onDeviceRecognizer))
 
     /** Re-reads ML Kit's models when the screen resumes (plan decision 4). */
     fun refresh() {
         scope.launch { runCatching { store.refresh() } }
+        dictionaryPack?.let { pack -> scope.launch { runCatching { pack.refresh() } } }
+    }
+
+    /** S5-dict: starts the dictionary pack download (Wi-Fi only follows the switch below). */
+    fun installDictionary() {
+        dictionaryPack?.install()
+    }
+
+    /** S5-dict: cancels a running download or deletes the installed pack. */
+    fun removeDictionary() {
+        dictionaryPack?.remove()
     }
 
     fun download(lang: Lang) = store.download(lang)
@@ -102,9 +120,9 @@ class OfflineLanguagesViewModel(
         scope.launch { store.delete(lang) }
     }
 
-    /** One switch for every offline download on this screen: translation and Whisper models. */
+    /** One switch for every offline download on this screen: translation, Whisper and content packs. */
     fun setWifiOnly(on: Boolean) {
-        scope.launch { settings.update { it.copy(translateWifiOnly = on, whisperWifiOnly = on) } }
+        scope.launch { settings.update { it.copy(translateWifiOnly = on, whisperWifiOnly = on, contentWifiOnly = on) } }
     }
 
     companion object {

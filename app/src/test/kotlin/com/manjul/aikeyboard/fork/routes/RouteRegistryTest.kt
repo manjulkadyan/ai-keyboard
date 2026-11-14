@@ -8,7 +8,9 @@ package com.manjul.aikeyboard.fork.routes
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
 import com.manjul.aikeyboard.app.Deeplink
+import com.manjul.aikeyboard.app.FlorisAppActivity
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import java.io.File
@@ -68,6 +70,10 @@ class RouteRegistryTest {
                 // S4-settings: the settings tree root and its sections
                 "settings/all", "settings/languages", "settings/translate", "settings/ai", "settings/appearance",
                 "settings/typing", "settings/privacy", "settings/subscription", "settings/about",
+                // S5-dict: the Dictionary screen
+                "dictionary",
+                // S5-phrasebook: the Phrasebook screen
+                "phrasebook",
             ),
             RouteRegistry.routes.keys,
         )
@@ -163,5 +169,60 @@ class RouteRegistryTest {
         TranslatorHandoff.offer("hola")
         assertEquals("hola", TranslatorHandoff.take())
         assertNull(TranslatorHandoff.take())
+    }
+
+    // S5-dict: the Dictionary screen and the keyboard card's "More"
+    @Test
+    fun dictionaryResolvesAndTakesItsWordOnlyFromTheExtra() {
+        val byExtra = RouteRegistry.resolve("dictionary", null)
+        assertEquals("dictionary", byExtra.path)
+        assertFalse(byExtra.unknown)
+        assertEquals("dictionary", RouteRegistry.resolve(null, Uri.parse("app://dictionary")).path)
+
+        val events = mutableListOf<AnalyticsEvent>()
+        val withQuery = Intent().putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, "dictionary?word=x")
+        val request = assertIs<AppIntent.OpenRoute>(AppIntents.classify(withQuery) { events += it })
+        assertTrue(request.route.isHome && request.route.unknown)
+        assertNull(request.dictionaryWord)
+        assertEquals(listOf("deeplink_unknown"), events.map { it.name })
+        assertTrue(events.single().params.isEmpty())
+
+        val more = Intent().putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, "dictionary")
+            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, "  run ")
+        assertEquals("run", assertIs<AppIntent.OpenRoute>(AppIntents.classify(more) {}).dictionaryWord)
+        val tooLong = Intent().putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, "dictionary")
+            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, "a".repeat(65))
+        assertNull(assertIs<AppIntent.OpenRoute>(AppIntents.classify(tooLong) {}).dictionaryWord)
+        val toTranslator = Intent().putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, "translator")
+            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, "run")
+        assertNull(assertIs<AppIntent.OpenRoute>(AppIntents.classify(toTranslator) {}).dictionaryWord)
+        assertFalse(AppIntent.OpenRoute(byExtra, dictionaryWord = "secret").toString().contains("secret"))
+
+        DictionaryHandoff.offer("run")
+        assertEquals("run", DictionaryHandoff.take())
+        assertNull(DictionaryHandoff.take())
+    }
+
+    @Test
+    fun phrasebookResolvesByExtraAndByLink() {
+        val byExtra = RouteRegistry.resolve("phrasebook", null)
+        assertEquals("phrasebook", byExtra.path)
+        assertFalse(byExtra.unknown)
+        assertEquals("phrasebook", RouteRegistry.resolve(null, Uri.parse("app://phrasebook")).path)
+        assertEquals("phrasebook", RouteRegistry.resolve(null, Uri.parse("ui://florisboard/phrasebook?x=1")).path)
+        assertTrue(RouteRegistry.resolve("phrasebook/greetings", null).unknown)
+    }
+
+    @Test
+    fun theDictionaryIntentRoundTripsThroughTheRouteAllowList() {
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val intent = AppIntents.dictionaryIntent(app, "book")
+        assertEquals(FlorisAppActivity::class.java.name, intent.component?.className)
+        assertEquals(RouteRegistry.DICTIONARY, intent.getStringExtra(RouteRegistry.EXTRA_OPEN_SCREEN))
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_CLEAR_TOP != 0)
+        val open = assertIs<AppIntent.OpenRoute>(AppIntents.classify(intent) {})
+        assertEquals("dictionary", open.route.path)
+        assertEquals("book", open.dictionaryWord)
     }
 }

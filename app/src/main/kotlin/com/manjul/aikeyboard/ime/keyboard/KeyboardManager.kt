@@ -782,6 +782,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             KeyCode.TOGGLE_TRANSLATE_BAR -> if (policyDecision().allowTranslate) FlorisImeService.translateSessionOrNull()?.toggle()
             // FORK(S3-ai): the ✦ chip opens the rewrite sheet; checked here, again in open() and before every send
             KeyCode.AI_REWRITE -> if (policyDecision().let { it.allowAi && it.allowCloud }) FlorisImeService.aiSessionOrNull()?.open()
+            // FORK(S5-stickers): the stickers chip opens the panel; checked here, again in the controller and at each tap
+            KeyCode.STICKERS_PANEL -> if (policyDecision().allowCloud) FlorisImeService.stickersSessionOrNull()?.open()
             KeyCode.KANA_SWITCHER -> handleKanaSwitch()
             KeyCode.KANA_HIRA -> handleKanaHira()
             KeyCode.KANA_KATA -> handleKanaKata()
@@ -1056,6 +1058,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 KeyCode.VOICE_INPUT -> policyDecision().allowVoice
                 KeyCode.TOGGLE_TRANSLATE_BAR -> policyDecision().allowTranslate // FORK(S2-bar)
                 KeyCode.AI_REWRITE -> FlorisImeService.aiSessionOrNull()?.chipAvailable?.value == true // FORK(S3-ai)
+                KeyCode.STICKERS_PANEL -> policyDecision().allowCloud // FORK(S5-stickers)
                 KeyCode.IME_UI_MODE_CLIPBOARD -> policyDecision().allowClipboardHistory
                 KeyCode.TOGGLE_INCOGNITO_MODE -> when (prefs.suggestion.incognitoMode.get()) {
                     IncognitoMode.FORCE_OFF, IncognitoMode.FORCE_ON -> false

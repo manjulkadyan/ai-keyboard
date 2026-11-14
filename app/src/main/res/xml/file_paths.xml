@@ -3,4 +3,8 @@
     <cache-path
         name="backup"
         path="backup-and-restore/"/>
+    <!-- FORK(S5-stickers): staged stickers shared with the host app, swept after 24 h (decision 14) -->
+    <cache-path
+        name="share"
+        path="share/"/>
 </paths>

@@ -23,8 +23,8 @@ import com.manjul.aikeyboard.fork.settings.SettingsSection
  * The paywall is `paywall?trigger=<wire>` for every link-able [PaywallTrigger] (S4-paywall). `pro`, which the AI
  * quota card opens, is an alias of `paywall?trigger=ai_quota` (plan decision 23). Before onboarding is done every
  * paywall route opens Home (PRD FR-32 AC3). `themes` opens the Themes screen (S4-themes). `settings/all` opens the
- * Settings tree and `settings/<slug>` each of its [SettingsSection]s (S4-settings, PRD FR-09). PRD FR-32 also lists
- * `conversation` and `camera`; their sprints add them.
+ * Settings tree and `settings/<slug>` each of its [SettingsSection]s (S4-settings, PRD FR-09). There is no
+ * `conversation` or `camera` route: both features are out of scope for this app (docs/decisions/od-21).
  */
 object RouteRegistry {
     /** The `FlorisAppActivity` extra naming a route (a key of [routes]). */
@@ -33,11 +33,16 @@ object RouteRegistry {
     /** Text handed to the Translator by `open_screen=translator` (Open in app from the Translate sheet). */
     const val EXTRA_TRANSLATOR_TEXT = "com.manjul.aikeyboard.extra.TRANSLATOR_TEXT"
 
+    /** The word handed to the Dictionary by `open_screen=dictionary` (the keyboard card's "More", S5-dict). */
+    const val EXTRA_DICTIONARY_WORD = "com.manjul.aikeyboard.extra.DICTIONARY_WORD"
+
     const val HOME = "home"
     const val TRANSLATOR = "translator"
     const val PRO = "pro"
     const val PAYWALL = "paywall"
     const val THEMES = "themes"
+    const val DICTIONARY = "dictionary"
+    const val PHRASEBOOK = "phrasebook"
     const val SETTINGS = SettingsSection.ROOT_ROUTE
 
     private const val HOME_PATH = "settings/home"
@@ -59,6 +64,8 @@ object RouteRegistry {
         PRO to paywallPath(PaywallTrigger.AI_QUOTA), // S4-paywall: alias (plan decision 23)
         THEMES to "themes", // S4-themes: the Themes screen
         SETTINGS to SettingsSection.ROOT_ROUTE, // S4-settings: the Settings tree
+        DICTIONARY to "dictionary", // S5-dict: the Dictionary screen; its word comes only from the extra
+        PHRASEBOOK to "phrasebook", // S5-phrasebook: the Phrasebook screen
     ) + SettingsSection.entries.associate { it.route to it.path } +
         PaywallTrigger.entries.filter { it.deepLinkable }.map(::paywallPath).associateWith { it }
 

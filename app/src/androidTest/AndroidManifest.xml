@@ -8,5 +8,16 @@
             android:exported="true"
             android:theme="@android:style/Theme.Material.Light"
             android:windowSoftInputMode="stateAlwaysVisible"/>
+        <!-- S5 Task 6: the host app's share target in StickerCompatInsertTest (the sticker share fallback). -->
+        <activity
+            android:name="com.manjul.aikeyboard.fork.stickers.StickerShareReceiverActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/png"/>
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

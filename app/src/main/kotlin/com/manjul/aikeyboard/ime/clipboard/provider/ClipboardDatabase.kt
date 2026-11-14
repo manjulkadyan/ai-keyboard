@@ -314,6 +314,11 @@ interface ClipboardHistoryDao {
     // FORK(S1-clipboard): TTL expiry; pinned items are never removed
     @Query("DELETE FROM $CLIPBOARD_HISTORY_TABLE WHERE isPinned = 0 AND creationTimestampMs < :cutoff")
     fun deleteUnpinnedOlderThan(cutoff: Long)
+
+    // FORK(S5-clipboard): the encryption migrator replaces only the text column, and only if the row still holds
+    // the plain text it read, so a pin or delete that raced it is not overwritten
+    @Query("UPDATE $CLIPBOARD_HISTORY_TABLE SET text = :sealed WHERE ${BaseColumns._ID} = :id AND text = :plain")
+    fun replaceText(id: Long, plain: String, sealed: String): Int
 }
 
 @Database(

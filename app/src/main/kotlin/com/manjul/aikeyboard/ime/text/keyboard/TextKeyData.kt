@@ -152,6 +152,7 @@ data class TextKeyData(
                 TOGGLE_PRIVATE_APP, // FORK(S1-smartbar)
                 TOGGLE_TRANSLATE_BAR, // FORK(S2-bar)
                 AI_REWRITE, // FORK(S3-ai)
+                STICKERS_PANEL, // FORK(S5-stickers)
             )
         }
 
@@ -533,6 +534,12 @@ data class TextKeyData(
             type = KeyType.FUNCTION,
             code = KeyCode.AI_REWRITE,
             label = "ai_rewrite",
+        )
+        // FORK(S5-stickers): predefined key data for [KeyCode.STICKERS_PANEL]
+        val STICKERS_PANEL = TextKeyData(
+            type = KeyType.FUNCTION,
+            code = KeyCode.STICKERS_PANEL,
+            label = "stickers_panel",
         )
         /** Predefined key data for [KeyCode.TOGGLE_AUTOCORRECT] */
         val TOGGLE_AUTOCORRECT = TextKeyData(

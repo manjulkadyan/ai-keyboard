@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S5-clipboard): smart chips under text items
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,10 +88,16 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription // FORK(S5-clipboard)
+import androidx.compose.ui.semantics.semantics // FORK(S5-clipboard)
 import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.clipboardManager
+import com.manjul.aikeyboard.editorInstance // FORK(S5-clipboard)
+import com.manjul.aikeyboard.fork.clipboard.SmartChip // FORK(S5-clipboard)
+import com.manjul.aikeyboard.fork.clipboard.SmartChipKind // FORK(S5-clipboard)
+import com.manjul.aikeyboard.fork.clipboard.SmartChips // FORK(S5-clipboard)
 import com.manjul.aikeyboard.ime.ImeUiMode
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFileStorage
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
@@ -142,6 +149,7 @@ fun ClipboardInputLayout(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val clipboardManager by context.clipboardManager()
+    val editorInstance by context.editorInstance() // FORK(S5-clipboard): a smart chip tap commits its value
     val keyboardManager by context.keyboardManager()
     val androidKeyguardManager = remember { context.systemService(AndroidKeyguardManager::class) }
 
@@ -359,6 +367,17 @@ fun ClipboardInputLayout(
                             .run { if (contentScrollInsteadOfClip) this.florisVerticalScroll() else this },
                         text = item.displayText(),
                     )
+                    // FORK(S5-clipboard): smart chips, found at render time; none on a masked item
+                    val chips = remember(item.text, item.isSensitive) {
+                        SmartChips.forItem(item.text, masked = item.isSensitive)
+                    }
+                    if (chips.isNotEmpty()) {
+                        ClipSmartChipsRow(
+                            chips = chips,
+                            enabled = popupItem == null,
+                            onChip = { chip -> editorInstance.commitClipboardItem(ClipboardItem.text(chip.value)) },
+                        )
+                    }
                 }
             }
         }
@@ -739,6 +758,44 @@ private fun ClipTextItemDescription(
             SnyggText(
                 modifier = Modifier.weight(1f),
                 text = description,
+            )
+        }
+    }
+}
+
+// FORK(S5-clipboard): one chip per email, link or phone number; a tap commits the value through the paste path
+@Composable
+private fun ClipSmartChipsRow(
+    chips: List<SmartChip>,
+    enabled: Boolean,
+    onChip: (SmartChip) -> Unit,
+) {
+    SnyggRow(
+        elementName = FlorisImeUi.ClipboardFilterRow.elementName,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        clickAndSemanticsModifier = Modifier.florisHorizontalScroll(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (chip in chips) {
+            val icon = when (chip.kind) {
+                SmartChipKind.EMAIL -> Icons.Outlined.Email
+                SmartChipKind.URL -> Icons.Default.Link
+                SmartChipKind.PHONE -> Icons.Default.Phone
+            }
+            val label = when (chip.kind) {
+                SmartChipKind.EMAIL -> R.string.clipboard__smart_chip_email
+                SmartChipKind.URL -> R.string.clipboard__smart_chip_url
+                SmartChipKind.PHONE -> R.string.clipboard__smart_chip_phone
+            }
+            val description = stringRes(label, "value" to chip.value)
+            SnyggChip(
+                elementName = FlorisImeUi.ClipboardFilterChip.elementName,
+                attributes = mapOf("state" to "inactive", "type" to chip.kind.name.lowercase()),
+                modifier = Modifier.semantics { contentDescription = description },
+                onClick = { onChip(chip) },
+                enabled = enabled,
+                imageVector = icon,
+                text = chip.value,
             )
         }
     }

@@ -73,6 +73,19 @@ import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelDownloadWorkerFa
 import com.manjul.aikeyboard.core.translate.mlkit.TranslateModelStore
 import kotlinx.coroutines.SupervisorJob
 // FORK(S2-translator): imports for Translator history and the shared TextToSpeech
+import com.manjul.aikeyboard.core.content.ContentDirs // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.manifest.ManifestCache // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.manifest.ManifestVerifier // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.source.AssetContentSource // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.source.ContentSources // FORK(S5-content)
+import com.manjul.aikeyboard.core.content.download.PackDownloader // FORK(S5-dict)
+import com.manjul.aikeyboard.core.content.download.PackDownloadWorker // FORK(S5-dict)
+import com.manjul.aikeyboard.core.content.download.PackDownloadWorkerFactory // FORK(S5-dict)
+import com.manjul.aikeyboard.core.analytics.AnalyticsEvent // FORK(S5-dict)
+import com.manjul.aikeyboard.core.analytics.AnalyticsSink // FORK(S5-dict)
+import com.manjul.aikeyboard.fork.dictionary.DictionaryAppGraph // FORK(S5-dict)
+import com.manjul.aikeyboard.fork.phrasebook.PhrasebookAppGraph // FORK(S5-phrasebook)
+import com.manjul.aikeyboard.fork.stickers.StickersAppGraph // FORK(S5-stickers)
 import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdict)
@@ -158,6 +171,24 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     val translation = lazy { TranslationCore(this) { translateModelStore.value } }
     // FORK(S2-translator): fork Room database (databases/app_database, never backed up), opened on first use
     val appDatabase = lazy { AppDatabase.new(this) }
+    // FORK(S5-content): the signed content manifest cache (CDN, or the debug assets); nothing is read until first use
+    // FORK(S5-dict): one content source for the manifest and the pack downloads
+    private val contentSource = lazy {
+        ContentSources.select(BuildConfig.CONTENT_BASE_URL, BuildConfig.DEBUG) { AssetContentSource(assets) }
+    }
+    val contentManifest = lazy {
+        ManifestCache(
+            dir = ContentDirs.manifest(this),
+            source = contentSource.value, // FORK(S5-dict)
+            verifier = ManifestVerifier(BuildConfig.CONTENT_PUBLIC_KEY),
+            clock = System::currentTimeMillis,
+        )
+    }
+    // FORK(S5-dict): pack downloads and the dictionary (pack, online cache, kb-api); all built on first use
+    val packDownloader = lazy { PackDownloader(contentSource.value, ContentDirs.packs(this)) }
+    val dictionary = lazy { DictionaryAppGraph(this) }
+    val phrasebook = lazy { PhrasebookAppGraph(this) } // FORK(S5-phrasebook): built on first use
+    val stickers = lazy { StickersAppGraph(this) } // FORK(S5-stickers): built on first use
     val translationHistory = lazy { TranslationHistoryRepository(appDatabase.value.translationHistoryDao()) }
     // FORK(S3-userdict): on-device user dictionary (user_word); opened on first use, written on a background worker
     val userWordRepository = lazy {
@@ -186,6 +217,16 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
                     addFactory(TranslateModelDownloadWorkerFactory { translateModelStore.value })
                     // FORK(S4-billing): the offline purchase verify retry
                     addFactory(BillingAppGraph.workerFactory { billing.value })
+                    // FORK(S5-dict): dictionary and sticker pack downloads
+                    addFactory(
+                        PackDownloadWorkerFactory {
+                            PackDownloadWorker.Deps(
+                                manifest = contentManifest.value,
+                                downloader = packDownloader.value,
+                                analytics = relaySink { analytics.value.log(it) },
+                            )
+                        },
+                    )
                 },
             )
             .build()
@@ -334,6 +375,27 @@ fun Context.ttsManager() = this.florisApplication().ttsManager
 
 // FORK(S3-userdict): accessor for the user dictionary
 fun Context.userWordRepository() = this.florisApplication().userWordRepository
+
+// FORK(S5-content): accessor for the fork Room database (Delete my data clears the Sprint 5 tables through it)
+fun Context.appDatabase() = this.florisApplication().appDatabase
+
+// FORK(S5-content): accessor for the content manifest cache (Delete my data clears its in-memory copy)
+fun Context.contentManifest() = this.florisApplication().contentManifest
+
+// FORK(S5-dict): accessors for the pack downloader and the dictionary
+fun Context.packDownloader() = this.florisApplication().packDownloader
+
+fun Context.dictionary() = this.florisApplication().dictionary
+
+// FORK(S5-phrasebook): accessor for the phrasebook
+fun Context.phrasebook() = this.florisApplication().phrasebook
+
+fun Context.stickers() = this.florisApplication().stickers // FORK(S5-stickers)
+
+// FORK(S5-dict): a function as an analytics sink (events only)
+private fun relaySink(log: (AnalyticsEvent) -> Unit): AnalyticsSink = object : AnalyticsSink {
+    override fun log(event: AnalyticsEvent) = log(event)
+}
 
 // FORK(S3-suggest): accessor for the suggestion field facts
 fun Context.suggestContext() = this.florisApplication().suggestContext

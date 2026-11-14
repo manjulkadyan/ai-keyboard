@@ -81,7 +81,7 @@ For bilingual and multilingual Android users, especially Urdu, Hindi and Arabic 
 |---|---|---|---|---|---|
 | **P1 Ayesha** (Lahore, 24, student / part-time tutor) | Mid-range Android (4 GB RAM), mobile data, WhatsApp-heavy | Urdu (Roman + Nastaliq), English | Writes formal English emails to clients; chats in Roman Urdu | Switches between three apps; Gboard has no Roman → Nastaliq; clones show ads | Roman Urdu transliteration; AI rewrite "Formal" |
 | **P2 Rahul** (Delhi, 31, sales rep) | Budget phone, drives between meetings | Hindi, Hinglish, English | Dictates messages while moving; replies to English-speaking customers | Dictation output is messy, with no punctuation and filler words | Continuous voice + AI polish; Hinglish → Devanagari |
-| **P3 Omar** (Dubai, 38, logistics supervisor, from Egypt) | Works with Urdu-, Hindi- and English-speaking crews | Arabic, English, some Urdu | Translates short instructions in chat; reads foreign signage and forms | Online-only translators fail on site; worries about privacy | Offline translate bar; camera OCR translate; conversation mode |
+| **P3 Omar** (Dubai, 38, logistics supervisor, from Egypt) | Works with Urdu-, Hindi- and English-speaking crews | Arabic, English, some Urdu | Translates short instructions in chat; reads foreign signage and forms | Online-only translators fail on site; worries about privacy | Offline translate bar. Camera OCR and conversation mode moved to a future app (OD-21) |
 | **P4 Fatima** (Karachi, 52, homemaker) | Low tech confidence | Urdu speaker, limited typing | Voice messages to family abroad, sometimes in English | Typing in Urdu is slow; setup flows confuse her | Big-mic voice typing; 3-step onboarding in Urdu UI |
 | **P5 Lucas** (São Paulo, 27, freelance designer) | Mid/high-end phone | Portuguese, English | Talks with international clients on Slack / WhatsApp | Copy-pasting into Google Translate breaks flow | Translate bar in any app; PROCESS_TEXT translate; AI tone |
 | **P6 Nadia** (Dhaka, 29, NGO field officer) | Shared device, patchy connectivity | Bengali, English | Field notes by voice; translating reports | Connectivity; data costs | On-device translation + offline packs (Bengali quality is a risk, R-03) |
@@ -106,8 +106,8 @@ For bilingual and multilingual Android users, especially Urdu, Hindi and Arabic 
 | J6 | see foreign text in any app | select it → Translate | understand it without copy-pasting | FR-14 |
 | J7 | am offline or on expensive data | still translate and dictate | rely on the keyboard everywhere | FR-11, FR-10, FR-36 |
 | J8 | type a password, card number or private message | be sure nothing leaves my phone | trust the keyboard | FR-02, FR-34 |
-| J9 | face a sign, menu or document | point the camera and read it in my language | navigate | FR-20 |
-| J10 | have a face-to-face conversation across languages | speak in turns and hear the translation | talk to people | FR-19 |
+| J9 | face a sign, menu or document | point the camera and read it in my language | navigate | Not in this app (OD-21) |
+| J10 | have a face-to-face conversation across languages | speak in turns and hear the translation | talk to people | Not in this app (OD-21) |
 | J11 | want my keyboard to feel like mine | pick a theme, colour or background | enjoy using it | FR-17, FR-18 |
 | J12 | want to express myself | send stickers and emoji | chat expressively | FR-04, FR-23 |
 
@@ -134,7 +134,7 @@ For bilingual and multilingual Android users, especially Urdu, Hindi and Arabic 
 | NG-2 | **Any ad inside the keyboard surface** | Policy and trust risk. Both targets do it (App H §5, App L §5) and we drop it explicitly. |
 | NG-3 | Accessibility-service two-way chat translation (auto-translating incoming messages) in v1 | Play Accessibility policy risk (CMP open Q8; COMPETITORS G4). Revisit in v2 (FR-37). |
 | NG-4 | A general AI chat assistant inside the keyboard | Scope, cost and policy (CMP "out of v1"). |
-| NG-5 | Live AR camera overlay in v1 | v2 (CMP; FR-20). |
+| NG-5 | Camera translation (photo or live overlay) and conversation mode | They move to a separate future app (OD-21, FR-19, FR-20). |
 | NG-6 | Reproducing either app's assets: their 71 subtype presets, 156 layouts, phrase lists, sticker packs or word lists | Clean-room rule (L-F:ime-core-keyboard; L-F:keyboard-themes). |
 | NG-7 | Keystroke logging, typing analytics, or cloud learning of the user's words | Privacy commitment §11. |
 | NG-8 | iOS in this release plan | Android-first. |
@@ -162,7 +162,7 @@ Targets are **initial hypotheses** set against category benchmarks and the targe
 | IME still selected at D7 | % of activated users whose default IME is still ours on D7 (checked on app open) | ≥ 70% | ≥ 75% |
 | **Voice sessions** | `voice_session_end` with ≥ 1 committed word, per voice-using DAU per day | ≥ 2.0 | ≥ 2.5 |
 | Voice adoption | % of DAU with ≥ 1 voice session | ≥ 25% | ≥ 30% |
-| **Translations/day** | `translate_done` (all surfaces: bar, translator, PROCESS_TEXT, conversation, camera) per translating DAU | ≥ 4 | ≥ 6 |
+| **Translations/day** | `translate_done` (all surfaces: bar, translator, PROCESS_TEXT) per translating DAU | ≥ 4 | ≥ 6 |
 | Translate adoption | % of DAU with ≥ 1 translation | ≥ 30% | ≥ 35% |
 | AI adoption | % of DAU with ≥ 1 `ai_rewrite_done` or `ai_polish_done` | ≥ 8% | ≥ 12% |
 | Transliteration adoption (ur/hi users) | % of DAU with an ur/hi subtype that commit ≥ 1 transliterated word | n/a | ≥ 20% |
@@ -219,8 +219,8 @@ The **FR** column is the requirement in §7 that implements the feature.
 | 2 | voice-typing-ime | 6.5 | **Improve** | FR-10 | The continuous loop is good (300 ms restart, 2 s silence, 3 s watchdog; App H §3.2). We add on-device preference, a privacy notice and spoken punctuation. |
 | 3 | keyboard-translation-bar | 4.67 | **Improve** | FR-13 | No debounce, no password check, refuses offline, `deleteSurroundingText` can delete user text (App H §3.1). We add a 400–500 ms debounce, on-device by default, a composing preview and a sensitive block. |
 | 4 | text-translator | 5.5 | **Improve** | FR-12 | Text translations are not saved to history (App H §3.3). We add history, favourites and offline. |
-| 5 | conversation-mode | 3.67 | **Improve** | FR-19 | Only conversation writes `translation_history` (App H §3.3). We give it its own session store and on-device option. |
-| 6 | camera-translation | 3.67 | **Improve** | FR-20 | Camera2 OCR chain with an "English only" toast (App H §3.4). We use CameraX + ML Kit Text Recognition v2 for Latin and Devanagari. ML Kit v2 has no Arabic-script model, so ar/ur/fa camera sources wait for TRD OD-10. |
+| 5 | conversation-mode | 3.67 | **Drop** (OD-21) | FR-19 | It moves to a separate future app. Only conversation writes `translation_history` (App H §3.3). |
+| 6 | camera-translation | 3.67 | **Drop** (OD-21) | FR-20 | It moves to a separate future app. Camera2 OCR chain with an "English only" toast (App H §3.4). |
 | 7 | offline-phrasebook | 4.0 | **Improve** | FR-22 | We write our own phrase content. Their lists are not copied. |
 | 8 | dictionary | 6.0 | **Improve** | FR-21 | English-only via dictionaryapi.dev (App H §2). We use an offline Wiktionary-derived pack (CC-BY-SA, attributed). |
 | 9 | keyboard-themes-customizer | 4.0 | **Improve** | FR-17 | We design our own presets. Custom photo background is kept. |
@@ -250,10 +250,10 @@ The **FR** column is the requirement in §7 that implements the feature.
 | 7 | dictionary | 4.0 | **Improve** | FR-21 | Offline clears the search (App L §3.6). We ship an offline pack, keep the query, and use `freedictionaryapi` only as an optional proxied online fallback. |
 | 8 | stickers | 4.0 | **Improve** | FR-23 | `isPremium` never read; compat path dead (App L §3.7). Premium packs are gated in our build. |
 | 9 | ime-live-translate | 3.67 | **Improve** | FR-13 | No debounce or cancel; a stale length deletes text; no password/incognito check (App L §3.2). Fixed in our build. |
-| 10 | camera-translator | 3.67 | **Improve** | FR-20 | Fixed en→es, temp files leaked (App L §3.4). We add a language picker and cache cleanup. |
+| 10 | camera-translator | 3.67 | **Drop** (OD-21) | FR-20 | It moves to a separate future app. Fixed en→es, temp files leaked (App L §3.4). |
 | 11 | ads-consent-stack | 3.5 | **Improve** | FR-27, FR-35 | UMP present. App-open every 4 h with no cooldown; 10 interstitials on 1 slot (App L §5). We put UMP first, a global cap, and no app-open on first launch. |
 | 12 | guess-word-game | 3.5 | **Keep (later)** | FR-25 | Daily word game with hints from rewarded ads the user starts. Our word list. |
-| 13 | voice-conversation | 3.33 | **Improve** | FR-19 | Room `conversation_messages`, a tab of the translator (App L §3.5). |
+| 13 | voice-conversation | 3.33 | **Drop** (OD-21) | FR-19 | It moves to a separate future app. Room `conversation_messages`, a tab of the translator (App L §3.5). |
 | 14 | keyboard-themes | 3.0 | **Improve** | FR-17 | 48 presets, 141 prefs, 12 key sounds (L-F). We design our own set: fewer prefs, sensible defaults. |
 | 15 | suggestions-autocorrect | 3.0 | **Improve** | FR-05 | About 81% of the Arabic list is English, no Hindi list, suggestions off by default (L-F). We use proper per-language dictionaries and turn suggestions on. |
 | 16 | in-app-update | 6.0 | **Improve** | FR-31 | Forced update shown only at exit (App L §5). Fixed. |
@@ -459,7 +459,7 @@ The language catalog is the intersection of engine support, labelled clearly. ML
 
 #### FR-12: Text translator screen + history + TTS (MVP · Improve)
 **Source:** H-F:text-translator (no history save; App H §3.3); L-F:text-translator (interstitial on every press, 10,000-character cap, mic refuses offline; App L §3.3); App L §4 (TTS per screen); CMP #5.
-**Description:** A full-screen translator: source and target pickers with swap, a multi-line input with a 5,000-character limit (counter shown), mic input, camera entry, results with copy / share / speak (TTS) / favourite, and auto-translate after a 600 ms debounce. Up to 500 entries of history are stored locally (Room), with search, favourites, delete and clear-all. TTS uses the platform `TextToSpeech` with a shared engine (`:core:tts`), and the UI shows when a voice is missing.
+**Description:** A full-screen translator: source and target pickers with swap, a multi-line input with a 5,000-character limit (counter shown), mic input (no camera entry, OD-21), results with copy / share / speak (TTS) / favourite, and auto-translate after a 600 ms debounce. Up to 500 entries of history are stored locally (Room), with search, favourites, delete and clear-all. TTS uses the platform `TextToSpeech` with a shared engine (`:core:tts`), and the UI shows when a voice is missing.
 **AC**
 1. Every successful translation is saved to history unless history is turned off in Settings.
 2. **No interstitial on the Translate action** or any primary action (PB §7; D-08).
@@ -568,7 +568,8 @@ The result is shown with *Replace* / *Insert* / *Retry*. **Engine order (OD-08, 
 1. Colours chosen with the wheel, hex or eyedropper apply to the selected element.
 2. Recents persist.
 
-#### FR-19: Conversation mode (v1 · Improve)
+#### FR-19: Conversation mode (moved out of this app, OD-21)
+**Status:** Out of scope for this app since 2026-11-14. It belongs in a separate future app (OD-21). The text below stays as input for that app.
 **Source:** H-F:conversation-mode (App H §3.3); L-F:voice-conversation (App L §3.5: Room `conversation_messages`); CMP #14.
 **Description:** A split-screen conversation for two people, one language each. Each side has a mic: speech → text → translation → optional auto-speak (TTS). The transcript is shown as chat bubbles, and sessions are saved locally. There is a "Face-to-face" flip mode that rotates the top half 180°.
 **AC**
@@ -576,7 +577,8 @@ The result is shown with *Replace* / *Insert* / *Retry*. **Engine order (OD-08, 
 2. Sessions are saved, listed, deletable and shareable as text.
 3. Works offline with on-device recognizer + packs.
 
-#### FR-20: Camera translation (v1 photo; v2 live overlay) (Improve)
+#### FR-20: Camera translation (moved out of this app, OD-21)
+**Status:** Out of scope for this app since 2026-11-14. It belongs in a separate future app (OD-21). The text below stays as input for that app. TRD OD-10 (Arabic-script OCR) no longer applies to this app.
 **Source:** H-F:camera-translation (Camera2, en-only toast; App H §3.4); L-F:camera-translator (CameraX, fixed en→es, temp files leaked; App L §3.4); CMP #15, out-of-v1 live overlay.
 **Description:**
 - **v1:** CameraX capture or gallery import, then ML Kit Text Recognition v2 (Latin, Devanagari). ML Kit v2 has no Arabic-script model; ar/ur/fa sources are marked "not supported for camera" until TRD OD-10 (default: defer to v1.1, then cloud OCR for Pro) (R-03). The recognized text is translated with FR-11 and shown as a block list with copy and share. An "overlay" view draws the translations over the bounding boxes on the still image.
@@ -687,7 +689,7 @@ The result is shown with *Replace* / *Insert* / *Retry*. **Engine order (OD-08, 
 
 #### FR-32: Deep links & intent routing (MVP · Improve)
 **Source:** L-F:open-screen-intent-routing (exported `open_screen`, `language` crash; App L §6).
-**Description:** A typed allow-list of destinations: `translator`, `conversation`, `camera`, `themes`, `paywall?trigger=`, `settings/{section}`. They are reachable via the `app://` scheme internally and verified App Links for marketing. Unknown or invalid values route to Home.
+**Description:** A typed allow-list of destinations: `translator`, `themes`, `paywall?trigger=`, `settings/{section}`. There is no `conversation` or `camera` route (OD-21). They are reachable via the `app://` scheme internally and verified App Links for marketing. Unknown or invalid values route to Home.
 **AC**
 1. A fuzz test on `MainActivity` with random extras and URIs produces no crash.
 2. Only allow-listed routes resolve.
@@ -796,7 +798,7 @@ Install → Launch
 | S-01 | Splash | app | MVP | FR-08 | None | ≤ 1 s |
 | S-02 | Onboarding O1–O5 | app | MVP | FR-08 | None | |
 | S-03 | Paywall | app | MVP | FR-29 | None | Contextual header |
-| S-04 | Home (hub: Translator, Conversation, Camera, Dictionary, Phrasebook, Themes, Game tiles; activation card) | app | MVP (tiles appear as features ship) | — | Banner (not first session) | |
+| S-04 | Home (hub: Translator, Dictionary, Phrasebook, Themes, Game tiles; activation card). No Conversation or Camera tile (OD-21) | app | MVP (tiles appear as features ship) | — | Banner (not first session) | |
 | S-05 | Text Translator | app | MVP | FR-12, FR-26 | Native below result | No interstitial on Translate |
 | S-06 | Translation History / Favourites | app | MVP | FR-12 | Native | |
 | S-07 | Language picker (sheet) | app + IME | MVP | FR-11 | None | Offline badge per language |
@@ -805,9 +807,9 @@ Install → Launch
 | S-10 | Private apps list | app | MVP | FR-02 | None | |
 | S-11 | Themes gallery + preview | app | MVP (basic) / v1 (custom) | FR-17 | Native in gallery | |
 | S-12 | Custom theme editor + colour picker | app | v1 | FR-17, FR-18 | None | |
-| S-13 | Conversation | app | v1 | FR-19 | None during a session | |
-| S-14 | Conversation history | app | v1 | FR-19 | Native | |
-| S-15 | Camera translate (capture → results/overlay) | app | v1 | FR-20 | None on capture; native on results | |
+| S-13 | Conversation | Not in this app (OD-21) | n/a | FR-19 | n/a | |
+| S-14 | Conversation history | Not in this app (OD-21) | n/a | FR-19 | n/a | |
+| S-15 | Camera translate (capture → results/overlay) | Not in this app (OD-21) | n/a | FR-20 | n/a | |
 | S-16 | Dictionary search + entry | app | v1 | FR-21 | Native | |
 | S-17 | Phrasebook categories + list | app | v1 | FR-22 | Native | |
 | S-18 | Word game | app | v1-late | FR-25 | Rewarded (user-started) | |
@@ -840,7 +842,7 @@ Freemium. The free tier is generous and carries ads on **companion-app surfaces 
 |---|---|---|
 | Keyboard, layouts, emoji, suggestions, transliteration | ✓ | ✓ |
 | Voice typing (on-device / system) | ✓ unlimited | ✓ |
-| On-device translation (bar, translator, PROCESS_TEXT, conversation, camera) | ✓ unlimited | ✓ |
+| On-device translation (bar, translator, PROCESS_TEXT) | ✓ unlimited | ✓ |
 | Cloud-quality translation tier | ✗ (OD-07 may allow 20 per day as a taster) | ✓ fair use |
 | AI rewrite + AI voice polish (shared pool) | **10 per day** (OD-04) | 150 per day, 3,000 per month fair use (TRD OD-16) |
 | Auto-polish every dictation (off by default, own consent, counts against quota) | ✗ | ✓ |
@@ -944,7 +946,7 @@ These are product requirements, not marketing copy. Each one is tested.
 | `voice_session_start` | Mic tapped | `lang`, `engine` (on_device/system) | **Voice sessions** |
 | `voice_session_end` | Session ends | `duration_bucket`, `words_bucket`, `end_reason` (user/silence/error), `error_code` | Voice sessions, quality |
 | `voice_permission_result` | RECORD_AUDIO result | `granted` | |
-| `translate_done` | Translation committed or shown as final | `surface` (bar/translator/process_text/conversation/camera), `engine` (on_device/cloud), `src`, `tgt`, `chars_bucket`, `offline` (bool) | **Translations/day** |
+| `translate_done` | Translation committed or shown as final | `surface` (bar/translator/process_text), `engine` (on_device/cloud), `src`, `tgt`, `chars_bucket`, `offline` (bool) | **Translations/day** |
 | `first_translate` | First `translate_done` | `surface` | |
 | `translate_error` | Failure | `surface`, `reason` (no_pack/timeout/net/quota) | Quality |
 | `pack_download_start` / `pack_download_done` | Model download | `lang`, `kind` (translate/dict/translit), `size_bucket`, `result` | Offline adoption |
@@ -956,8 +958,8 @@ These are product requirements, not marketing copy. Each one is tested.
 | `translit_commit` | Transliterated word committed (sampled 1%) | `lang` | Transliteration adoption |
 | `process_text_open` | PROCESS_TEXT/SEND sheet | `action` (process_text/send), `editable` (bool) | Acquisition |
 | `process_text_replace` | Replace tapped | | |
-| `conversation_turn` | One translated turn | `src`, `tgt`, `engine` | v1 |
-| `camera_translate_done` | OCR + translate | `blocks_bucket`, `src`, `tgt` | v1 |
+| `conversation_turn` | One translated turn | `src`, `tgt`, `engine` | Not in this app (OD-21) |
+| `camera_translate_done` | OCR + translate | `blocks_bucket`, `src`, `tgt` | Not in this app (OD-21) |
 | `dictionary_lookup` | Lookup | `offline` (bool), `found` (bool) | v1 |
 | `theme_apply` | Theme applied | `theme_id`, `premium` (bool) | |
 | `sticker_send` | Sticker committed | `pack_id`, `premium` (bool), `method` (commit_content/share) | v1 |
@@ -983,9 +985,9 @@ Revenue tracking: Play Console is the source of truth for subscriptions. Analyti
 
 ## 13. Release Plan
 
-Timeline from CMP: MVP is about 48 dev-days (about 10 weeks), full v1 about 72 dev-days. With a 25–30% buffer, that gives **about 3 months to MVP and about 4.5 months to v1**. v2 is scoped after v1 data. The TRD bottom-up estimate is 60 dev-days to MVP and 88.5 to v1, including the scope that TRD §8.1 adds for FR-03, 06, 07, 09, 18, 30, 33, 34 and 35. With buffer that is 75–78 and 111–115 working days (about 3.6 and 5.3 months). Plan dates use the TRD figure.
+Timeline from CMP: MVP is about 48 dev-days (about 10 weeks), full v1 about 72 dev-days. With a 25–30% buffer, that gives **about 3 months to MVP and about 4.5 months to v1**. v2 is scoped after v1 data. The TRD bottom-up estimate is 60 dev-days to MVP and 88.5 to v1 (81.5 after OD-21), including the scope that TRD §8.1 adds for FR-03, 06, 07, 09, 18, 30, 33, 34 and 35. With buffer that is 75–78 and 111–115 working days (about 3.6 and 5.3 months). Plan dates use the TRD figure.
 
-**Revised plan (decision 2026-10-18, RN-01): no scope cuts.** The TRD §11.9 review raises the MVP to 76 raw dev-days, or 95–99 working days with buffer. Adding the 14-day closed test and Play review, the public MVP launch is **about M+5**, and v1 (about 104.5 raw days, 131–136 with buffer) is **about M+6.5**. All MVP and v1 scope below stays. **Added 2026-10-18:** the on-device Whisper fallback (FR-10) and a Gemini Nano spike plus on-device-first AI (FR-15/16, OD-20) add an estimated 7–9 raw dev-days, which moves the public MVP to **about M+5.5** (estimate to confirm in the TRD).
+**Revised plan (decision 2026-10-18, RN-01): no scope cuts.** The TRD §11.9 review raises the MVP to 76 raw dev-days, or 95–99 working days with buffer. Adding the 14-day closed test and Play review, the public MVP launch is **about M+5**, and v1 (about 104.5 raw days, 131–136 with buffer) is **about M+6.5**. All MVP and v1 scope below stays, except for one later change. **OD-21 (2026-11-14)** removes FR-19 and FR-20 and saves about 7 dev-days. v1 becomes 104.5 − 7 = about 97.5 raw days, or 122–127 with buffer (TRD §11.9). **Added 2026-10-18:** the on-device Whisper fallback (FR-10) and a Gemini Nano spike plus on-device-first AI (FR-15/16, OD-20) add an estimated 7–9 raw dev-days, which moves the public MVP to **about M+5.5** (estimate to confirm in the TRD).
 
 ### 13.1 MVP: "Voice + Translate keyboard that is private" (≈ M+5)
 
@@ -1006,11 +1008,10 @@ Stage weeks are rescaled to the M+5 plan.
 
 ### 13.2 v1: "Regional depth + companion app" (≈ M+6.5)
 
-FR-03 (bn, ps), FR-05 (next-word prediction), FR-06, FR-17 (custom), FR-18, FR-19, FR-20 (photo + still overlay), FR-21, FR-22, FR-23, **FR-24 (Roman Urdu / Hinglish)**, FR-25 (if capacity allows; otherwise v1.1), FR-30, FR-33. UI locales go to 31. Lifetime SKU decision (OD-03). PROCESS_TEXT "✦ Rewrite" action.
+FR-03 (bn, ps), FR-05 (next-word prediction), FR-06, FR-17 (custom), FR-18, FR-21, FR-22, FR-23, **FR-24 (Roman Urdu / Hinglish)**, FR-25 (if capacity allows; otherwise v1.1), FR-30, FR-33. FR-19 and FR-20 are out of this app (OD-21). UI locales go to 31. Lifetime SKU decision (OD-03). PROCESS_TEXT "✦ Rewrite" action.
 
 ### 13.3 v2: "Beyond the keyboard" (≈ M+9, scoped after v1 data)
 
-- FR-20 live camera overlay
 - FR-37 two-way chat translation (only if the policy gate passes)
 - Glide typing evaluation (OD-10)
 - Additional dictionaries (ur, hi, ar)
@@ -1027,7 +1028,7 @@ FR-03 (bn, ps), FR-05 (next-word prediction), FR-06, FR-17 (custom), FR-18, FR-1
 |---|---|---|---|---|
 | R-01 | **Activation drop-off.** Users abandon at the system "this keyboard may collect all text" warning. | High | High | Pre-warn in copy (O2). State the privacy promise. Auto-advance. Activation card on Home. A/B test copy (OD-12). |
 | R-02 | **Voice quality / offline availability varies by OEM.** On-device recognizers are missing for ur, bn or ps on many devices (CMP open Q6). | High | High | Fall back to the system service with disclosure. Offline language download guidance. On-device Whisper fallback at MVP (FR-10), gated per language by eval; fine-tuned models in v2. |
-| R-03 | **ML Kit translation and OCR quality for ur, hi, ar, ps and bn is below user expectations** (CMP open Q7). | Medium | High | Native-speaker eval gate. "Beta" label. Cloud tier for Pro. Fail-open messaging. Track `translate_error` and thumbs-down (v1). |
+| R-03 | **ML Kit translation quality for ur, hi, ar, ps and bn is below user expectations** (CMP open Q7). | Medium | High | Native-speaker eval gate. "Beta" label. Cloud tier for Pro. Fail-open messaging. Track `translate_error` and thumbs-down (v1). |
 | R-04 | **Play policy:** IME data-collection review, AI-generated content, subscription disclosure, Data safety mismatch. | Medium | High | No ads in the IME. Prominent disclosures. Accurate Data safety. Report-output flag. Pre-launch policy review checklist. |
 | R-05 | **Accessibility policy** blocks two-way chat translation (G4). | High | Medium | Parked to v2 behind a gate (FR-37). Not part of the core value. |
 | R-06 | **AI cost overrun / abuse.** Scripted quota abuse, long inputs. | Medium | Medium | App Check + Play Integrity, server quota, a 2,000-character cap, cheap model tier for polish (OD-08), Gemini Nano on-device first where supported (no cloud cost), per-UID rate limits, cost alarms. |
@@ -1066,6 +1067,7 @@ FR-03 (bn, ps), FR-05 (next-word prediction), FR-06, FR-17 (custom), FR-18, FR-1
 | OD-18 | Remote Config cadence (CMP Q5) | 1 h / 12 h / 24 h fetch | **12 h minimum fetch, 1 h in debug.** Small typed schema | Eng | Week 4 |
 | OD-19 | Two-way chat translation (Accessibility) | Build v2 / never | **Policy assessment in v1, decide for v2** | Product + Legal | v1 end |
 | OD-20 | Gemini Nano on-device AI | Ship on-device first / cloud only | **Spike first (about 1 day):** confirm an IME can call ML Kit GenAI (no `BACKGROUND_USE_BLOCKED`), measure ur/hi/ar/en quality against the OD-08 eval, and check device coverage in launch markets. Pass → Nano first, cloud fallback. Fail → cloud only, retry in v1 | Eng (AI) | Sprint 1 |
+| OD-21 | Conversation mode and camera translation (FR-19, FR-20) | Keep in v1 / move to a separate app | **Decided 2026-11-14: move both to a separate future app** (`docs/decisions/od-21-drop-conversation-camera.md`). This keeps the app focused on the keyboard and saves about 7 dev-days in Sprint 5 | Product | done |
 
 ---
 
@@ -1077,6 +1079,7 @@ FR-03 (bn, ps), FR-05 (next-word prediction), FR-06, FR-17 (custom), FR-18, FR-1
 - Web or desktop clients
 - Enterprise features
 - Any reuse of App H or App L code, endpoints, assets, keys or strings
+- Conversation mode (FR-19) and camera translation (FR-20). They move to a separate future app (OD-21)
 
 ---
 
@@ -1112,8 +1115,8 @@ These are from COMPETITORS §4.
 | FR-16 | AI voice polish + translate | MVP | New | — (gap) | — (gap) | #10 | G1 | AI adoption, voice sessions |
 | FR-17 | Themes | MVP/v1 | Improve | H-F:keyboard-themes-customizer | L-F:keyboard-themes | #13 | — | Conversion (T3) |
 | FR-18 | Colour picker | v1 | Keep | H-F:color-picker | — | — | — | — |
-| FR-19 | Conversation mode | v1 | Improve | H-F:conversation-mode; §3.3 | L-F:voice-conversation; §3.5 | #14 | G2 | Translations/day |
-| FR-20 | Camera translation | v1/v2 | Improve | H-F:camera-translation; §3.4 | L-F:camera-translator; §3.4 | #15 | G3 | Translations/day |
+| FR-19 | Conversation mode | Out (OD-21) | Improve | H-F:conversation-mode; §3.3 | L-F:voice-conversation; §3.5 | #14 | G2 | Translations/day |
+| FR-20 | Camera translation | Out (OD-21) | Improve | H-F:camera-translation; §3.4 | L-F:camera-translator; §3.4 | #15 | G3 | Translations/day |
 | FR-21 | Dictionary | v1 | Improve | H-F:dictionary; §2 | L-F:dictionary; §2 E2, §3.6 | #16 | G2 | — |
 | FR-22 | Phrasebook | v1 | Improve | H-F:offline-phrasebook | — | #17 | G2 | — |
 | FR-23 | Stickers | v1 | Improve | H-F:sticker-packs; §2, §3.5 | L-F:stickers; §3.7 | #18 | — | Conversion (T6) |
@@ -1154,7 +1157,7 @@ Evidence-fidelity review against both teardown reports, `CLASS_COVERAGE.md`, bot
 - NG-6: "71 theme presets" is now "71 subtype presets". D-12 notes that the test-device ID is the SDK's emulator constant. D-14 and FR-35 now say the over-40-character event names are an H-only finding. Also fixed the "an SEND" typo and the L#4 citation.
 - FR-10 AC1 now matches TRD §4.2.3: no fixed watchdog, a 250 ms restart capped at 3, a BUSY recreate at 400 ms, and a 60 s session cap.
 - FR-11 AC5: Pashto is cloud-only (Pro) because ML Kit has no Pashto model.
-- FR-20 and §6.1 H#6: ML Kit OCR v2 has no Arabic-script model, so those sources are deferred per TRD OD-10.
+- FR-20 and §6.1 H#6: ML Kit OCR v2 has no Arabic-script model, so those sources are deferred per TRD OD-10. (Superseded by OD-21, which moves FR-20 out of this app.)
 - FR-16 now uses `/v1/polish`.
 - FR-28: Billing is now "8.3.0 or later". The playbook pins two versions (8.3.0 in the catalog, 9.1.0 in the module), and the TRD pins 8.3.0.
 - The Pro AI quota is now 150 per day and 3,000 per month in FR-15 and §10.2, matching TRD OD-16.
@@ -1181,3 +1184,12 @@ Evidence-fidelity review against both teardown reports, `CLASS_COVERAGE.md`, bot
 - **Voice:** on-device Whisper is the MVP fallback, with the system recognizer kept as primary because Whisper on Android cannot stream live text. Updated FR-10 (description, AC3, AC4, AC7–AC9), FR-36, §10.6, PC-3, R-02, OD-16 and §13.3. No cloud speech recognition, so Audio stays undeclared.
 - **AI:** Gemini Nano runs first where supported, and the cheapest cloud model is the fallback, after a spike (new OD-20, new R-14). Updated FR-15 (engine order, AC8, AC10, AC11), FR-16, §10.6 consent, OD-08 and R-06.
 - **Timeline:** the two additions are estimated at 7–9 raw dev-days, giving about M+5.5. The TRD needs a matching estimate.
+
+## Review log (2026-11-14): OD-21
+
+- **OD-21:** conversation mode (FR-19) and camera translation (FR-20) move to a separate future app.
+  They overload this app and dilute its keyboard focus.
+- FR-19 and FR-20 keep their text and are marked as moved out. J9 and J10 have no FR in this app.
+- Updated persona P3, NG-5, the Translations/day sources, §6.1 H#5 and H#6, §6.2 L#10 and L#13, FR-12, FR-32, S-04,
+  S-13 to S-15, §10.2, the event plan, §13, R-03, §16 and the traceability rows.
+- TRD OD-10 (Arabic-script OCR) no longer applies to this app.

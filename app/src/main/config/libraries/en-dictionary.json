@@ -1,0 +1,15 @@
+{
+  "uniqueId": "en-dictionary",
+  "name": "English dictionary (Wiktionary definitions)",
+  "developers": [
+    {
+      "name": "Wiktionary contributors",
+      "organisationUrl": "https://en.wiktionary.org"
+    }
+  ],
+  "website": "https://en.wiktionary.org",
+  "description": "The downloadable English dictionary pack and the online lookups (through our server and the Free Dictionary API) show definitions derived from Wiktionary. The definitions are shared under CC-BY-SA-4.0. The pack is downloaded on request and is not part of the app.",
+  "licenses": [
+    "dictionary-cc-by-sa-4.0"
+  ]
+}

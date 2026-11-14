@@ -75,7 +75,8 @@ class AdsAppGraph(private val app: Application) {
     // S4 Task 7: placements, rules and the loaded ads. Nothing here loads an ad before the SDK is READY.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val unitIds by lazy { AdUnitIds(firebase.remoteConfig) }
-    private val nativePlacements = listOf(AdPlacements.NATIVE_TRANSLATOR, AdPlacements.NATIVE_HISTORY)
+    private val nativePlacements =
+        listOf(AdPlacements.NATIVE_TRANSLATOR, AdPlacements.NATIVE_HISTORY, AdPlacements.NATIVE_DICTIONARY) // S5-dict
 
     internal val reporter: NonFatalReporter get() = firebase.reporter
 

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2024-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S5-dict): long-press opens the definition card
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.fork.dictionary.DefinitionCards // FORK(S5-dict)
 import com.manjul.aikeyboard.ime.nlp.ClipboardSuggestionCandidate
 import com.manjul.aikeyboard.ime.nlp.SuggestionCandidate
 import com.manjul.aikeyboard.ime.theme.FlorisImeUi
@@ -123,7 +125,10 @@ fun CandidatesRow(modifier: Modifier = Modifier) {
                     onLongPress = {
                         // Can't use candidate directly
                         val candidateItem = candidates[n]
-                        if (candidateItem.isEligibleForUserRemoval) {
+                        // FORK(S5-dict): the definition card (plan decision 21); Remove keeps the upstream action
+                        DefinitionCards.onLongPress(context, candidateItem) {
+                            nlpManager.removeSuggestion(subtypeManager.activeSubtype, candidateItem)
+                        } ?: if (candidateItem.isEligibleForUserRemoval) {
                             nlpManager.removeSuggestion(subtypeManager.activeSubtype, candidateItem)
                         } else {
                             false

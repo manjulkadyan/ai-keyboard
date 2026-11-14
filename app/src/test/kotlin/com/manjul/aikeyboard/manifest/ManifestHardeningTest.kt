@@ -44,9 +44,11 @@ class ManifestHardeningTest {
             "com.manjul.aikeyboard.ime.clipboard.FlorisCopyToClipboardActivity" to
                 "Upstream share target (SEND image/*) that copies an image into the clipboard",
             TRANSLATE_TEXT_ACTIVITY to "Translate sheet for PROCESS_TEXT and SEND text/plain; no data URIs",
+            DEFINE_TEXT_ACTIVITY to "Define sheet for PROCESS_TEXT text/plain; no data URIs, never returns text",
         )
 
         const val TRANSLATE_TEXT_ACTIVITY = "com.manjul.aikeyboard.fork.processtext.TranslateTextActivity"
+        const val DEFINE_TEXT_ACTIVITY = "com.manjul.aikeyboard.fork.dictionary.DefineTextActivity"
 
         val COMPONENT_TAGS = listOf("activity", "activity-alias", "service", "receiver", "provider")
     }
@@ -283,6 +285,22 @@ class ManifestHardeningTest {
             filters.toSet(),
         )
         assertEquals(2, filters.size)
+    }
+
+    @Test
+    fun `define activity accepts only process text of plain text`() {
+        // S5-dict, PRD FR-21: one PROCESS_TEXT filter, text/plain only, no data URI of any kind.
+        val activity = manifest.elements("activity").single { it.attr("name") == DEFINE_TEXT_ACTIVITY }
+        assertEquals("true", activity.attr("exported"))
+        assertEquals("true", activity.attr("excludeFromRecents"))
+        assertEquals("", activity.attr("taskAffinity"))
+        assertTrue(activity.hasAttributeNS(androidNs, "taskAffinity"))
+        val filter = activity.children("intent-filter").single()
+        assertEquals(listOf("android.intent.action.PROCESS_TEXT"), filter.children("action").map { it.attr("name") })
+        assertEquals(listOf("android.intent.category.DEFAULT"), filter.children("category").map { it.attr("name") })
+        val data = filter.children("data").single()
+        assertEquals(1, data.attributes.length, "DefineTextActivity <data> may only set mimeType")
+        assertEquals("text/plain", data.attr("mimeType"))
     }
 
     @Test

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 AI Keyboard contributors. Licensed under the Apache License, Version 2.0 -->
+<!-- The in-keyboard sticker panel (PRD FR-23). -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Card shown when a premium sticker pack or sticker is tapped without Pro. -->
+    <string name="stickers__premium_card" tools:ignore="MissingTranslation">This pack comes with Pro</string>
+    <!-- Button on the premium card. It opens the Pro screen. -->
+    <string name="stickers__see_pro" tools:ignore="MissingTranslation">See Pro</string>
+    <!-- Shown while a sticker pack downloads. -->
+    <string name="stickers__downloading" tools:ignore="MissingTranslation">Downloading stickers…</string>
+    <!-- Shown when a sticker pack did not download. -->
+    <string name="stickers__download_failed" tools:ignore="MissingTranslation">The stickers did not download. Try again later.</string>
+    <!-- Shown for a pack that is listed but not downloaded yet. -->
+    <string name="stickers__not_installed" tools:ignore="MissingTranslation">Tap the pack to download it</string>
+    <!-- Content description of one sticker. %1$d is its number in the pack. -->
+    <string name="stickers__sticker" tools:ignore="MissingTranslation">Sticker %1$d</string>
+    <!-- Content description of a premium pack tab. %1$s is the pack title. -->
+    <string name="stickers__premium_badge" tools:ignore="MissingTranslation">%1$s, Pro pack</string>
+    <!-- Label of a premium pack tab. %1$s is the pack title; the crown marks a Pro pack. -->
+    <string name="stickers__premium_tab" tools:ignore="MissingTranslation">%1$s 👑</string>
+    <!-- Premium card text with its crown. %1$s is stickers__premium_card. -->
+    <string name="stickers__premium_card_badge" tools:ignore="MissingTranslation">👑 %1$s</string>
+    <!-- Shown when "Download on Wi-Fi only" is on and the network is metered. Nothing was downloaded. -->
+    <string name="stickers__waits_for_wifi" tools:ignore="MissingTranslation">This pack waits for Wi-Fi. To download it now, turn off Download on Wi-Fi only in Offline languages.</string>
+</resources>

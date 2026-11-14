@@ -33,8 +33,8 @@
 | FR-01 | Core keyboard + sensitive-field policy | MVP | FR-11 | App-side ads | MVP |
 | FR-02 | Onboarding | MVP | FR-12 | Pro subscription | MVP |
 | FR-03 | Voice typing in the IME, live partials | MVP | FR-13 | Themes, customizer, key sounds | MVP |
-| FR-04 | On-device translation core | MVP | FR-14 | Voice conversation | v1 |
-| FR-05 | Text translator screen + history | MVP | FR-15 | Camera translator (OCR) | v1 |
+| FR-04 | On-device translation core | MVP | FR-14 | Voice conversation | Out (OD-21) |
+| FR-05 | Text translator screen + history | MVP | FR-15 | Camera translator (OCR) | Out (OD-21) |
 | FR-06 | Translate-as-you-type bar | MVP | FR-16 | Dictionary | v1 |
 | FR-07 | PROCESS_TEXT / SEND entry points | MVP | FR-17 | Offline phrasebook | v1 |
 | FR-08 | Suggestions and autocorrect (minimal) | MVP | FR-18 | Stickers | v1 |
@@ -48,8 +48,8 @@
 | FR-01 core + policy | FR-01, FR-02, FR-04, FR-07 (clipboard = PRD FR-06, **v1**, off by default) | FR-11 ads | FR-27 |
 | FR-02 onboarding | FR-08, FR-09 | FR-12 Pro | FR-28, FR-29 |
 | FR-03 voice | FR-10 | FR-13 themes | FR-17 (MVP basic), FR-18 (v1) |
-| FR-04 translation core | FR-11, FR-36 | FR-14 conversation | FR-19 |
-| FR-05 translator screen | FR-12, FR-26 | FR-15 camera | FR-20 |
+| FR-04 translation core | FR-11, FR-36 | FR-14 conversation (out, OD-21) | FR-19 |
+| FR-05 translator screen | FR-12, FR-26 | FR-15 camera (out, OD-21) | FR-20 |
 | FR-06 translate bar | FR-13 | FR-16 dictionary | FR-21 |
 | FR-07 PROCESS_TEXT/SEND | FR-14 | FR-17 phrasebook | FR-22 |
 | FR-08 suggestions | FR-05 | FR-18 stickers | FR-23 |
@@ -75,8 +75,8 @@ Versions come from the playbook catalog (`PB`) unless the row says otherwise. Bu
 | Persistence | Room (KSP, exported schemas, AutoMigration) | 2.8.x | PB. Room 3 is OD-08 |
 | Preferences | DataStore (Preferences for flags, Proto for `ThemeSpec` and policy) | 1.2.1 | PB |
 | Network | Retrofit + OkHttp + kotlinx.serialization; `okhttp-sse` for AI streaming | per catalog | PB. Blocking `HttpURLConnection` with no timeout is replaced (H §3.1, L §2 E1) |
-| On-device ML | ML Kit Translation, Language ID, Text Recognition v2 (Latin, Devanagari, CJK) | latest bundled/unbundled per catalog | COMP #4, #15. Mobile Vision is removed (H §3.4) |
-| Camera | CameraX (`camera-camera2`, `-lifecycle`, `-view`) | per catalog | COMP "borrow from L". Raw Camera2 is removed (H §3.4) |
+| On-device ML | ML Kit Translation, Language ID. Text Recognition v2 is not used, because camera translation is out of scope (OD-21) | latest bundled/unbundled per catalog | COMP #4 |
+| Camera | None. CameraX is not used, because camera translation is out of scope (OD-21) | n/a | n/a |
 | Speech | Platform `SpeechRecognizer` (on-device recognizer on API 31+); optional Whisper path (OD-04) | platform | COMP #3 |
 | TTS | Platform `TextToSpeech`, sentence-chunked | platform | COMP "borrow from L" |
 | Firebase | BoM: Auth (anonymous + Google), App Check (Play Integrity provider), Remote Config, Analytics (GA4), Crashlytics, Performance | BoM 34.15.0 | PB |
@@ -124,7 +124,6 @@ Versions come from the playbook catalog (`PB`) unless the row says otherwise. Bu
 :core:voice                  SpeechSession, recognizer factory, audio focus, Whisper adapter (optional)
 :core:translate              TranslationEngine interface, MlKitEngine, ProxyCloudEngine, LanguageIdService, ModelManager, LRU cache
 :core:ai                     AiClient (SSE), prompt ids, request builder, quota state
-:core:ocr                    CameraX controller, ML Kit text recognizer selection, block model
 :core:tts                    TtsSpeaker with sentence chunker
 :core:network                OkHttp, Retrofit, App Check + Firebase ID-token interceptor, Play Integrity token provider
 :core:database               Room DB, DAOs, migrations, prepopulated phrase/dictionary assets
@@ -135,7 +134,7 @@ Versions come from the playbook catalog (`PB`) unless the row says otherwise. Bu
 :core:analytics              Event catalog with compile-time-checked names, consent-aware sink
 :core:testing                Fakes (FakeInputConnection, FakeTranslationEngine, FakeAiClient), test rules
 :data / :domain              Repositories and use cases (MVVM/UDF per PB)
-:feature:onboarding  :feature:translator  :feature:history  :feature:conversation  :feature:camera
+:feature:onboarding  :feature:translator  :feature:history
 :feature:dictionary  :feature:phrasebook  :feature:themes  :feature:stickers  :feature:settings
 :feature:paywall  :feature:game
 :baselineprofile  :benchmark
@@ -166,9 +165,7 @@ Rules: every schema change ships an `@AutoMigration` or a hand-written `Migratio
 
 | Table | Columns (type) | Indexes / notes | FR | Trace |
 |---|---|---|---|---|
-| `translation_history` | `id` PK auto, `source_text` TEXT, `target_text` TEXT, `source_lang` TEXT (BCP-47), `target_lang` TEXT, `engine` TEXT (`mlkit`/`cloud`), `origin` TEXT (`text`/`camera`/`voice`/`process_text`/`conversation`/`polish`), `is_favorite` INT, `created_at` INT | idx(`created_at`), idx(`is_favorite`). Retention cap from RC `history_max_rows` (default 500, PRD FR-12) | FR-05, FR-15 | H §3.3: text and camera translations were never saved. L had no history table (COMP verification) |
-| `conversation_session` | `id` PK, `lang_a` TEXT, `lang_b` TEXT, `title` TEXT, `created_at` INT, `updated_at` INT | | FR-14 | L CC 6.3: no language pair stored |
-| `conversation_message` | `id` PK, `session_id` FK→session CASCADE, `speaker` TEXT (`a`/`b`), `source_lang` TEXT, `target_lang` TEXT, `source_text` TEXT, `target_text` TEXT, `created_at` INT | idx(`session_id`,`created_at`) | FR-14 | L CC 6.3: messages kept no language pair |
+| `translation_history` | `id` PK auto, `source_text` TEXT, `target_text` TEXT, `source_lang` TEXT (BCP-47), `target_lang` TEXT, `engine` TEXT (`mlkit`/`cloud`), `origin` TEXT (`text`/`voice`/`process_text`/`polish`), `is_favorite` INT, `created_at` INT | idx(`created_at`), idx(`is_favorite`). Retention cap from RC `history_max_rows` (default 500, PRD FR-12) | FR-05 | H §3.3: text and camera translations were never saved. L had no history table (COMP verification) |
 | `user_word` | `id` PK, `locale` TEXT, `word` TEXT, `frequency` INT, `source` TEXT (`learned`/`manual`), `updated_at` INT | unique(`locale`,`word`). Writes are refused while the policy says `allowLearning=false` | FR-08 | H §6: user-dictionary DB never created; H CC 7.3: dictionaries merged across languages |
 | `clipboard_item` | `id` PK, `text` TEXT, `mime` TEXT, `uri` TEXT NULL, `pinned` INT, `created_at` INT, `expires_at` INT | Items flagged sensitive are **never inserted**. Unpinned rows expire (RC `clip_ttl_minutes`, default 1,440 = 24 h, PRD FR-06) | FR-01 | L §8: `IS_SENSITIVE` clips still stored |
 | `theme` | `id` TEXT PK (UUID), `name` TEXT, `spec_json` TEXT (serialized `ThemeSpec`, §4.8), `is_builtin` INT, `is_premium` INT, `bg_image_path` TEXT NULL, `updated_at` INT | | FR-13 | H CC 7.3 backgrounds as indices; L CC 6.3 colours as palette IDs |
@@ -177,7 +174,7 @@ Rules: every schema change ships an `@AutoMigration` or a hand-written `Migratio
 | `dictionary_entry` | `id` PK, `lang` TEXT, `headword` TEXT, `pos` TEXT, `definition` TEXT, `example` TEXT NULL, `source` TEXT (`offline`/`online`), `fetched_at` INT NULL | idx(`lang`,`headword`). Offline rows are prepopulated from a CC-BY-SA Wiktionary-derived asset (attribution shown on the screen) | FR-16 | COMP #16; H and L hard-code `en` |
 | `dictionary_translation` | `entry_id` FK CASCADE, `target_lang` TEXT, `gloss` TEXT | PK(`entry_id`,`target_lang`) | FR-16 | COMP "freedictionaryapi `translations=true` shape" |
 | `phrase_category` / `phrase` | category: `id`, `key`, `sort`; phrase: `id`, `category_id`, `lang`, `text`, `audio_hint` NULL | Prepopulated from **our own authored** asset DB (`createFromAsset`) | FR-17 | H phrasebook DB is on the do-not-copy list (COMP) |
-| `language_model_state` | `lang` TEXT PK, `kind` TEXT (`translate`/`ocr`/`whisper`), `state` TEXT (`absent`/`downloading`/`ready`/`failed`), `bytes` INT, `updated_at` INT | Mirrors ML Kit `RemoteModelManager` for fast UI | FR-04 | |
+| `language_model_state` | `lang` TEXT PK, `kind` TEXT (`translate`/`whisper`), `state` TEXT (`absent`/`downloading`/`ready`/`failed`), `bytes` INT, `updated_at` INT | Mirrors ML Kit `RemoteModelManager` for fast UI | FR-04 | |
 | `game_progress` | `day` TEXT PK (yyyy-MM-dd), `word_id` TEXT, `guesses` INT, `solved` INT, `hints_used` INT | | FR-20 | |
 | `ai_usage_local` | `day` TEXT PK, `actions` INT, `last_reset_at` INT | Display only. The server is the quota authority (§5.3) | FR-09, FR-10 | |
 
@@ -201,7 +198,6 @@ AI requests and their text are **not** stored locally. A polish+translate result
 | Path | Content | Lifetime | Trace |
 |---|---|---|---|
 | `cache/share/` | Files offered through `FileProvider` (shared translations, stickers for `commitContent`) | Deleted after share result or 24 h sweep | H §6 `external-path "."`; L §6 broad roots incl. `external-cache-path` |
-| `cache/ocr/` | Captured frames and gallery imports | Deleted on camera screen exit + WorkManager sweep every 24 h | L §3.4 temp images never deleted |
 | `files/themes/` | Cropped background images at keyboard resolution | Until theme deleted | H CC 7.3 camera background used only the thumbnail |
 | `files/stickers/<pack>/` | Downloaded sticker packs | Until pack removed | |
 | `no_backup/models/` | Whisper model (if OD-04 picks on-device) | Until user removes | |
@@ -278,7 +274,7 @@ Each capability is checked **twice**: the UI hides the control and the controlle
 - Dictionaries are loaded per active subtype only (H CC 7.3: all dictionaries merged regardless of language). Budget: <= 8 MB resident per loaded locale.
 - Budget: suggestion strip update <= 30 ms p90 after a key press (§6.4).
 
-### 4.2 Voice pipeline (FR-03, reused by FR-10, FR-14)
+### 4.2 Voice pipeline (FR-03, reused by FR-10)
 
 #### 4.2.1 Defects being fixed
 
@@ -322,7 +318,7 @@ States: `Idle -> Starting -> Listening -> (Partial)* -> Finalizing -> Idle`, plu
 
 Two candidates behind the same `SpeechEngine` interface: (a) on-device whisper.cpp via JNI with a downloadable quantized small model (`no_backup/models/`), batch transcription after release of the mic key (no partials); (b) cloud transcription through `/v1/transcribe` on our backend (Pro only). **Decision 2026-10-18 (product): ship (a) in MVP as a fallback; never ship (b).** The engine order is: on-device system recognizer for the locale, then the default recognition service, then Whisper when no recognizer supports the locale, no service is installed, or the user picks "Offline (Whisper)". Whisper is batch only (Android streaming with whisper.cpp runs well behind real time), the model is downloaded and never bundled (base by default, small on phones with 6 GB RAM or more), enablement is per language behind a native-speaker eval, and the model is unloaded after 60 s idle. The `.so` must be 16 KB page-aligned. Keep logging `voice_unavailable{reason}` to size v2 fine-tuning. Dictate (COMPETITORS) proves demand for Whisper quality but uses bring-your-own-key, which we do not do.
 
-### 4.3 Translation abstraction (FR-04 to FR-07, reused by FR-14, FR-15, FR-17)
+### 4.3 Translation abstraction (FR-04 to FR-07, reused by FR-17)
 
 #### 4.3.1 Interface
 
@@ -443,7 +439,10 @@ These are planning numbers, to be replaced by measured `usage` data in the first
 - Undo chip after Replace (4.1.3).
 - Errors map to user copy: quota (with upsell), offline, paused, refused, too long. No raw exception text (H §3.3).
 
-### 4.5 OCR and camera translator (FR-15)
+### 4.5 OCR and camera translator (FR-15, out of scope)
+
+**Out of scope for this app (OD-21, 2026-11-14).** Camera translation moves to a separate future app. The design
+below stays as input for that app. Nothing in this section is built here.
 
 | Item | Design | Trace |
 |---|---|---|
@@ -456,7 +455,7 @@ These are planning numbers, to be replaced by measured `usage` data in the first
 | Storage | Frames in `cache/ocr/`, deleted on exit + 24 h sweep. Results saved to history (origin `camera`) | L §3.4 temp images never deleted; H §3.3 camera results not saved |
 | Permissions | `CAMERA` requested in context with rationale; no storage permission (photo picker) | |
 
-### 4.6 TTS (FR-05, FR-14, FR-17)
+### 4.6 TTS (FR-05, FR-17)
 
 - `TtsSpeaker` in the app process (and in the IME only for "speak translation" in the bar): one `TextToSpeech` instance, initialised lazily, `shutdown()` on scope end.
 - Chunking: split by `BreakIterator.getSentenceInstance(locale)`, pack sentences up to `TextToSpeech.getMaxSpeechInputLength()` (minus margin), queue with `QUEUE_ADD`, track with `UtteranceProgressListener` for a progress indicator and Stop (COMP "borrow from L"; H CC 7.3 no chunking).
@@ -493,7 +492,7 @@ These are planning numbers, to be replaced by measured `usage` data in the first
 
 | FR | Design notes | Trace |
 |---|---|---|
-| FR-14 Voice conversation | Two-pane screen, each side a `SpeechSession` in the app (not IME) with its own language; auto-speak translation via `TtsSpeaker`; face-to-face mode flips the top pane. Messages saved with both languages | L CC 6.3 no language pair; reuses 4.2, 4.3, 4.6 |
+| FR-14 Voice conversation (out of scope, OD-21) | Not built in this app. Kept for the future app: two-pane screen, each side a `SpeechSession` in the app (not IME) with its own language; auto-speak translation via `TtsSpeaker`; face-to-face mode flips the top pane. Messages saved with both languages | L CC 6.3 no language pair; reuses 4.2, 4.3, 4.6 |
 | FR-17 Phrasebook | Our own authored phrases (categories x ~300 phrases) in English, translated by professional translators for the MVP locales and stored in the prepopulated DB. ML Kit fills other targets on demand (marked "machine translated") | H phrasebook DB on the do-not-copy list |
 | FR-19 Transliteration | Roman Urdu -> Urdu script and Hinglish -> Devanagari as a subtype mode with candidates in the suggestion strip. Engine choice (rule-based table + frequency ranking, ICU4J `Transliterator`, or a small on-device model) is OD-13 | GAP regional depth |
 | FR-20 Word game | Offline daily word from our own list, 6 guesses, rewarded-ad hint (app only), progress in `game_progress` | COMP "borrow from L" |
@@ -522,7 +521,7 @@ These are planning numbers, to be replaced by measured `usage` data in the first
 | Purchase flow | Paywall -> `launchBillingFlow` -> `PurchasesUpdatedListener` -> send `purchaseToken` to `POST /v1/entitlement/verify` -> backend verifies with Play Developer API (`purchases.subscriptionsv2.get`), acknowledges, stores entitlement -> client updates cache | **[NEW DECISION]** |
 | Restore | `queryPurchasesAsync` on every cold start and on paywall open; unknown tokens are sent for verification | COMP #12 |
 | Lifecycle | Real-time developer notifications (Pub/Sub) update the Firestore entitlement (renewal, grace period, on-hold, revoked) | |
-| Client checks | `EntitlementRepository.isPro: StateFlow<Boolean>` from cached server verdict with `expires_at`; cache valid for offline use until `expires_at + 3 days grace`. Server checks entitlement independently on every Pro-gated call (AI Pro quota, cloud translate, cloud OCR) | |
+| Client checks | `EntitlementRepository.isPro: StateFlow<Boolean>` from cached server verdict with `expires_at`; cache valid for offline use until `expires_at + 3 days grace`. Server checks entitlement independently on every Pro-gated call (AI Pro quota, cloud translate) | |
 | What Pro unlocks | Remove ads, higher AI quota, cloud translation tier, premium themes and sticker packs | COMP #12 |
 
 ### 4.13 Remote config
@@ -563,7 +562,6 @@ Cloud Run service `kb-api` (region near users, min instances 1 for AI latency) b
 | `POST /v1/rewrite` | `{ mode: "fix"\|"formal"\|"friendly"\|"shorter"\|"longer"\|"emojify"\|"translate", target_lang?, modes?: [..], locale, text, client_req_id }` | `text/event-stream`: `event: delta {text}` ... `event: done {quota_left, trimmed}`; or JSON `{variants}` for multi | 400 `too_long`, 401, 402 `quota` (+`resets_at`), 429 (+`Retry-After`), 451 `refused`, 503 `ai_paused` | FR-09 |
 | `POST /v1/polish` | `{ transcript, source_lang?, target_lang, client_req_id }` | SSE `delta` (polished then translation fields as they complete) + `done {polished, translation, source_lang_detected, quota_left}` | same | FR-10 |
 | `POST /v1/translate` | `{ text, source?, target, client_req_id }` | `{ text, source_detected, engine }` | 402 `not_pro`, 413, 429 | FR-04 |
-| `POST /v1/ocr` (if OD-10 = cloud) | multipart image <= 2 MB, `lang_hint` | `{ blocks: [{text, box}] }` | 402, 413 | FR-15 |
 | `POST /v1/dictionary` | `{ word, lang, targets: [..] }` | `{ entries: [...] }` | 404 `not_found` | FR-16 |
 | `POST /v1/entitlement/verify` | `{ purchase_token, product_id }` | `{ pro_active, expires_at, signature }` | 400 `invalid_token` | FR-12 |
 | `POST /v1/account/delete` | `{ client_req_id }` (Firebase ID token identifies the uid) | `{ deleted: true }`; server erases quota counters, entitlement cache rows and the anonymous Firebase user within 30 days, and keeps no AI text (none is stored) | 401 | PRD FR-34 |
@@ -595,14 +593,13 @@ All responses carry `X-Request-Id`. `client_req_id` makes retries idempotent for
 | Typing, suggestions, autocorrect, clipboard, themes, stickers already downloaded | Full |
 | Voice | Full when the on-device recognizer and language pack exist; otherwise an explanatory chip |
 | Translation | Full for downloaded ML Kit pairs; cloud-only pairs show "needs internet (Pro)" |
-| Camera OCR | Full for supported scripts (recognition and translation both on-device) |
 | Dictionary | Offline DB entries; enrichment when online |
 | AI rewrite/polish | Not available; chip "AI needs internet" |
 | Billing | Cached entitlement valid until `expires_at` + 3 days |
 
 ### 6.2 Privacy
 
-- Default data flow: keystrokes, voice and translations stay on the device. Only explicit AI actions, opt-in cloud translation (Pro), cloud OCR (if chosen) and dictionary lookups leave it, each with first-use disclosure.
+- Default data flow: keystrokes, voice and translations stay on the device. Only explicit AI actions, opt-in cloud translation (Pro) and dictionary lookups leave it, each with first-use disclosure.
 - Play Data safety form and the in-app privacy screen are generated from one table maintained in `docs/data-flows.md`.
 - An IME must show a prominent disclosure before collecting any typed text; ours is shown before the first AI action and the first cloud-translation opt-in. The required content, consent classes and Data safety draft are in §11.6.
 
@@ -614,7 +611,7 @@ All responses carry `X-Request-Id`. `client_req_id` makes retries idempotent for
 | Play Integrity + App Check | As 5.2; integrity is checked server-side for paid features only, so a failed verdict never breaks typing | COMP |
 | No logcat of user text | `Log` banned outside `:core:common` logging facade (custom lint). Release build: R8 `-assumenosideeffects` for `Log.v/d/i`; facade drops any argument typed `UserText`. Crashlytics custom keys never hold content | L §8 `urlCheck___`, `TextCheck----`, `DictionaryLog` |
 | Network security config | `cleartextTrafficPermitted="false"` globally, system CAs only in release, user CAs allowed in debug. Pinning is OD-17 | Both apps: no NSC hardening |
-| Backup | `allowBackup="true"` with `dataExtractionRules` (API 31+) and `fullBackupContent` (API 26-30) that **exclude** the Room DB tables with user content (`clipboard_item`, `translation_history`, `conversation_*`, `user_word`), `cache/` and `no_backup/`. Themes and settings may back up | L §6 `allowBackup` with no rules |
+| Backup | `allowBackup="true"` with `dataExtractionRules` (API 31+) and `fullBackupContent` (API 26-30) that **exclude** the Room DB tables with user content (`clipboard_item`, `translation_history`, `user_word`), `cache/` and `no_backup/`. Themes and settings may back up | L §6 `allowBackup` with no rules |
 | FileProvider | Single root `<cache-path name="share" path="share/"/>` | H §6 `external-path "."`; L §6 broad roots |
 | Exported components | Only: launcher activity, `TranslateTextActivity` (PROCESS_TEXT/SEND), IME service (`BIND_INPUT_METHOD`), settings activity referenced by `method.xml`. A manifest test fails on any new exported component without review | L §6 exported route bug, dangling alias |
 | Deep links | Route whitelist (4.3.4) | L §6 |
@@ -745,15 +742,16 @@ Delta +1 day: RTDN handling and server-side verification. **Exit (MVP):** closed
 
 **MVP roll-up:** COMP 48 days; TRD **53 days**. With the 25-30% buffer from COMP: **66-69 working days (about 3.2 months)**. _Superseded: see §8.1 and §11.9 (76 raw, 95–99 with buffer)._
 
-### Sprint 5: v1 surfaces (13 days)
+### Sprint 5: v1 surfaces (6 days)
 
 | Task | TRD FR | Source | COMP est | TRD est |
 |---|---|---|---:|---:|
-| Voice conversation | FR-14 | L CC 6.3 | 2.5 | 2.5 |
-| Camera translator (CameraX, OCR v2, gallery/share ingest, overlay, cleanup) | FR-15 | H §3.4, L §3.4, H CC 7.3 | 4.5 | 4.5 |
 | Dictionary (offline DB, enrichment proxy, define selection) | FR-16 | COMP #16 | 2 | 2 |
 | Phrasebook (own content) | FR-17 | COMP #17 | 1.5 | 1.5 |
 | Stickers (manifest, `commitContent` chain, premium gate) | FR-18 | L §3.7 | 2.5 | 2.5 |
+
+OD-21 (2026-11-14) removed voice conversation (FR-14, 2.5 days) and the camera translator (FR-15, 4.5 days).
+The sprint goes from 13 to 13 − 2.5 − 4.5 = 6 days (2 + 1.5 + 2.5).
 
 ### Sprint 6: Regional depth, game, hardening (11 days)
 
@@ -763,7 +761,7 @@ Delta +1 day: RTDN handling and server-side verification. **Exit (MVP):** closed
 | Daily word game + rewarded hint | FR-20 | COMP | 2 | 2 |
 | Hardening: privacy audit against 6.2/6.3, device matrix QA, accessibility pass, release | all | COMP | 6 | 6 |
 
-**v1 roll-up:** COMP 72 days; TRD **77 days**. With buffer: **96-100 working days (about 4.6 months)**. _Superseded: see §8.1 and §11.9 (about 104.5 raw, 131–136 with buffer)._ Content work (phrasebook translations, theme art, sticker packs, dictionary extract) runs in parallel with outside contributors and is not in these numbers.
+**v1 roll-up:** COMP 72 days; TRD **77 days**. With buffer: **96-100 working days (about 4.6 months)**. After OD-21: COMP 72 − 7 = 65 days; TRD 77 − 7 = **70 days**, or 88-91 with buffer (about 4.2-4.3 months). _Superseded: see §8.1 and §11.9 (about 104.5 raw, 131–136 with buffer)._ Content work (phrasebook translations, theme art, sticker packs, dictionary extract) runs in parallel with outside contributors and is not in these numbers.
 
 ### 8.1 PRD FR coverage (added 2026-10-17)
 
@@ -790,8 +788,8 @@ Every PRD FR is listed against the sprint that builds it. Rows marked **[inf]** 
 | FR-16 | AI voice polish + translate | MVP | S3 (FR-10) | 0 |
 | FR-17 | Themes | MVP basic / v1 custom | S4 (FR-13) | 0 |
 | FR-18 | Colour picker | v1 | **S5 new task: HSV picker for custom themes** [inf] | 1 |
-| FR-19 | Conversation mode | v1 | S5 (FR-14) | 0 |
-| FR-20 | Camera translation | v1 | S5 (FR-15); Arabic-script OCR per OD-10 | 0 |
+| FR-19 | Conversation mode | Out (OD-21) | Not scheduled. Moved to a separate future app | n/a |
+| FR-20 | Camera translation | Out (OD-21) | Not scheduled. Moved to a separate future app | n/a |
 | FR-21 | Dictionary | v1 | S5 (FR-16) | 0 |
 | FR-22 | Phrasebook | v1 | S5 (FR-17) | 0 |
 | FR-23 | Stickers | v1 | S5 (FR-18) | 0 |
@@ -811,7 +809,7 @@ Every PRD FR is listed against the sprint that builds it. Rows marked **[inf]** 
 | FR-37 | Two-way chat via Accessibility | Later | Parked (PRD §7.9); not scheduled | — |
 | FR-38 | AI chat assistant | Later | Parked / dropped for v1; not scheduled | — |
 
-**Revised roll-ups with §8.1.** MVP: 53 + 7 = **60 days**, or 75-78 working days with the 25-30% buffer (about 3.6 months). v1 (cumulative): 77 + 7 + 4.5 = **88.5 days**, or 111-115 working days with buffer (about 5.3 months). The sprint headers above still show the v1.0 day counts. **§11.9 adds 16 more MVP days (scope still missing plus under-estimates): MVP 76 raw days, 95–99 with buffer (about 4.5–4.7 months).**
+**Revised roll-ups with §8.1.** MVP: 53 + 7 = **60 days**, or 75-78 working days with the 25-30% buffer (about 3.6 months). v1 (cumulative): 77 + 7 + 4.5 = **88.5 days**, or 111-115 working days with buffer (about 5.3 months). **After OD-21 (2026-11-14):** 88.5 − 2.5 − 4.5 = **81.5 days**, or 102-106 working days with buffer (about 4.9-5.0 months). The sprint headers above still show the v1.0 day counts. **§11.9 adds 16 more MVP days (scope still missing plus under-estimates): MVP 76 raw days, 95–99 with buffer (about 4.5–4.7 months).**
 
 ---
 
@@ -827,7 +825,7 @@ Every PRD FR is listed against the sprint that builds it. Rows marked **[inf]** 
 | R-06 | Clean-room contamination (string, asset, word list from an APK) | L | H | Implementers do not use `jadx_out/`; licence record per asset; review checklist; string and asset provenance check before release | Eng lead | Clean-room rule |
 | R-07 | Prompt injection via user text (text that tells the model to do something else) | M | L | Text declared as data in tags, output limited to edited text/JSON schema, no tools, eval cases with injections | Eng | §4.4.3 |
 | R-08 | IME ANRs or memory kills (ML Kit models, Compose) hurt vitals and ranking | M | H | Budgets as CI gates, model release after idle, no network on main thread, baseline profiles | Eng | GAP stability |
-| R-09 | Arabic-script OCR gap leaves ur/ar camera users unserved | H | M | OD-10 decision; clear "not supported" UI until then | Product | §4.5 |
+| R-09 | Arabic-script OCR gap leaves ur/ar camera users unserved | n/a | n/a | Closed: camera translation is out of scope (OD-21) | Product | §4.5 |
 | R-10 | Anthropic API outage or latency spike | L | M | Server-side fallback, timeouts, clear user message, AI hidden by breaker; typing unaffected | Eng | |
 | R-11 | Billing or entitlement bugs grant or deny Pro wrongly | M | M | Server verification + RTDN, test purchases with license testers, grace logic tests | Eng | H §5 dead billing |
 | R-12 | Data protection obligations (GDPR, India DPDP Act, Pakistan draft law) for AI text processing | M | M | No retention of text, DPA with vendors, OD-14 ZDR decision, privacy policy per region | Legal | |
@@ -852,7 +850,7 @@ L = likelihood, I = impact (L/M/H).
 | OD-07 | Model routing per AI action | Opus 5.5 everywhere / per-action cheapest model that passes the eval (PRD OD-08) | **The cheapest model that passes the eval, per action** (PRD OD-08; §11.4). Start with Haiku 5.5; step up to Sonnet 5.5 for a language or tone that fails the eval. Opus 5.5 only where the eval shows nothing cheaper is good enough. Product owner signs off on the eval result | Product + finance | Sprint 3 (before the closed test, not after) |
 | OD-08 | Room version | Room 2.8 / Room 3 | **Room 2.8**; Room 3 after it is stable and upstream FlorisBoard compatibility is checked | Eng | Sprint 0 |
 | OD-09 | GMA SDK flavour | Legacy GMA SDK / GMA Next-Gen | **Legacy GMA** for MVP mediation coverage; re-evaluate at v1 | Eng + monetisation | Sprint 4 |
-| OD-10 | Arabic-script OCR | Cloud OCR via proxy (Pro) / open-source on-device engine / defer | **Defer to v1.1**, then cloud via proxy for Pro | Product | Sprint 5 |
+| OD-10 | Arabic-script OCR | Cloud OCR via proxy (Pro) / open-source on-device engine / defer | **Not applicable to this app (OD-21, 2026-11-14).** Camera translation moved to a separate future app, which owns this question. The old default was "defer to v1.1, then cloud via proxy for Pro" | Product | closed |
 | OD-11 | Online dictionary source | Free Dictionary API (freedictionaryapi.com) / Wiktionary API / licensed | **Free Dictionary API via our proxy** after checking its terms; offline Wiktionary extract as base | Product | Sprint 5 |
 | OD-12 | Process model | Single process / separate `:ime` process | **Single process** (upstream assumption), lazy init rules (2.3); data layer already multi-process safe | Eng lead | Sprint 0 |
 | OD-13 | Transliteration engine | Rule table + frequency ranking / ICU4J / small on-device model | **Rule table + frequency ranking** for Roman Urdu and Hinglish; ICU4J as fallback | Eng | Sprint 6 |
@@ -877,8 +875,8 @@ This review was done from the point of view of a senior Android IME engineer. It
 | # | Finding | Fix |
 |---|---|---|
 | 1.1 | The rule "`:ime*` must not depend on `:core:ads`" only applies at compile time. In a single process, every `ContentProvider` in the merged manifest runs `onCreate` when the process starts. That includes the GMA SDK's init provider (check whether the pinned GMA version still declares `MobileAdsInitProvider`), `FirebaseInitProvider` and `androidx.startup`. If the user opens a chat app before ever opening our app, the keyboard is what starts the process, so ad SDK code loads in the IME process anyway. That breaks PRD FR-27 AC1 ("no `MobileAds` class loaded in the IME service") and PC-4 | (a) Remove the ad SDK's auto-init provider with `tools:node="remove"` in `:app`'s manifest (GMA is initialised explicitly after UMP). (b) Set Firebase Analytics `firebase_analytics_collection_enabled=false` and `google_analytics_adid_collection_enabled=false` as manifest defaults, and turn them on only after consent from an Activity. (c) Add an instrumented test: cold-start the process **through the IME only** (app never opened), type for 30 s, then assert that no class under `com.google.android.gms.ads` is loaded and that no request went to an ads host. CI gate |
-| 1.2 | In a single process, the memory of the companion app (Compose screens, the GMA WebView, a native ad, CameraX) stays in the same process as the keyboard after the user leaves the app. The "IME PSS idle ≤ 90 MB" budget is measured with the app never opened, which is not what real users do. When the low-memory killer removes the process, the keyboard has to cold-start, and the user sees it as lag | Add a §6.4 budget: **IME PSS ≤ 120 MB, measured 60 s after leaving a screen that showed a native ad**. Do a 0.5-day spike in Sprint 0 to measure it. If the spike misses the budget, take OD-12 option B: move the IME service to `android:process=":ime"`. ContentProviders do not start in that process, which also removes 1.1 at the source. The data layer is already multi-process safe (§2.3). Upstream FlorisBoard's in-memory preference cache then needs cross-process invalidation, budgeted at 2 days |
-| 1.3 | Crashes in app code (an ads callback, CameraX) kill the keyboard while the user is typing in another app | Same decision as 1.2. Regardless of that decision, run every SDK callback that is not part of the keyboard behind `runCatching` plus a Crashlytics non-fatal |
+| 1.2 | In a single process, the memory of the companion app (Compose screens, the GMA WebView, a native ad) stays in the same process as the keyboard after the user leaves the app. The "IME PSS idle ≤ 90 MB" budget is measured with the app never opened, which is not what real users do. When the low-memory killer removes the process, the keyboard has to cold-start, and the user sees it as lag | Add a §6.4 budget: **IME PSS ≤ 120 MB, measured 60 s after leaving a screen that showed a native ad**. Do a 0.5-day spike in Sprint 0 to measure it. If the spike misses the budget, take OD-12 option B: move the IME service to `android:process=":ime"`. ContentProviders do not start in that process, which also removes 1.1 at the source. The data layer is already multi-process safe (§2.3). Upstream FlorisBoard's in-memory preference cache then needs cross-process invalidation, budgeted at 2 days |
+| 1.3 | Crashes in app code (an ads callback) kill the keyboard while the user is typing in another app | Same decision as 1.2. Regardless of that decision, run every SDK callback that is not part of the keyboard behind `runCatching` plus a Crashlytics non-fatal |
 
 ### 11.2 IME lifecycle corrections
 
@@ -938,7 +936,7 @@ This review was done from the point of view of a senior Android IME engineer. It
 | 5.2 | `downloadModelIfNeeded()` returns a `Task` with **no byte progress and no cancel** | PRD FR-36 AC1 "download progress visible" can only be an indeterminate indicator. "Cancel" hides the job; when the `Task` completes, `deleteDownloadedModel()` removes the model. Product wording: RN-06. The real state comes from `RemoteModelManager.getDownloadedModels()`. `language_model_state` (§3.1) is only a cache of it, refreshed on app resume and when the bar opens |
 | 5.3 | Downloads started from the IME | The keyboard never starts a download silently. "Download" in the bar starts it, with Wi-Fi rules applied. Run downloads in a WorkManager job owned by the app (unique work per language) so they survive the keyboard hiding. On API 34+, a user-initiated data-transfer job is the right job type if mobile-data downloads are allowed |
 | 5.4 | Memory | A loaded `Translator` adds tens of MB of native memory. Keep at most **one** loaded pair in the IME, and close it after 60 s idle or on `onTrimMemory(TRIM_MEMORY_RUNNING_LOW)` or higher. The §6.4 "≤ 160 MB with one model" budget stands |
-| 5.5 | Text Recognition v2 has no Arabic-script model (§4.5, OD-10) | Unchanged. The PRD FR-20 wording "Arabic-script support as available" matches "not supported in v1" |
+| 5.5 | Text Recognition v2 has no Arabic-script model (§4.5, OD-10) | No longer applies. OD-21 moves camera translation (PRD FR-20) out of this app |
 
 ### 11.6 Play policy: user data, ads, Data safety, deletion
 
@@ -958,7 +956,6 @@ This review was done from the point of view of a senior Android IME engineer. It
 |---|---|---|---|---|---|---|
 | Messages → Other in-app messages, **or** App activity → Other user-generated content (pick one and keep it the same in listing and policy) | Yes: text selected for AI, cloud translation, and transcripts for polish | No | **Yes** | Optional (user-started) | App functionality | `/v1/rewrite`, `/v1/polish`, `/v1/translate` |
 | Audio | **No** on the platform-recognizer path. On-device Whisper records in our process but never transmits, so it is not collected. Cloud Whisper is not planned | No | Yes | Optional | App functionality | §11.3 #3.4 |
-| Photos | Only if OD-10 cloud OCR ships | No | Yes | Optional | App functionality | `/v1/ocr` |
 | Personal info → Email address | Yes, only for users who sign in with Google | No | No | Optional | Account management | Firebase Auth |
 | Personal info → User IDs | Yes (Firebase uid) | No | No | Required | App functionality, fraud prevention | Auth, quota |
 | Financial info → Purchase history | Yes | No | No | Optional | App functionality | `/v1/entitlement/*` |
@@ -1026,6 +1023,9 @@ The Review log already aligned clipboard (off, 24 h), history 500, LRU 200, rewr
 
 **v1: 88.5 + 8.5 + 7.5 = about 104.5 raw days; 131–136 with buffer, about 6.2–6.5 months.**
 
+**v1 after OD-21 (2026-11-14):** 104.5 − 2.5 (voice conversation) − 4.5 (camera translator) = **about 97.5 raw days;
+122–127 with buffer, about 5.8–6.0 months.** The same total is 81.5 + 8.5 + 7.5 = 97.5.
+
 ### 11.10 Added risks
 
 | ID | Risk | L | I | Mitigation |
@@ -1064,7 +1064,7 @@ Evidence-fidelity and PRD-alignment review against both teardown reports, `CLASS
 
 - **Engineering and Play-policy pass (§11).** Added §11: SDK auto-init in the shared process, IME lifecycle fixes, the mic permission trampoline, ML Kit download limits, LLM model economics with on-demand-only AI, the Play Integrity quota, consent screens, a Data safety draft, the web deletion URL, `POST /v1/ai/report`, CI gates and a revised estimate. Product items are listed in `REVIEW_NOTES.md`.
 
-**Still open.** Runtime egress from password fields (CMP Q1) is unproven for both apps. Arabic-script OCR waits on OD-10. Billing stays pinned to 8.3.0, even though the playbook's monetization module cites 9.1.0.
+**Still open.** Runtime egress from password fields (CMP Q1) is unproven for both apps. Arabic-script OCR no longer applies (OD-21). Billing stays pinned to 8.3.0, even though the playbook's monetization module cites 9.1.0.
 
 ## Follow-up product decisions (2026-10-18)
 
@@ -1072,3 +1072,10 @@ Evidence-fidelity and PRD-alignment review against both teardown reports, `CLASS
 - **AI engine:** Gemini Nano (ML Kit GenAI / AICore) runs first where supported, with the cheapest passing cloud model (OD-07) as the fallback. This is gated by a roughly 1-day spike (PRD OD-20). The spike must confirm that the IME can call inference without `BACKGROUND_USE_BLOCKED` (ML Kit GenAI allows only the top foreground app), measure ur/hi/ar/en quality against the §7.1 eval, and check device coverage in launch markets. On-device requests skip `consent_ai` and the network path, but count against the same quota.
 - **Estimate impact (to confirm):** Whisper fallback about 4–6 raw days (JNI, 16 KB alignment, download and model state, batch UX, memory, OEM QA). Nano spike plus integration about 3 days. MVP moves from 76 to about 83–85 raw days, which puts public launch at about M+5.5.
 
+## Product decision OD-21 (2026-11-14)
+
+- Voice conversation (TRD FR-14, PRD FR-19) and the camera translator (TRD FR-15, PRD FR-20) move to a separate
+  future app (`docs/decisions/od-21-drop-conversation-camera.md`).
+- Sprint 5 drops from 13 to 6 days. The v1 roll-up drops by 7 days: 88.5 to 81.5 in §8.1, and 104.5 to 97.5 in §11.9.
+- OD-10 and R-09 no longer apply. CameraX, Text Recognition v2, `:core:ocr`, `:feature:conversation`,
+  `:feature:camera`, the `conversation_*` tables, `cache/ocr/`, `/v1/ocr` and the Photos Data safety row are removed.

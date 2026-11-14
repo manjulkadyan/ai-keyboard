@@ -22,16 +22,21 @@ enum class UnavailableReason(val value: String) {
     NO_SERVICE("no_service"), LANG_UNSUPPORTED("lang_unsupported"), OFFLINE_NO_MODEL("offline_no_model")
 }
 
-/** Kind of downloadable pack; [WHISPER] and [TRANSLATE] (ML Kit models) are downloaded so far. */
+/** Kind of downloadable pack: [WHISPER], [TRANSLATE] (ML Kit models), and [DICT] and [STICKERS] content packs. */
 enum class PackKind(val value: String) {
-    TRANSLATE("translate"), DICT("dict"), TRANSLIT("translit"), WHISPER("whisper")
+    TRANSLATE("translate"), DICT("dict"), TRANSLIT("translit"), WHISPER("whisper"), STICKERS("stickers")
 }
 
 enum class PackResult(val value: String) {
     OK("ok"), FAILED("failed"), HASH_MISMATCH("hash_mismatch"), CANCELLED("cancelled")
 }
 
-/** Where a translation happened; conversation and camera arrive in S5. */
+/** How a sticker reached the host app (S5 Task 6): the commitContent, share and clipboard chain. */
+enum class StickerMethod(val value: String) {
+    COMMIT_CONTENT("commit_content"), SHARE("share"), CLIPBOARD("clipboard")
+}
+
+/** Where a translation happened. Conversation and camera are out of scope for this app (docs/decisions/od-21). */
 enum class TranslateSurface(val value: String) {
     BAR("bar"), TRANSLATOR("translator"), PROCESS_TEXT("process_text")
 }

@@ -97,6 +97,8 @@ Rebuild the bundled dictionaries (`app/src/main/assets/dict/<lang>.sdict`) from 
 - `:core:firebase`: App Check and anonymous Auth tokens for kb-api. It depends on `:core:ai`.
 - `:ime:ai-ui`: AI rewrite sheet, quota card and report sheet. It depends on `:core:ai`, `:core:config`, `:core:analytics`, `:ime:policy` and `:ime:editing`.
 - `fork/ai/AiAppGraph` builds the AI objects lazily. kb-api is our backend and is not in this repo.
+- `:ime:stickers-ui`: sticker panel and its controller. It depends on `:core:content`, `:core:analytics` and `:ime:policy`.
+- `fork/stickers` sends a sticker by commitContent, then a share to the host, then the clipboard (`StickerInserter`).
 - `:core:ads`: ads skeleton for the app process only. Nothing in `:app` calls it yet.
 - `:lib:*` (android, color, compose, kotlin, native, snygg) are upstream libraries.
 - `:lib:native` is upstream Rust code built through CMake. `libnative/dummy` is an upstream Cargo crate, not a Gradle module.
