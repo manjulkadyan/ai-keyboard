@@ -27,6 +27,20 @@ class RuleTableTest {
         assertEquals(2, table().matchesAt("KHana", 0).size)
     }
 
+    @Test fun lengthChangingLowerCaseDoesNotDropLaterMatches() {
+        // "İ".lowercase(Locale.ROOT) is two chars; only the window at the offset is lower-cased now.
+        assertEquals(setOf("kh", "k"), table().matchesAt("İkha", 1).map { it.roman }.toSet())
+        assertTrue(table().matchesAt("kİa", 0).any { it.roman == "k" })
+    }
+
+    @Test fun loweredOverloadMatchesThePublicOne() {
+        val t = table()
+        for (offset in 0 until 4) {
+            val public = t.matchesAt("khaa", offset).map { it.roman }
+            assertEquals(public, t.matchesAtLowered("khaa", offset).map { it.roman })
+        }
+    }
+
     @Test fun endRuleMatchesOnlyAtLastSegment() {
         assertTrue(table().matchesAt("kha", 2).any { it.roman == "a" })
         assertFalse(table().matchesAt("khaa", 2).any { it.roman == "a" })

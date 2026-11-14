@@ -13,22 +13,32 @@ import java.util.Locale
  */
 class RuleTable private constructor(val lang: TranslitLang, internal val rules: List<Rule>) {
     private val byFirstChar: Map<Char, List<Rule>> = rules.groupBy { it.roman[0] }
-    
+
     val maxRomanLength: Int = rules.maxOfOrNull { it.roman.length } ?: 0
 
     /**
      * Rules whose roman part starts at input[offset]. Position is checked against offset and input length. MID and
-     * END never match at offset 0, so a whole-word vowel gets its word-start form only.
+     * END never match at offset 0, so a whole-word vowel gets its word-start form only. Only the window a rule can
+     * cover is lower-cased, char by char, so the length never changes (no lost matches for input such as "İ").
      */
     fun matchesAt(input: String, offset: Int): List<Rule> {
         if (offset < 0 || offset >= input.length) return emptyList()
-        val text = input.lowercase(Locale.ROOT)
-        if (text.length != input.length) return emptyList()
-        val candidates = byFirstChar[text[offset]] ?: return emptyList()
+        val end = minOf(input.length, offset + maxRomanLength)
+        return matches(lowerCase(input.substring(offset, end)), 0, offset, input.length)
+    }
+
+    /** [matchesAt] for a [lowerCase]d word. The decoder lower-cases once per word, not once per call. */
+    internal fun matchesAtLowered(text: String, offset: Int): List<Rule> {
+        if (offset < 0 || offset >= text.length) return emptyList()
+        return matches(text, offset, offset, text.length)
+    }
+
+    /** Rules matching [text] at [at]; [offset] and [length] place that point in the whole input. */
+    private fun matches(text: String, at: Int, offset: Int, length: Int): List<Rule> {
+        val candidates = byFirstChar[text[at]] ?: return emptyList()
         return candidates.filter { rule ->
-            val end = offset + rule.roman.length
-            end <= text.length && text.startsWith(rule.roman, offset) &&
-                positionAllows(rule.position, offset, end, text.length)
+            text.startsWith(rule.roman, at) &&
+                positionAllows(rule.position, offset, offset + rule.roman.length, length)
         }
     }
 
@@ -42,6 +52,12 @@ class RuleTable private constructor(val lang: TranslitLang, internal val rules: 
     override fun toString(): String = "RuleTable(lang=${lang.tag}, rules=${rules.size})"
 
     companion object {
+        /** Lower-cases one char at a time, so the result is as long as [input] and offsets stay valid. */
+        internal fun lowerCase(input: String): String {
+            val chars = CharArray(input.length) { input[it].lowercaseChar() }
+            return String(chars)
+        }
+
         /** Columns: roman, native, cost, position. Blank lines and lines starting with # are skipped. */
         fun parse(lang: TranslitLang, tsv: Sequence<String>): RuleTable {
             val rules = ArrayList<Rule>()

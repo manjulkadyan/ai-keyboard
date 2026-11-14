@@ -39,6 +39,23 @@ class SuggestDictionary internal constructor(
 
     fun containsExact(word: String): Boolean = indexOf(word) >= 0
 
+    /**
+     * True when some word starts with [prefix] (a whole word counts). A binary search over the sorted words: every
+     * prefix is a contiguous range, so only the first word at or after [prefix] needs a check. Like [frequency], the
+     * exact form is tried first, then the lowercase form. The empty prefix matches any non-empty dictionary.
+     */
+    fun hasPrefix(prefix: String): Boolean {
+        if (startsAt(prefix)) return true
+        val lower = prefix.lowercase()
+        return lower != prefix && startsAt(lower)
+    }
+
+    private fun startsAt(prefix: String): Boolean {
+        val i = words.binarySearch(prefix)
+        val at = if (i >= 0) i else -(i + 1)
+        return at < words.size && words[at].startsWith(prefix)
+    }
+
     /** Every word in sorted order (read-only view; used by the dictionary build checks). */
     fun wordList(): List<String> = words.asList()
 
