@@ -8,7 +8,9 @@ package com.manjul.aikeyboard.fork.routes
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
 import com.manjul.aikeyboard.app.Deeplink
+import com.manjul.aikeyboard.app.FlorisAppActivity
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import java.io.File
@@ -197,5 +199,18 @@ class RouteRegistryTest {
         DictionaryHandoff.offer("run")
         assertEquals("run", DictionaryHandoff.take())
         assertNull(DictionaryHandoff.take())
+    }
+
+    @Test
+    fun theDictionaryIntentRoundTripsThroughTheRouteAllowList() {
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val intent = AppIntents.dictionaryIntent(app, "book")
+        assertEquals(FlorisAppActivity::class.java.name, intent.component?.className)
+        assertEquals(RouteRegistry.DICTIONARY, intent.getStringExtra(RouteRegistry.EXTRA_OPEN_SCREEN))
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_CLEAR_TOP != 0)
+        val open = assertIs<AppIntent.OpenRoute>(AppIntents.classify(intent) {})
+        assertEquals("dictionary", open.route.path)
+        assertEquals("book", open.dictionaryWord)
     }
 }

@@ -7,7 +7,6 @@ package com.manjul.aikeyboard.fork.dictionary
 
 import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
@@ -33,10 +32,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.manjul.aikeyboard.R
-import com.manjul.aikeyboard.app.FlorisAppActivity
 import com.manjul.aikeyboard.core.content.dictionary.Definition
 import com.manjul.aikeyboard.core.content.dictionary.LookupResult
 import com.manjul.aikeyboard.dictionary
+import com.manjul.aikeyboard.fork.routes.AppIntents
 import com.manjul.aikeyboard.fork.routes.RouteRegistry
 import com.manjul.aikeyboard.fork.suggest.LatinWordCandidate
 import com.manjul.aikeyboard.fork.voice.BackDismisses
@@ -127,13 +126,6 @@ object DefinitionCards {
         show(word, learned, lookup = { app.dictionary().value.repository.lookupOffline(it) }, remove = remove)
         return true
     }
-
-    /** Opens the app's Dictionary screen with [word] (route allow-list, `dictionary`). */
-    fun moreIntent(context: Context, word: String): Intent =
-        Intent(context, FlorisAppActivity::class.java)
-            .putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, RouteRegistry.DICTIONARY)
-            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, word)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
 }
 
 /** The card over the keyboard area while open; nothing while closed. It takes every touch, and Back closes it. */
@@ -156,7 +148,7 @@ fun BoxScope.DefinitionCardOverlay() {
             onMore = {
                 DefinitionCards.dismiss()
                 try {
-                    context.startActivity(DefinitionCards.moreIntent(context, ui.word))
+                    context.startActivity(AppIntents.dictionaryIntent(context, ui.word))
                 } catch (_: ActivityNotFoundException) {
                     // Our own Activity is always there; nothing to open otherwise.
                 }

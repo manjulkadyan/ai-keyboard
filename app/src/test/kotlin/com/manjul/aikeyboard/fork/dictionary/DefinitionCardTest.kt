@@ -81,8 +81,8 @@ class DefinitionCardTest {
     }
 
     @Test
-    fun moreBuildsTheDictionaryIntentWithTheWord() {
-        val intent = DefinitionCards.moreIntent(app, "book")
+    fun moreUsesTheSharedDictionaryIntentWithTheWord() {
+        val intent = AppIntents.dictionaryIntent(app, "book")
         assertEquals(FlorisAppActivity::class.java.name, intent.component?.className)
         assertEquals(RouteRegistry.DICTIONARY, intent.getStringExtra(RouteRegistry.EXTRA_OPEN_SCREEN))
         assertEquals("book", intent.getStringExtra(RouteRegistry.EXTRA_DICTIONARY_WORD))

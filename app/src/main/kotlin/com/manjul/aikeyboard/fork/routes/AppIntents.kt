@@ -5,8 +5,10 @@
 
 package com.manjul.aikeyboard.fork.routes
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.manjul.aikeyboard.app.FlorisAppActivity
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.EventCatalog
 import com.manjul.aikeyboard.fork.processtext.ProcessTextInput
@@ -88,6 +90,16 @@ object AppIntents {
         val word = runCatching { intent.getCharSequenceExtra(RouteRegistry.EXTRA_DICTIONARY_WORD) }.getOrNull()
         return word?.toString()?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_DICTIONARY_WORD_CHARS }
     }
+
+    /**
+     * S5-dict: the one intent that opens the Dictionary screen with [word] through the route allow-list. The
+     * Define action and the keyboard card both use it; [dictionaryWord] reads it back.
+     */
+    fun dictionaryIntent(context: Context, word: String): Intent =
+        Intent(context, FlorisAppActivity::class.java)
+            .putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, RouteRegistry.DICTIONARY)
+            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, word)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
 
     const val MAX_DICTIONARY_WORD_CHARS = 64
 }

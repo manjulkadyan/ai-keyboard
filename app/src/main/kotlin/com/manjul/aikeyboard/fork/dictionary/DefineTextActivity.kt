@@ -49,7 +49,6 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.AppTheme
-import com.manjul.aikeyboard.app.FlorisAppActivity
 import com.manjul.aikeyboard.app.apptheme.FlorisAppTheme
 import com.manjul.aikeyboard.core.analytics.ProcessTextAction
 import com.manjul.aikeyboard.core.content.dictionary.LookupResult
@@ -57,7 +56,6 @@ import com.manjul.aikeyboard.core.tts.TtsAvailability
 import com.manjul.aikeyboard.dictionary
 import com.manjul.aikeyboard.fork.processtext.ProcessTextInput
 import com.manjul.aikeyboard.fork.routes.AppIntents
-import com.manjul.aikeyboard.fork.routes.RouteRegistry
 import com.manjul.aikeyboard.fork.voice.isOnline
 import com.manjul.aikeyboard.ttsManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -133,7 +131,7 @@ class DefineTextActivity : ComponentActivity() {
                         onDismiss = ::finish,
                         onSpeak = ::speak,
                         onOpenInApp = { w ->
-                            start(dictionaryIntent(this, w))
+                            start(AppIntents.dictionaryIntent(this, w))
                             finish()
                         },
                         onOpenLicence = { url -> start(Intent(Intent.ACTION_VIEW, url.toUri())) },
@@ -167,13 +165,6 @@ class DefineTextActivity : ComponentActivity() {
             if (word.isEmpty() || word.length > AppIntents.MAX_DICTIONARY_WORD_CHARS) return null
             return word.takeIf { w -> w.none { it.isWhitespace() } }
         }
-
-        /** Opens the Dictionary screen with [word] through the route allow-list. */
-        fun dictionaryIntent(context: Context, word: String): Intent =
-            Intent(context, FlorisAppActivity::class.java)
-                .putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, RouteRegistry.DICTIONARY)
-                .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, word)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
 
         private fun defaultDeps(context: Context): Deps {
             val app = context.applicationContext
