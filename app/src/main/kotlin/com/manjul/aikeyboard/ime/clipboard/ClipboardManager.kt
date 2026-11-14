@@ -20,16 +20,17 @@ package com.manjul.aikeyboard.ime.clipboard
 import android.content.ClipData
 import android.content.Context
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
-import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.editorInstance
 import com.manjul.aikeyboard.fork.clipboard.ClipboardCaptureGate // FORK(S1-clipboard)
 // FORK(S5-clipboard): imports for the encrypted clipboard history
 import com.manjul.aikeyboard.fork.clipboard.ClipboardCipher
+import com.manjul.aikeyboard.fork.clipboard.CompactionMark
 import com.manjul.aikeyboard.fork.clipboard.ClipboardEncryptionMigrator
 import com.manjul.aikeyboard.fork.clipboard.ClipboardHistoryVault
 import com.manjul.aikeyboard.fork.clipboard.ClipboardWipe
 import com.manjul.aikeyboard.fork.clipboard.KeyProvider
 import com.manjul.aikeyboard.fork.clipboard.KeystoreKeyProvider
+import com.manjul.aikeyboard.fork.clipboard.compactClipboardDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFileStorage
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFilesDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDao
@@ -56,6 +57,7 @@ import org.florisboard.lib.android.showShortToastSync
 import org.florisboard.lib.android.systemService
 import org.florisboard.lib.kotlin.tryOrNull
 import java.io.Closeable
+import java.io.File
 
 /**
  * [ClipboardManager] manages the clipboard and clipboard history.
@@ -75,6 +77,9 @@ class ClipboardManager(
     companion object {
         // 1 minute
         private const val INTERVAL = 60 * 1000L
+
+        // FORK(S5-clipboard): present while a compaction after the encryption migration is still owed (no content)
+        const val COMPACTION_MARK_FILE = "clipboard_compaction.pending"
 
         /**
          * Taken from ClipboardDescription.java from the AOSP
@@ -104,8 +109,11 @@ class ClipboardManager(
     }
 
     private val prefs by FlorisPreferenceStore
-    private val appContext by context.appContext()
-    private val editorInstance by context.editorInstance()
+    // FORK(S5-clipboard): the app context directly, and the editor on first use, so tests can build the real manager
+    // on a plain Application (Robolectric cannot load FlorisApplication's native library). In production the
+    // context is FlorisApplication, so these are the same objects as upstream's.
+    private val appContext: Context = context.applicationContext
+    private val editorInstance by lazy { context.editorInstance().value }
     private val systemClipboardManager = context.systemService(AndroidClipboardManager::class)
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -155,11 +163,18 @@ class ClipboardManager(
             if (clipHistoryDb == null) {
                 val db = ClipboardHistoryDatabase.new(context.applicationContext)
                 clipHistoryDb = db
-                // FORK(S5-clipboard): seal pre-S5 plaintext rows once per process; reads pass them through meanwhile
+                // FORK(S5-clipboard): seal pre-S5 plaintext rows once per process; reads pass them through meanwhile.
+                // A compaction that fails stays owed in a no_backup marker file and is retried at the next start.
                 ioScope.launch {
-                    ClipboardEncryptionMigrator(db.clipboardItemDao(), historyCipher, historyWipe) {
-                        compactHistoryDb(db)
-                    }.runOnce()
+                    ClipboardEncryptionMigrator(
+                        dao = db.clipboardItemDao(),
+                        cipher = historyCipher,
+                        wipe = historyWipe,
+                        pendingCompaction = CompactionMark.FileMark(
+                            File(context.applicationContext.noBackupFilesDir, COMPACTION_MARK_FILE),
+                        ),
+                        compact = { compactClipboardDatabase(db.openHelper.writableDatabase) },
+                    ).runOnce()
                 }
                 withContext(Dispatchers.Main) {
                     clipHistoryDao?.getAllLive()?.observeForever { _ ->
@@ -441,14 +456,6 @@ class ClipboardManager(
             files.close()
         }
         ClipboardFileStorage.resetClipboardFileStorage(appContext)
-    }
-
-    // FORK(S5-clipboard): after the migration, drop the free pages and WAL frames that still hold old plain text
-    private fun compactHistoryDb(db: ClipboardHistoryDatabase) {
-        val sql = db.openHelper.writableDatabase
-        sql.query("PRAGMA wal_checkpoint(TRUNCATE)").close()
-        sql.execSQL("VACUUM")
-        sql.query("PRAGMA wal_checkpoint(TRUNCATE)").close()
     }
 
     fun pasteItem(item: ClipboardItem) {

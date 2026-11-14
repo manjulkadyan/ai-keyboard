@@ -25,13 +25,20 @@ class ClipboardWipe(
     var currentGeneration: Int = 0
         private set
 
-    /** True if this call wiped. */
+    /**
+     * True if this call wiped. If the rows could not be deleted, it logs that and returns false, and the generation
+     * stays, so that the next read or start that meets the same rows wipes again.
+     */
     @Synchronized
     fun wipe(seenGeneration: Int): Boolean {
         if (seenGeneration != currentGeneration) return false
-        runCatching(deleteRows)
+        val rowsDeleted = runCatching(deleteRows).isSuccess
         runCatching(deleteFiles)
         runCatching(keys::delete)
+        if (!rowsDeleted) {
+            Log.w(TAG, "clipboard history key lost; clearing the history failed")
+            return false
+        }
         currentGeneration = seenGeneration + 1
         Log.w(TAG, "clipboard history key lost; history cleared")
         return true

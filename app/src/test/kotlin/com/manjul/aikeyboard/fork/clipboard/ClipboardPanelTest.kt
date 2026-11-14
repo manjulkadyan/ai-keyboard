@@ -36,8 +36,9 @@ import kotlin.test.assertTrue
 /**
  * The clipboard panel's history as `ClipboardManager` keeps it: every DAO write goes through
  * [ClipboardHistoryVault.sealForWrite] and every DAO read through [ClipboardHistoryVault.read], exactly as the
- * manager calls them. `ClipboardManager` itself needs `FlorisApplication` (native library), which Robolectric
- * cannot load, so the upstream behaviours are asserted on the same DAO queries, prefs and helpers it uses.
+ * manager calls them. The upstream behaviours are asserted on the same DAO queries, prefs and helpers it uses. The
+ * real manager's seal and open wiring is covered by `ime.clipboard.ClipboardManagerSealingTest` and
+ * `ClipboardManagerSealGuardTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
