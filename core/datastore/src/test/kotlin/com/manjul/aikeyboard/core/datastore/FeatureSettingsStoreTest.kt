@@ -258,4 +258,20 @@ class FeatureSettingsStoreTest {
         assertEquals("system", old.keySound)
         assertEquals("", old.pendingPremiumThemeId)
     }
+
+    @Test
+    fun `colour fields default to empty and persist`() = runTest {
+        val d = FeatureSettings()
+        assertEquals(emptyList(), d.recentColors)
+        assertEquals(emptyList(), d.customThemeColors)
+        val store = FeatureSettingsStore(app)
+        store.update { it.copy(recentColors = listOf(0xFFFF8800), customThemeColors = listOf(1L, 2L, 3L, 0xFFFFFFFF)) }
+        val file = File(app.filesDir, "datastore/feature_settings.json")
+        val decoded = file.inputStream().use { FeatureSettingsSerializer.readFrom(it) }
+        assertEquals(listOf(0xFFFF8800), decoded.recentColors)
+        assertEquals(listOf(1L, 2L, 3L, 0xFFFFFFFF), decoded.customThemeColors)
+        val old = FeatureSettingsSerializer.readFrom("""{"onboardingDone":true}""".byteInputStream())
+        assertEquals(emptyList(), old.recentColors)
+        assertEquals(emptyList(), old.customThemeColors)
+    }
 }

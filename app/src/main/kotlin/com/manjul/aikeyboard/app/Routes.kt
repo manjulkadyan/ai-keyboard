@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
  * Modified by AI Keyboard contributors, 2026. FORK(S4-themes): Themes route. FORK(S4-settings): settings tree.
- * FORK(S4-privacy): Delete my data route
+ * FORK(S4-privacy): Delete my data route. FORK(S5-color): Custom colours route
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,6 +85,7 @@ import com.manjul.aikeyboard.fork.phrasebook.PhrasebookScreen // FORK(S5-phraseb
 import com.manjul.aikeyboard.fork.paywall.PaywallRoute // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.paywall.PaywallTrigger // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.themes.ThemesScreen // FORK(S4-themes)
+import com.manjul.aikeyboard.fork.themes.CustomThemeScreen // FORK(S5-color)
 import com.manjul.aikeyboard.fork.settings.AiSettingsScreen // FORK(S3-polish)
 import android.app.Application // FORK(S4-settings)
 import com.manjul.aikeyboard.app.ads.AdsAppGraph // FORK(S4-settings)
@@ -158,6 +159,11 @@ object Routes {
     @Serializable
     @Deeplink("themes")
     object Themes
+
+    // FORK(S5-color): the "Custom colours" theme editor, opened from Themes only (not on the RouteRegistry allow-list)
+    @Serializable
+    @Deeplink("themes/custom")
+    object CustomColors
 
     object Settings {
         @Serializable
@@ -435,6 +441,7 @@ object Routes {
                 }
             }
             composableWithDeepLink(Themes::class) { ThemesScreen() } // FORK(S4-themes)
+            composableWithDeepLink(CustomColors::class) { CustomThemeScreen() } // FORK(S5-color)
             composableWithDeepLink(Settings.Ai::class) { // FORK(S3-polish)
                 // FORK(S4-billing): auto-polish unlocks from the signed Pro cache
                 val store = LocalContext.current.featureSettingsStore().value

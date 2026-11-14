@@ -514,4 +514,24 @@
     <string name="clipboard__smart_chip_email" tools:ignore="MissingTranslation">Insert email address {value}</string>
     <string name="clipboard__smart_chip_url" tools:ignore="MissingTranslation">Insert link {value}</string>
     <string name="clipboard__smart_chip_phone" tools:ignore="MissingTranslation">Insert phone number {value}</string>
+    <!-- S5 Task 8: HSV colour picker and the Custom colours theme -->
+    <string name="color_picker__hue" tools:ignore="MissingTranslation">Hue</string>
+    <string name="color_picker__sat_val" tools:ignore="MissingTranslation">Saturation and brightness</string>
+    <string name="color_picker__sat_val_state" tools:ignore="MissingTranslation">Saturation {s} percent, brightness {v} percent</string>
+    <string name="color_picker__hex" tools:ignore="MissingTranslation">Hex colour</string>
+    <string name="color_picker__hex_error" tools:ignore="MissingTranslation">Use #RRGGBB or #AARRGGBB</string>
+    <string name="color_picker__recent" tools:ignore="MissingTranslation">Recent colour {hex}</string>
+    <string name="color_picker__eyedropper" tools:ignore="MissingTranslation">Pick a colour from the screen</string>
+    <string name="custom_theme__title" tools:ignore="MissingTranslation">Custom colours</string>
+    <string name="custom_theme__card" tools:ignore="MissingTranslation">Custom colours</string>
+    <string name="custom_theme__card_summary" tools:ignore="MissingTranslation">Pick your own key, text, background and accent colours</string>
+    <string name="custom_theme__element_keys" tools:ignore="MissingTranslation">Keys</string>
+    <string name="custom_theme__element_key_text" tools:ignore="MissingTranslation">Key text</string>
+    <string name="custom_theme__element_background" tools:ignore="MissingTranslation">Background</string>
+    <string name="custom_theme__element_accent" tools:ignore="MissingTranslation">Accent</string>
+    <string name="custom_theme__done" tools:ignore="MissingTranslation">Done</string>
+    <string name="custom_theme__save" tools:ignore="MissingTranslation">Save</string>
+    <string name="custom_theme__saved" tools:ignore="MissingTranslation">Custom colours applied</string>
+    <string name="custom_theme__failed" tools:ignore="MissingTranslation">Could not save the theme. Try again.</string>
+    <string name="custom_theme__low_contrast" tools:ignore="MissingTranslation">The key text is hard to read on these keys. You can still save.</string>
 </resources>

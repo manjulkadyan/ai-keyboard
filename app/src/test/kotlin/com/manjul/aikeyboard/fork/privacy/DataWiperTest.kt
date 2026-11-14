@@ -154,6 +154,8 @@ class DataWiperTest {
                 analyticsOptOut = true,
                 privatePackages = setOf("com.bank"),
                 keySound = "wood",
+                recentColors = listOf(0xFF112233),
+                customThemeColors = listOf(0xFF000001, 0xFF000002, 0xFF000003, 0xFF000004),
                 translateHistoryEnabled = false,
                 proActive = true,
                 proState = "active",
@@ -263,6 +265,9 @@ class DataWiperTest {
             )
             assertEquals(expected, settings.flow.first())
             assertEquals(expected, settings.current)
+            // S5-color: the picker's recents and the saved custom colours reset with FeatureSettings.
+            assertEquals(emptyList(), settings.current.recentColors)
+            assertEquals(emptyList(), settings.current.customThemeColors)
         }
 
     @Test

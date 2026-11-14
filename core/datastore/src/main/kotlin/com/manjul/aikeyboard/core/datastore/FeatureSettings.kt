@@ -105,6 +105,16 @@ data class FeatureSettings(
      */
     val pendingPremiumThemeId: String = "",
     /**
+     * The colour picker's recent colours (S5 Task 8, PRD FR-18 AC2): ARGB values, newest first, at most 8, no
+     * duplicates. A colour is added when the user taps "Done". Local only.
+     */
+    val recentColors: List<Long> = emptyList(),
+    /**
+     * The saved "Custom colours" theme (S5 Task 8): one ARGB value per `CustomTheme.Element` (keys, key text,
+     * background, accent), in that order; empty = never saved. Local only.
+     */
+    val customThemeColors: List<Long> = emptyList(),
+    /**
      * The tone the ✦ sheet lists first (S4 Task 11), a `RewriteMode` wire name from [AI_TONES]. Kept as a string so
      * this module does not depend on `:core:ai`; [FeatureSettingsStore] clamps unknown values to the default.
      */

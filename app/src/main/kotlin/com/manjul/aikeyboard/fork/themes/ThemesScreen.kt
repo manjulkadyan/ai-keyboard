@@ -21,6 +21,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -85,9 +86,10 @@ internal class ThemesHolder(context: Context) : ViewModel() {
 }
 
 /**
- * The Themes screen (S4 Task 10, route `themes`): the presets of this device, a key border switch and the key
- * sound. Tapping a preset previews it in the upstream preview field below the screen; Apply sets it for day and
- * night. A premium preset without Pro opens the paywall and is applied when Pro turns on.
+ * The Themes screen (S4 Task 10, route `themes`): the presets of this device, a key border switch, the key
+ * sound and a card to the "Custom colours" editor (S5 Task 8). Tapping a preset previews it in the upstream preview
+ * field below the screen; Apply sets it for day and night. A premium preset without Pro opens the paywall and is
+ * applied when Pro turns on.
  */
 @Composable
 fun ThemesScreen() = FlorisScreen {
@@ -151,6 +153,17 @@ fun ThemesScreen() = FlorisScreen {
                 }
             },
         ) { Text(stringRes(R.string.themes__apply)) }
+        // S5 Task 8: the free "Custom colours" theme editor.
+        OutlinedCard(
+            onClick = { navController.navigate(Routes.CustomColors) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            ListItem(
+                headlineContent = { Text(stringRes(R.string.custom_theme__card)) },
+                supportingContent = { Text(stringRes(R.string.custom_theme__card_summary)) },
+                leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) },
+            )
+        }
         Text(
             stringRes(R.string.themes__key_sound),
             style = MaterialTheme.typography.titleSmall,
