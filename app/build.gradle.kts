@@ -303,6 +303,11 @@ androidComponents {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // FORK(S5-dict): every unit-test variant reads the fixture content in place (plan F15). Only debug packages it.
+    val fixtureContent = layout.projectDirectory.dir("src/debug/assets/content/v1")
+    systemProperty("content.contentDir", fixtureContent.asFile.absolutePath)
+    systemProperty("content.fixturePublicKey", CONTENT_FIXTURE_PUBLIC_KEY)
+    inputs.dir(fixtureContent).withPropertyName("fixtureContent")
 }
 
 // FORK(S4-rc): with the upload off, the plugin writes the blank id 00000000000000000000000000000000, and Crashlytics

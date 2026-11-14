@@ -11,12 +11,10 @@ import androidx.work.Configuration
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.core.content.ContentDirs
 import com.manjul.aikeyboard.core.content.download.PackDownloadWorker
 import com.manjul.aikeyboard.core.content.manifest.ManifestCache
 import com.manjul.aikeyboard.core.content.manifest.ManifestVerifier
-import com.manjul.aikeyboard.core.content.source.AssetContentSource
 import com.manjul.aikeyboard.core.content.source.ContentFetchException
 import com.manjul.aikeyboard.core.content.source.ContentSource
 import com.manjul.aikeyboard.core.database.AppDatabase
@@ -75,20 +73,28 @@ class DataWiperTest {
         }
     }
 
-    /** The debug fixture content, readable until [offline] is set. */
+    /**
+     * The Task 1 fixture content, read in place from the path in the test system property (plan F15). Only debug
+     * packages it as assets, so beta, release and benchmark would see no manifest. Readable until [offline] is set.
+     */
     private val contentSource = object : ContentSource {
         var offline = false
-        private val assets = AssetContentSource(app.assets)
+        private val root = File(System.getProperty("content.contentDir")!!)
 
         override suspend fun fetchTo(path: String, sink: OutputStream, maxBytes: Long): Long {
-            if (offline) throw ContentFetchException("offline")
-            return assets.fetchTo(path, sink, maxBytes)
+            if (offline || ".." in path) throw ContentFetchException("unavailable")
+            val file = File(root, path).takeIf { it.isFile } ?: throw ContentFetchException("missing")
+            val bytes = file.readBytes()
+            if (bytes.size > maxBytes) throw ContentFetchException("too large")
+            sink.write(bytes)
+            return bytes.size.toLong()
         }
     }
     private val manifest = ManifestCache(
         ContentDirs.manifest(app),
         contentSource,
-        ManifestVerifier(BuildConfig.CONTENT_PUBLIC_KEY),
+        // Release builds carry no fixture key, so the test takes it from Gradle, not from BuildConfig.
+        ManifestVerifier(System.getProperty("content.fixturePublicKey")!!),
         clock = System::currentTimeMillis,
     )
     private val workManager: WorkManager by lazy {
