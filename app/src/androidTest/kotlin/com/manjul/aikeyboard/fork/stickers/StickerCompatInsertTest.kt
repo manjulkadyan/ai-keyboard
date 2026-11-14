@@ -5,8 +5,14 @@
 
 package com.manjul.aikeyboard.fork.stickers
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.Uri
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import androidx.core.content.ContextCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.manjul.aikeyboard.BuildConfig
@@ -15,11 +21,11 @@ import com.manjul.aikeyboard.core.analytics.AnalyticsSink
 import com.manjul.aikeyboard.core.content.stickers.StickerUi
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
@@ -32,7 +38,23 @@ class StickerCompatInsertTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext
         val hostPackage = instrumentation.context.packageName
-        StickerShareReceiverActivity.reset()
+        val latch = CountDownLatch(1)
+        var receivedUri: String? = null
+        var readable = false
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                receivedUri = intent.getStringExtra(StickerShareReceiverActivity.EXTRA_URI)
+                readable = intent.getBooleanExtra(StickerShareReceiverActivity.EXTRA_READABLE, false)
+                latch.countDown()
+            }
+        }
+        // The receiver Activity runs in the test package's process and reports back by broadcast.
+        ContextCompat.registerReceiver(
+            app,
+            receiver,
+            IntentFilter(StickerShareReceiverActivity.ACTION_RECEIVED),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
 
         val editor = EditorInfo()
         // A plain EditText fills in no content MIME types; its connection is not needed for the share path.
@@ -53,11 +75,14 @@ class StickerCompatInsertTest {
         val sticker = StickerUi("starter/01", "starter", src, premium = false)
         val method = runBlocking { inserter.insert(sticker, editor, null) }
 
-        assertEquals(InsertMethod.SHARE, method)
-        assertTrue(StickerShareReceiverActivity.latch.await(10, TimeUnit.SECONDS))
-        val uri = StickerShareReceiverActivity.received
-        assertNotNull(uri)
-        assertEquals("${BuildConfig.APPLICATION_ID}.provider.file", uri!!.authority)
-        assertTrue(StickerShareReceiverActivity.readable)
+        try {
+            assertEquals(InsertMethod.SHARE, method)
+            assertTrue(latch.await(10, TimeUnit.SECONDS))
+            val uri = Uri.parse(receivedUri)
+            assertEquals("${BuildConfig.APPLICATION_ID}.provider.file", uri.authority)
+            assertTrue(readable)
+        } finally {
+            app.unregisterReceiver(receiver)
+        }
     }
 }
