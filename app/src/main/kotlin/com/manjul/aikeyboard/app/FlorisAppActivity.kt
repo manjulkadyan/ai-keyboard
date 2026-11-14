@@ -60,6 +60,7 @@ import com.manjul.aikeyboard.billing // FORK(S4-billing)
 import com.manjul.aikeyboard.fork.routes.AppIntent // FORK(S2-routes)
 import com.manjul.aikeyboard.fork.routes.AppIntents // FORK(S2-routes)
 import com.manjul.aikeyboard.fork.routes.TranslatorHandoff // FORK(S2-routes)
+import com.manjul.aikeyboard.fork.routes.DictionaryHandoff // FORK(S5-dict)
 import com.manjul.aikeyboard.lib.FlorisLocale
 import com.manjul.aikeyboard.lib.compose.LocalPreviewFieldController
 import com.manjul.aikeyboard.lib.compose.PreviewKeyboardField
@@ -239,6 +240,7 @@ class FlorisAppActivity : ComponentActivity() {
     // Home only once onboarding is done, otherwise onboarding stays.
     private fun openRoute(navController: NavController, request: AppIntent.OpenRoute) {
         request.translatorText?.let(TranslatorHandoff::offer)
+        request.dictionaryWord?.let(DictionaryHandoff::offer) // FORK(S5-dict): the keyboard card's "More"
         val uri = "ui://florisboard/${request.route.path}".toUri()
         if (!request.route.isHome && navController.graph.hasDeepLink(uri)) {
             navController.navigate(uri)

@@ -41,6 +41,11 @@ data class FeatureSettings(
     val translateWifiOnly: Boolean = true,
     /** Content pack downloads (dictionary and sticker packs, Sprint 5) wait for an unmetered network (Wi-Fi). */
     val contentWifiOnly: Boolean = true,
+    /**
+     * The app's Dictionary screen and the Define action may look a word up on kb-api when the offline pack misses it
+     * (Sprint 5, plan decision 6). The keyboard card never does.
+     */
+    val onlineDictionary: Boolean = true,
     val cloudTranslateOptIn: Boolean = false,
     val translateHistoryEnabled: Boolean = true,
     /** When first_translate was logged (sent once per install); 0 = never. */

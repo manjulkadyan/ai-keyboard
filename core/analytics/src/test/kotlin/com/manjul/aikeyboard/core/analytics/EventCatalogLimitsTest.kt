@@ -61,6 +61,7 @@ class EventCatalogLimitsTest {
         EventCatalog.updatePrompt(UpdateTypeParam.FLEXIBLE, UpdateResultParam.FAILED),
         EventCatalog.themeApply(big, premium = true),
         EventCatalog.deleteData(),
+        EventCatalog.dictionaryLookup(offline = false, found = true),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -173,10 +174,16 @@ class EventCatalogLimitsTest {
             "consent_result", "consent_withdrawn",
             "purchase_start", "trial_start", "purchase_success", "purchase_fail", "subscription_state",
             "restore_purchases", "paywall_view", "paywall_close", "ad_paid_event", "update_prompt", "theme_apply",
-            "delete_data",
+            "delete_data", "dictionary_lookup",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)
+    }
+
+    @Test fun dictionaryLookupCarriesOfflineAndFoundOnly() {
+        val e = EventCatalog.dictionaryLookup(offline = true, found = false)
+        assertEquals("dictionary_lookup", e.name)
+        assertEquals(mapOf("offline" to true, "found" to false), e.params)
     }
 
     @Test fun themeApplyCarriesThemeIdAndPremiumOnly() {

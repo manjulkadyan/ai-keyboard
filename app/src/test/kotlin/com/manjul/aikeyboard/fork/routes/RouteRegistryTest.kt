@@ -68,6 +68,8 @@ class RouteRegistryTest {
                 // S4-settings: the settings tree root and its sections
                 "settings/all", "settings/languages", "settings/translate", "settings/ai", "settings/appearance",
                 "settings/typing", "settings/privacy", "settings/subscription", "settings/about",
+                // S5-dict: the Dictionary screen
+                "dictionary",
             ),
             RouteRegistry.routes.keys,
         )
@@ -163,5 +165,37 @@ class RouteRegistryTest {
         TranslatorHandoff.offer("hola")
         assertEquals("hola", TranslatorHandoff.take())
         assertNull(TranslatorHandoff.take())
+    }
+
+    // S5-dict: the Dictionary screen and the keyboard card's "More"
+    @Test
+    fun dictionaryResolvesAndTakesItsWordOnlyFromTheExtra() {
+        val byExtra = RouteRegistry.resolve("dictionary", null)
+        assertEquals("dictionary", byExtra.path)
+        assertFalse(byExtra.unknown)
+        assertEquals("dictionary", RouteRegistry.resolve(null, Uri.parse("app://dictionary")).path)
+
+        val events = mutableListOf<AnalyticsEvent>()
+        val withQuery = Intent().putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, "dictionary?word=x")
+        val request = assertIs<AppIntent.OpenRoute>(AppIntents.classify(withQuery) { events += it })
+        assertTrue(request.route.isHome && request.route.unknown)
+        assertNull(request.dictionaryWord)
+        assertEquals(listOf("deeplink_unknown"), events.map { it.name })
+        assertTrue(events.single().params.isEmpty())
+
+        val more = Intent().putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, "dictionary")
+            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, "  run ")
+        assertEquals("run", assertIs<AppIntent.OpenRoute>(AppIntents.classify(more) {}).dictionaryWord)
+        val tooLong = Intent().putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, "dictionary")
+            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, "a".repeat(65))
+        assertNull(assertIs<AppIntent.OpenRoute>(AppIntents.classify(tooLong) {}).dictionaryWord)
+        val toTranslator = Intent().putExtra(RouteRegistry.EXTRA_OPEN_SCREEN, "translator")
+            .putExtra(RouteRegistry.EXTRA_DICTIONARY_WORD, "run")
+        assertNull(assertIs<AppIntent.OpenRoute>(AppIntents.classify(toTranslator) {}).dictionaryWord)
+        assertFalse(AppIntent.OpenRoute(byExtra, dictionaryWord = "secret").toString().contains("secret"))
+
+        DictionaryHandoff.offer("run")
+        assertEquals("run", DictionaryHandoff.take())
+        assertNull(DictionaryHandoff.take())
     }
 }

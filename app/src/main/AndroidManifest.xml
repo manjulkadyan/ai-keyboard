@@ -188,6 +188,22 @@
             </intent-filter>
         </activity>
 
+        <!-- FORK(S5-dict): the "Define" text-selection action (PRD FR-21). Exported with one PROCESS_TEXT filter,
+             text/plain only, no data URIs (ExportedComponentRules); it never returns text. -->
+        <activity
+            android:name="com.manjul.aikeyboard.fork.dictionary.DefineTextActivity"
+            android:label="@string/dictionary__define_label"
+            android:theme="@style/FlorisAppTheme.Transparent"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+        </activity>
+
         <!-- Clipboard Media File Provider -->
         <provider
             android:name="com.manjul.aikeyboard.ime.clipboard.provider.ClipboardMediaProvider"

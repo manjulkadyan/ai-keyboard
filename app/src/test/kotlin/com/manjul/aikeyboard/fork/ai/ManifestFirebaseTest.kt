@@ -114,6 +114,7 @@ class ManifestFirebaseTest {
             "com.manjul.aikeyboard.SettingsLauncherAlias",
             "com.manjul.aikeyboard.ime.clipboard.FlorisCopyToClipboardActivity",
             "com.manjul.aikeyboard.fork.processtext.TranslateTextActivity",
+            "com.manjul.aikeyboard.fork.dictionary.DefineTextActivity", // S5-dict: the Define action
         )
         val LIBRARY_EXPORTED = setOf(
             "androidx.profileinstaller.ProfileInstallReceiver",

@@ -74,6 +74,9 @@ class ImeAdIsolationTest {
                 "S4 Task 7: the native_translator slot and translate_done as a feature use. Activity screen only.",
             "com/manjul/aikeyboard/fork/translator/HistoryScreen.kt" to
                 "S4 Task 7: the native_history slot as the last list item. Activity screen only.",
+            "com/manjul/aikeyboard/fork/dictionary/DictionaryScreen.kt" to
+                "S5 Task 4: the native_dictionary slot below the attribution footer. Activity screen only; the " +
+                "keyboard card (DefinitionCard.kt) and DictionaryAppGraph.kt reference no ads.",
         )
 
         /**

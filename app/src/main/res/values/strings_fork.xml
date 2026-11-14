@@ -433,4 +433,33 @@
     <string name="about__contact__no_app" tools:ignore="MissingTranslation">No email app found</string>
     <!-- S4-settings: placeholder until the support address exists. -->
     <string name="contact_email" translatable="false">support@example.com</string>
+    <!-- S5-dict: Dictionary screen, Define action, keyboard card and pack row. -->
+    <string name="dictionary__title" tools:ignore="MissingTranslation">Dictionary</string>
+    <string name="dictionary__home_summary" tools:ignore="MissingTranslation">Look up English words, offline first</string>
+    <string name="dictionary__define_label" tools:ignore="MissingTranslation">Define</string>
+    <string name="dictionary__select_one_word" tools:ignore="MissingTranslation">Select one word</string>
+    <string name="dictionary__search_hint" tools:ignore="MissingTranslation">Word to look up</string>
+    <string name="dictionary__search" tools:ignore="MissingTranslation">Look up</string>
+    <string name="dictionary__offline" tools:ignore="MissingTranslation">You are offline. Only the downloaded dictionary is used.</string>
+    <string name="dictionary__loading" tools:ignore="MissingTranslation">Looking up</string>
+    <string name="dictionary__not_found" tools:ignore="MissingTranslation">No definition found</string>
+    <string name="dictionary__no_pack" tools:ignore="MissingTranslation">No definition found. Download the dictionary in Offline languages to look up words offline.</string>
+    <string name="dictionary__example" tools:ignore="MissingTranslation">Example: {example}</string>
+    <string name="dictionary__synonyms" tools:ignore="MissingTranslation">Synonyms: {synonyms}</string>
+    <string name="dictionary__speak_cd" tools:ignore="MissingTranslation">Read aloud</string>
+    <string name="dictionary__more_cd" tools:ignore="MissingTranslation">More options</string>
+    <string name="dictionary__online_setting" tools:ignore="MissingTranslation">Online dictionary</string>
+    <string name="dictionary__attribution" tools:ignore="MissingTranslation">Definitions from {source}, by {attribution}</string>
+    <string name="dictionary__licence" tools:ignore="MissingTranslation">Licence: {licence}</string>
+    <string name="dictionary__open_in_app" tools:ignore="MissingTranslation">Open in app</string>
+    <string name="dictionary__card_more" tools:ignore="MissingTranslation">More</string>
+    <string name="dictionary__card_remove" tools:ignore="MissingTranslation">Remove suggestion</string>
+    <string name="dictionary__card_close" tools:ignore="MissingTranslation">Close</string>
+    <string name="dictionary__card_no_pack" tools:ignore="MissingTranslation">Download the dictionary in the app</string>
+    <string name="offline_languages__dictionary" tools:ignore="MissingTranslation">Dictionary</string>
+    <string name="offline_languages__dictionary_name" tools:ignore="MissingTranslation">English dictionary</string>
+    <string name="offline_languages__dictionary_absent" tools:ignore="MissingTranslation">Not downloaded</string>
+    <string name="offline_languages__dictionary_downloading" tools:ignore="MissingTranslation">Downloading</string>
+    <string name="offline_languages__dictionary_ready" tools:ignore="MissingTranslation">Downloaded, version {version}</string>
+    <string name="offline_languages__dictionary_unavailable" tools:ignore="MissingTranslation">Not available right now</string>
 </resources>

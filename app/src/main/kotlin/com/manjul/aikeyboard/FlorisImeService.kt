@@ -118,6 +118,7 @@ import android.app.KeyguardManager
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.fork.voice.VoiceImeSession // FORK(S1-voice)
 import com.manjul.aikeyboard.fork.translate.TranslateImeSession // FORK(S2-bar)
+import com.manjul.aikeyboard.fork.dictionary.DefinitionCards // FORK(S5-dict)
 import com.manjul.aikeyboard.fork.ai.AiConsentActivity // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.ai.AiImeSession // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.ai.copyAiOutput // FORK(S3-ai)
@@ -578,6 +579,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         policyController.onFinishInputView() // FORK(S1-policy)
         translateSession.onFinishInputView() // FORK(S2-bar): hiding closes the bar, pair and mode are kept
         aiSession.onFinishInputView() // FORK(S3-ai): hiding cancels the stream and closes the sheet
+        DefinitionCards.dismiss() // FORK(S5-dict): hiding closes the definition card
         editorInstance.handleFinishInputView()
     }
 

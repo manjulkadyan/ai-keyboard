@@ -19,6 +19,10 @@ interface DictionaryDao {
     @Query("SELECT * FROM dictionary_entry WHERE lang = :lang AND headword_norm = :headwordNorm ORDER BY id")
     suspend fun find(lang: String, headwordNorm: String): List<DictionaryEntryEntity>
 
+    /** Drops the cached definitions of [headwordNorm] in [lang], so a refetch replaces a stale answer. */
+    @Query("DELETE FROM dictionary_entry WHERE lang = :lang AND headword_norm = :headwordNorm")
+    suspend fun delete(lang: String, headwordNorm: String)
+
     @Query("DELETE FROM dictionary_entry")
     suspend fun clearAll()
 }

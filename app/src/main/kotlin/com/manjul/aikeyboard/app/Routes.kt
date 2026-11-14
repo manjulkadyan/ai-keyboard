@@ -80,6 +80,7 @@ import com.manjul.aikeyboard.fork.settings.TypingSettingsScreen // FORK(S3-userd
 import com.manjul.aikeyboard.fork.settings.OfflineLanguagesScreen // FORK(S2-packs)
 import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
+import com.manjul.aikeyboard.fork.dictionary.DictionaryLookupScreen // FORK(S5-dict)
 import com.manjul.aikeyboard.fork.paywall.PaywallRoute // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.paywall.PaywallTrigger // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.themes.ThemesScreen // FORK(S4-themes)
@@ -135,6 +136,11 @@ object Routes {
     @Serializable
     @Deeplink("translator/history")
     object TranslatorHistory // FORK(S2-translator)
+
+    // FORK(S5-dict): the Dictionary screen (S-16, PRD FR-21); its word comes only from EXTRA_DICTIONARY_WORD
+    @Serializable
+    @Deeplink("dictionary")
+    object Dictionary
 
     // FORK(S4-paywall): the paywall (S-03) replaces the S3 Pro placeholder. RouteRegistry maps "pro" to
     // "paywall?trigger=ai_quota"; an unknown trigger shows the AI quota header.
@@ -413,6 +419,7 @@ object Routes {
             composableWithDeepLink(Settings.Suggestions::class) { TypingSettingsScreen() } // FORK(S3-userdict)
             composableWithDeepLink(Translator::class) { TranslatorScreen() } // FORK(S2-translator)
             composableWithDeepLink(TranslatorHistory::class) { HistoryScreen() } // FORK(S2-translator)
+            composableWithDeepLink(Dictionary::class) { DictionaryLookupScreen() } // FORK(S5-dict)
             // FORK(S4-paywall): the paywall route; close goes back, or to Home when it was the first screen
             composableWithDeepLink(Paywall::class) { entry ->
                 val trigger = PaywallTrigger.fromWire(entry.toRoute<Paywall>().trigger) ?: PaywallTrigger.AI_QUOTA

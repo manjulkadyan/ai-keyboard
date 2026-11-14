@@ -62,6 +62,7 @@ object EventCatalog {
     const val UPDATE_PROMPT = "update_prompt"
     const val THEME_APPLY = "theme_apply"
     const val DELETE_DATA = "delete_data"
+    const val DICTIONARY_LOOKUP = "dictionary_lookup"
 
     /** User property: one of [ProStatus]. */
     const val USER_PROPERTY_PRO_STATUS = "pro_status"
@@ -112,6 +113,7 @@ object EventCatalog {
         UPDATE_PROMPT to setOf("type", "result"),
         THEME_APPLY to setOf("theme_id", "premium"),
         DELETE_DATA to emptySet(),
+        DICTIONARY_LOOKUP to setOf("offline", "found"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -301,6 +303,13 @@ object EventCatalog {
 
     /** The user confirmed Delete my data and kb-api deleted the account (S4 Task 12, PRD §12). No params. */
     fun deleteData() = event(DELETE_DATA)
+
+    /**
+     * One submitted dictionary query (S5, PRD FR-21). [offline] is true when no online answer (fresh or cached) was
+     * used (F16). The word is never sent.
+     */
+    fun dictionaryLookup(offline: Boolean, found: Boolean) =
+        event(DICTIONARY_LOOKUP, "offline" to offline, "found" to found)
 
     /**
      * The ad SDK reported revenue for one impression (S4 Task 7, GMA `OnPaidEventListener`). [placement] is a

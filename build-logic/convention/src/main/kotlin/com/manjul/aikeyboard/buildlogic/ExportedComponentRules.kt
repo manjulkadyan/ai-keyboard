@@ -70,6 +70,13 @@ object ExportedComponentRules {
                 IntentFilterSpec(setOf("android.intent.action.SEND"), setOf("text/plain")),
             ),
         ),
+        // S5-dict (PRD FR-21): the system "Define" selection action, PROCESS_TEXT text/plain only
+        "com.manjul.aikeyboard.fork.dictionary.DefineTextActivity" to ExportedComponentAllowance(
+            "Define sheet for PROCESS_TEXT text/plain; no data URIs, never returns text",
+            intentFilters = setOf(
+                IntentFilterSpec(setOf("android.intent.action.PROCESS_TEXT"), setOf("text/plain")),
+            ),
+        ),
         "com.manjul.aikeyboard.ime.clipboard.FlorisCopyToClipboardActivity" to ExportedComponentAllowance(
             "Upstream share target (SEND image/*) that copies an image into the clipboard",
         ),

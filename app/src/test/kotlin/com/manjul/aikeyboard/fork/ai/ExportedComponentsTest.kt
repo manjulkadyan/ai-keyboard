@@ -76,6 +76,7 @@ class ExportedComponentsTest {
             "com.manjul.aikeyboard.SettingsLauncherAlias",
             "com.manjul.aikeyboard.ime.clipboard.FlorisCopyToClipboardActivity",
             "com.manjul.aikeyboard.fork.processtext.TranslateTextActivity",
+            "com.manjul.aikeyboard.fork.dictionary.DefineTextActivity", // S5-dict: the Define action
         )
     }
 }

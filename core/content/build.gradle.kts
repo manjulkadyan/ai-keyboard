@@ -34,6 +34,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.mockwebserver)
+    testImplementation(testFixtures(projects.core.ai)) // S5-dict: FakeTokenSource for the DictionaryClient tests
     testRuntimeOnly(libs.junit.vintage.engine)
 }
 
