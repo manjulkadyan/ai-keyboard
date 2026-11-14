@@ -13,8 +13,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Seals every clipboard text row that has no `e1:` prefix (rows written before S5). `ClipboardManager` is
- * app-scoped, so [runOnce] on its instance runs once per process. A sealed row that no longer opens means the
- * key is lost, and the whole history is wiped. [compact] runs after rows were sealed, so that SQLite drops the
+ * app-scoped, so [runOnce] on its instance runs once per process. With an unavailable key it stops and changes
+ * nothing. Only a lost key (see [isPermanentKeyLoss]) wipes the history, once per key generation.
+ * [compact] runs after rows were sealed, so that SQLite drops the
  * free pages that still hold the old plain text.
  */
 class ClipboardEncryptionMigrator(
@@ -26,9 +27,9 @@ class ClipboardEncryptionMigrator(
 ) {
     sealed interface Result {
         data class Sealed(val rows: Int) : Result
-        /** No key: plaintext rows stay as they are until the next process start. */
+        /** The key store is unavailable: every row stays as it is until the next process start. */
         data object NoKey : Result
-        /** A sealed row did not open; the history was wiped. */
+        /** The key is lost. The history was wiped, unless a wipe for this key generation already ran. */
         data object Lost : Result
     }
 
@@ -42,15 +43,29 @@ class ClipboardEncryptionMigrator(
     }
 
     suspend fun migrate(): Result = withContext(dispatcher) {
+        val generation = wipe.currentGeneration
         val rows = dao.getAll()
         val (sealed, plain) = rows.filter { it.text != null }.partition { cipher.isSealed(it.text!!) }
-        if (sealed.any { cipher.open(it.text!!) == null }) {
-            wipe.wipe()
-            return@withContext Result.Lost
+        for (row in sealed) {
+            when (cipher.tryOpen(row.text!!)) {
+                is Opening.Opened -> Unit
+                Opening.Unavailable -> return@withContext Result.NoKey
+                Opening.Lost -> {
+                    wipe.wipe(generation)
+                    return@withContext Result.Lost
+                }
+            }
         }
         var count = 0
         for (row in plain) {
-            val text = cipher.sealOrNull(row.text!!) ?: return@withContext Result.NoKey
+            val text = when (val sealing = cipher.trySeal(row.text!!)) {
+                is Sealing.Done -> sealing.value
+                Sealing.Unavailable -> return@withContext Result.NoKey
+                Sealing.Lost -> {
+                    wipe.wipe(generation)
+                    return@withContext Result.Lost
+                }
+            }
             if (dao.replaceText(row.id, row.text, text) > 0) count++
         }
         if (count > 0) runCatching(compact)

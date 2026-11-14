@@ -114,7 +114,8 @@ class ClipboardManager(
     private val clipHistoryDao: ClipboardHistoryDao? get() = clipHistoryDb?.clipboardItemDao()
 
     // FORK(S5-clipboard): text is sealed before each DAO write and opened after each DAO read; in-memory items hold
-    // plain text. A lost key wipes rows, files and the key alias. Reads are opened off the main thread, in order.
+    // plain text. A lost key wipes rows, files and the key alias, once per key generation; an unavailable key
+    // hides sealed rows and deletes nothing. Reads are opened off the main thread, in order.
     private val historyCipher = ClipboardCipher(keyProvider)
     private val historyWipe = ClipboardWipe(
         deleteRows = { clipHistoryDao?.deleteAll() },
@@ -162,8 +163,10 @@ class ClipboardManager(
                 }
                 withContext(Dispatchers.Main) {
                     clipHistoryDao?.getAllLive()?.observeForever { items ->
-                        // FORK(S5-clipboard): open sealed rows off the main thread, in arrival order
-                        ioScope.launch(historyReadDispatcher) { updateHistory(historyVault.openAll(items)) }
+                        // FORK(S5-clipboard): open sealed rows off the main thread, in arrival order. The wipe
+                        // generation is taken on arrival, so rows read before a wipe cannot wipe again.
+                        val generation = historyWipe.currentGeneration
+                        ioScope.launch(historyReadDispatcher) { updateHistory(historyVault.openAll(items, generation)) }
                     }
                 }
             }

@@ -6,8 +6,10 @@
 package com.manjul.aikeyboard.fork.clipboard
 
 import android.app.Application
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.util.Log
 import androidx.room.Room
+import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDao
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
 import kotlinx.coroutines.Dispatchers
@@ -20,9 +22,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
+import java.security.KeyStoreException
+import java.security.ProviderException
+import java.security.UnrecoverableKeyException
+import javax.crypto.AEADBadTagException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -105,10 +112,60 @@ class ClipboardEncryptionMigratorTest {
         assertEquals(0, keys.deletes)
     }
 
-    @Test fun `with no key sealed rows are lost`() = runBlocking {
+    @Test fun `with no key sealed rows stay, nothing is wiped, and they open when the key comes back`() = runBlocking {
         migrator.migrate()
+        val key = keys.current
         keys.current = null
+        assertEquals(ClipboardEncryptionMigrator.Result.NoKey, migrator.migrate())
+        assertEquals(3, dao.getAll().size)
+        assertEquals(0, keys.deletes)
+        assertEquals(0, filesDeleted)
+        assertTrue(ShadowLog.getLogsForTag(ClipboardWipe.TAG).isEmpty())
+        keys.current = key
+        assertEquals(ClipboardEncryptionMigrator.Result.Sealed(0), migrator.migrate())
+        assertEquals(texts.toSet(), dao.getAll().map { cipher.open(it.text!!) }.toSet())
+    }
+
+    @Test fun `a permanently invalidated key wipes the history once`() = runBlocking {
+        migrator.migrate()
+        keys.lost = true
         assertEquals(ClipboardEncryptionMigrator.Result.Lost, migrator.migrate())
         assertEquals(emptyList(), dao.getAll())
+        assertEquals(1, keys.deletes)
+        assertEquals(1, filesDeleted)
+        assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
+    }
+
+    @Test fun `a read and the migrator that both see one lost key wipe once and keep the new clips`() = runBlocking {
+        migrator.migrate()
+        val vault = ClipboardHistoryVault(cipher, wipe)
+        val staleRows = dao.getAll()
+        keys.current = TestKeys.newKey() // the old key is gone: the sealed rows no longer open
+        var fresh: Long = -1
+        // The migrator reads the rows, then the panel read wipes and a new clip arrives, then the migrator opens.
+        val racingDao = object : ClipboardHistoryDao by dao {
+            override fun getAll(): List<ClipboardItem> {
+                vault.openAll(staleRows)
+                fresh = dao.insert(assertNotNull(vault.sealForWrite(ClipboardItem.text("after the wipe"))))
+                return staleRows
+            }
+        }
+        val raced = ClipboardEncryptionMigrator(racingDao, cipher, wipe, Dispatchers.Unconfined)
+        assertEquals(ClipboardEncryptionMigrator.Result.Lost, raced.migrate())
+        assertEquals(1, keys.deletes)
+        assertEquals(1, filesDeleted)
+        assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
+        assertEquals(listOf("after the wipe"), vault.openAll(dao.getAll()).map { it.text })
+        assertEquals(fresh, dao.getAll().single().id)
+    }
+
+    @Test fun `only a bad tag, an invalidated key or an unrecoverable key count as a lost key`() {
+        assertTrue(isPermanentKeyLoss(AEADBadTagException()))
+        assertTrue(isPermanentKeyLoss(KeyPermanentlyInvalidatedException()))
+        assertTrue(isPermanentKeyLoss(UnrecoverableKeyException()))
+        assertTrue(isPermanentKeyLoss(IllegalStateException(UnrecoverableKeyException())))
+        assertFalse(isPermanentKeyLoss(KeyStoreException()))
+        assertFalse(isPermanentKeyLoss(ProviderException()))
+        assertFalse(isPermanentKeyLoss(IllegalStateException()))
     }
 }

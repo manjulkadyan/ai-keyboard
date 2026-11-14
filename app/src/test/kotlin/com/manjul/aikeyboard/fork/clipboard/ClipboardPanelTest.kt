@@ -183,11 +183,43 @@ class ClipboardPanelTest {
         assertTrue(logs.none { it.msg.contains("private") || it.throwable != null })
     }
 
-    @Test fun `with no key new clips are not stored and sealed rows are lost`() {
+    @Test fun `with no key sealed rows are hidden, new clips are not stored, and nothing is wiped`() {
         write(ClipboardItem.text("before the key went away"))
+        dao.insert(ClipboardItem.text("pre-S5 plaintext"))
+        val key = keys.current
         keys.current = null
         assertNull(vault.sealForWrite(ClipboardItem.text("not stored")))
+        assertEquals(listOf("pre-S5 plaintext"), history().all.map { it.text })
+        assertEquals(2, dao.getAll().size)
+        assertEquals(0, keys.deletes)
+        assertEquals(0, filesDeleted)
+        assertTrue(ShadowLog.getLogsForTag(ClipboardWipe.TAG).isEmpty())
+        keys.current = key // the key store is back
+        assertEquals(setOf("before the key went away", "pre-S5 plaintext"), history().all.map { it.text }.toSet())
+    }
+
+    @Test fun `a permanently invalidated key wipes the history, with one warning`() {
+        write(ClipboardItem.text("private note"))
+        keys.lost = true
         assertEquals(emptyList(), history().all)
         assertEquals(emptyList(), dao.getAll())
+        assertEquals(1, keys.deletes)
+        assertEquals(1, filesDeleted)
+        assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
+    }
+
+    @Test fun `a late read of rows from before a wipe does not wipe again`() {
+        write(ClipboardItem.text("private note"))
+        val staleRows = dao.getAll()
+        val generation = wipe.currentGeneration
+        keys.current = TestKeys.newKey()
+        assertEquals(emptyList(), vault.openAll(staleRows, generation).map { it.text })
+        write(ClipboardItem.text("after the wipe"))
+        val keyAfterWipe = keys.current
+        vault.openAll(staleRows, generation) // the same rows, delivered late
+        assertEquals(1, keys.deletes)
+        assertEquals(keyAfterWipe, keys.current)
+        assertEquals(listOf("after the wipe"), history().all.map { it.text })
+        assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
     }
 }

@@ -5,7 +5,10 @@
 
 package com.manjul.aikeyboard.fork.clipboard
 
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import java.security.UnrecoverableKeyException
 import java.util.Base64
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
@@ -14,8 +17,53 @@ import javax.crypto.spec.GCMParameterSpec
 fun interface KeyProvider {
     fun key(): SecretKey?
 
+    /**
+     * Tells an unavailable key store (a transient fault: hide sealed rows, keep everything) from a lost key (wipe).
+     * The default knows no loss, so a null [key] is [KeyLookup.Unavailable].
+     */
+    fun lookup(): KeyLookup = key()?.let { KeyLookup.Present(it) } ?: KeyLookup.Unavailable
+
     /** Deletes the key, so that the next [key] call makes a new one. */
     fun delete() {}
+}
+
+sealed interface KeyLookup {
+    data class Present(val key: SecretKey) : KeyLookup
+
+    /** The key store failed for now. The key can come back, so nothing is deleted. */
+    data object Unavailable : KeyLookup
+
+    /** The key is permanently invalidated or unrecoverable. */
+    data object Lost : KeyLookup
+}
+
+/** True for a real key loss: a bad GCM tag from a present key, or an invalidated or unrecoverable key. */
+internal fun isPermanentKeyLoss(error: Throwable): Boolean {
+    var e: Throwable? = error
+    var depth = 0
+    while (e != null && depth++ < MAX_CAUSE_DEPTH) {
+        if (e is AEADBadTagException || e is KeyPermanentlyInvalidatedException || e is UnrecoverableKeyException) {
+            return true
+        }
+        e = e.cause
+    }
+    return false
+}
+
+private const val MAX_CAUSE_DEPTH = 8
+
+/** The result of [ClipboardCipher.trySeal]. */
+internal sealed interface Sealing {
+    data class Done(val value: String) : Sealing
+    data object Unavailable : Sealing
+    data object Lost : Sealing
+}
+
+/** The result of [ClipboardCipher.tryOpen]. */
+internal sealed interface Opening {
+    data class Opened(val text: String) : Opening
+    data object Unavailable : Opening
+    data object Lost : Opening
 }
 
 /**
@@ -27,32 +75,48 @@ class ClipboardCipher(private val keys: KeyProvider) {
     fun seal(plain: String): String = sealOrNull(plain) ?: error("clipboard key unavailable")
 
     /** Seals [plain], or null when no key is available or the key store fails. */
-    fun sealOrNull(plain: String): String? {
-        val key = keys.key() ?: return null
+    fun sealOrNull(plain: String): String? = (trySeal(plain) as? Sealing.Done)?.value
+
+    /** The plain text, or null on a bad tag, a missing key or a missing prefix. */
+    fun open(stored: String): String? = (tryOpen(stored) as? Opening.Opened)?.text
+
+    internal fun trySeal(plain: String): Sealing {
+        val key = when (val lookup = keys.lookup()) {
+            is KeyLookup.Present -> lookup.key
+            KeyLookup.Unavailable -> return Sealing.Unavailable
+            KeyLookup.Lost -> return Sealing.Lost
+        }
         return try {
             // No IV is passed in: AndroidKeyStore requires randomized encryption and picks the IV itself.
             val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key) }
             val iv = cipher.iv
-            if (iv == null || iv.size != IV_BYTES) return null
+            if (iv == null || iv.size != IV_BYTES) return Sealing.Unavailable
             val body = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
-            PREFIX + Base64.getEncoder().encodeToString(iv + body)
-        } catch (_: Exception) {
-            null
+            Sealing.Done(PREFIX + Base64.getEncoder().encodeToString(iv + body))
+        } catch (e: Exception) {
+            if (isPermanentKeyLoss(e)) Sealing.Lost else Sealing.Unavailable
         }
     }
 
-    /** The plain text, or null on a bad tag, a missing key or a missing prefix. */
-    fun open(stored: String): String? {
-        if (!stored.startsWith(PREFIX)) return null
-        val payload = decode(stored) ?: return null
-        if (payload.size < IV_BYTES + TAG_BYTES) return null
-        val key = keys.key() ?: return null
+    /**
+     * [Opening.Lost] only for a real loss (see [isPermanentKeyLoss]). A missing prefix, a bad payload or a key
+     * store fault is [Opening.Unavailable], which never wipes.
+     */
+    internal fun tryOpen(stored: String): Opening {
+        if (!stored.startsWith(PREFIX)) return Opening.Unavailable
+        val payload = decode(stored) ?: return Opening.Unavailable
+        if (payload.size < IV_BYTES + TAG_BYTES) return Opening.Unavailable
+        val key = when (val lookup = keys.lookup()) {
+            is KeyLookup.Present -> lookup.key
+            KeyLookup.Unavailable -> return Opening.Unavailable
+            KeyLookup.Lost -> return Opening.Lost
+        }
         return try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BYTES * 8, payload, 0, IV_BYTES))
-            String(cipher.doFinal(payload, IV_BYTES, payload.size - IV_BYTES), Charsets.UTF_8)
-        } catch (_: Exception) {
-            null
+            Opening.Opened(String(cipher.doFinal(payload, IV_BYTES, payload.size - IV_BYTES), Charsets.UTF_8))
+        } catch (e: Exception) {
+            if (isPermanentKeyLoss(e)) Opening.Lost else Opening.Unavailable
         }
     }
 
