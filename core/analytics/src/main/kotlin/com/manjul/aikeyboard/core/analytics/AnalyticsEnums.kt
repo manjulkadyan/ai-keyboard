@@ -31,6 +31,11 @@ enum class PackResult(val value: String) {
     OK("ok"), FAILED("failed"), HASH_MISMATCH("hash_mismatch"), CANCELLED("cancelled")
 }
 
+/** How a sticker reached the host app (S5 Task 6): the commitContent, share and clipboard chain. */
+enum class StickerMethod(val value: String) {
+    COMMIT_CONTENT("commit_content"), SHARE("share"), CLIPBOARD("clipboard")
+}
+
 /** Where a translation happened. Conversation and camera are out of scope for this app (docs/decisions/od-21). */
 enum class TranslateSurface(val value: String) {
     BAR("bar"), TRANSLATOR("translator"), PROCESS_TEXT("process_text")

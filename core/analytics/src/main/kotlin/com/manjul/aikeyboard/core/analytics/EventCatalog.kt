@@ -63,6 +63,7 @@ object EventCatalog {
     const val THEME_APPLY = "theme_apply"
     const val DELETE_DATA = "delete_data"
     const val DICTIONARY_LOOKUP = "dictionary_lookup"
+    const val STICKER_SEND = "sticker_send"
 
     /** User property: one of [ProStatus]. */
     const val USER_PROPERTY_PRO_STATUS = "pro_status"
@@ -114,6 +115,7 @@ object EventCatalog {
         THEME_APPLY to setOf("theme_id", "premium"),
         DELETE_DATA to emptySet(),
         DICTIONARY_LOOKUP to setOf("offline", "found"),
+        STICKER_SEND to setOf("pack_id", "premium", "method"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -310,6 +312,18 @@ object EventCatalog {
      */
     fun dictionaryLookup(offline: Boolean, found: Boolean) =
         event(DICTIONARY_LOOKUP, "offline" to offline, "found" to found)
+
+    /**
+     * One sticker sent to the host app (S5 Task 6, PRD FR-23), once per insert that worked. [packId] is a manifest
+     * or bundled pack id (snake_case, at most 40 characters); anything else is sent as `other`. The host package,
+     * the file path and the URI are never sent.
+     */
+    fun stickerSend(packId: String, premium: Boolean, method: StickerMethod) = event(
+        STICKER_SEND,
+        "pack_id" to if (packId.length <= 40 && SNAKE_CASE.matches(packId)) packId else "other",
+        "premium" to premium,
+        "method" to method.value,
+    )
 
     /**
      * The ad SDK reported revenue for one impression (S4 Task 7, GMA `OnPaidEventListener`). [placement] is a

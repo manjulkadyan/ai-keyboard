@@ -37,6 +37,11 @@
         <intent>
             <action android:name="android.speech.RecognitionService"/>
         </intent>
+        <!-- FORK(S5-stickers): share targets of the host app, for the sticker ACTION_SEND fallback on API 30+ -->
+        <intent>
+            <action android:name="android.intent.action.SEND"/>
+            <data android:mimeType="image/png"/>
+        </intent>
     </queries>
 
     <!-- dataExtractionRules (API 31+) gets its own file in the <data-extraction-rules> format (upstream

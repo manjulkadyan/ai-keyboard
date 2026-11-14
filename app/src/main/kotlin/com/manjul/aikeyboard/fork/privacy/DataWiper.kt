@@ -24,6 +24,7 @@ import com.manjul.aikeyboard.core.firebase.FirebaseDataResetter
 import com.manjul.aikeyboard.core.translate.Lang
 import com.manjul.aikeyboard.core.voice.whisper.WhisperModelSpec
 import com.manjul.aikeyboard.featureSettingsStore
+import com.manjul.aikeyboard.fork.stickers.ShareCache
 import com.manjul.aikeyboard.firebaseGraph
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFileStorage
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFilesDatabase
@@ -38,6 +39,7 @@ import com.manjul.aikeyboard.whisperVoice
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * The on-device half of Delete my data and Clear data (S4 Task 12). [wipeLocal] clears:
@@ -134,8 +136,8 @@ class DataWiper(
          * Cancels the pack downloads (tag [PackDownloadWorker.TAG]) first, so none of them writes a pack again after
          * the wipe. Then it empties the Sprint 5 tables (user phrases and favourites, the online dictionary cache,
          * sticker packs and stickers), clears the in-memory [manifest] and the phrase translations ([clearPhraseCache])
-         * when they exist, and deletes the downloaded packs and the cached manifest. Every part runs; the first error is
-         * rethrown at the end.
+         * when they exist, and deletes the downloaded packs, the cached manifest and the staged stickers
+         * (`cache/share`). Every part runs; the first error is rethrown at the end.
          */
         internal suspend fun clearContent(
             db: AppDatabase,
@@ -162,7 +164,8 @@ class DataWiper(
             part { manifest?.clear() }
             part {
                 withContext(Dispatchers.IO) {
-                    for (dir in listOf(ContentDirs.packs(app), ContentDirs.manifest(app))) {
+                    val share = File(app.cacheDir, ShareCache.DIR) // S5 Task 6: staged stickers
+                    for (dir in listOf(ContentDirs.packs(app), ContentDirs.manifest(app), share)) {
                         check(!dir.exists() || dir.deleteRecursively()) { "content files not deleted" }
                     }
                 }

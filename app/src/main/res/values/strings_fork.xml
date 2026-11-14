@@ -257,6 +257,11 @@
     <!-- S3-ai: the ✦ AI rewrite chip in the keyboard's top bar. One short word. -->
     <string name="quick_action__ai_rewrite" tools:ignore="MissingTranslation">AI</string>
     <string name="quick_action__ai_rewrite__tooltip" tools:ignore="MissingTranslation">Rewrite with AI</string>
+    <!-- S5-stickers: the stickers chip and the sticker insert notices -->
+    <string name="quick_action__stickers_panel" tools:ignore="MissingTranslation">Stickers</string>
+    <string name="quick_action__stickers_panel__tooltip" tools:ignore="MissingTranslation">Open stickers</string>
+    <string name="stickers__copied" tools:ignore="MissingTranslation">Sticker copied. Paste it in the chat.</string>
+    <string name="stickers__not_accepted" tools:ignore="MissingTranslation">This app does not accept stickers</string>
     <!-- S3-ai: screen reader label of the area behind the AI rewrite sheet; tapping it closes the sheet. -->
     <string name="ai_sheet__close" tools:ignore="MissingTranslation">Close AI rewrite</string>
 

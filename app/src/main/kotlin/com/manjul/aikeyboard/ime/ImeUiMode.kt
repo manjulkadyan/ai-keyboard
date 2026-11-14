@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S5-stickers): Apache-2.0 §4(b) change notice
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +20,8 @@ package com.manjul.aikeyboard.ime
 enum class ImeUiMode(val value: Int) {
     TEXT(0),
     MEDIA(1),
-    CLIPBOARD(2);
+    CLIPBOARD(2),
+    STICKERS(3); // FORK(S5-stickers): the sticker panel
 
     companion object {
         fun fromInt(int: Int) = entries.firstOrNull { it.value == int } ?: TEXT

@@ -23,15 +23,15 @@ enum class ChipId {
             SETTINGS -> KeyCode.SETTINGS
             TRANSLATE -> KeyCode.TOGGLE_TRANSLATE_BAR // S2-bar: opens the Translate bar
             AI -> KeyCode.AI_REWRITE // S3-ai: opens the ✦ rewrite sheet
-            STICKERS -> null
+            STICKERS -> KeyCode.STICKERS_PANEL // S5-stickers: opens the sticker panel
         }
 
     companion object {
         /** Chips that can be neither pinned nor moved. */
         val fixed: Set<ChipId> = setOf(MIC, TRANSLATE)
 
-        /** Chips with a handler. Upstream has no stickers. */
-        val registered: Set<ChipId> = setOf(MIC, TRANSLATE, AI, EMOJI, CLIPBOARD, SETTINGS)
+        /** Chips with a handler. Upstream has no stickers; S5-stickers adds the panel. */
+        val registered: Set<ChipId> = setOf(MIC, TRANSLATE, AI, EMOJI, CLIPBOARD, STICKERS, SETTINGS)
 
         fun forKeyCode(code: Int): ChipId? = entries.firstOrNull { it.keyCode == code }
     }

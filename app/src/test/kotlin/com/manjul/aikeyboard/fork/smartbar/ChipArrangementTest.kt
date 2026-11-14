@@ -68,4 +68,16 @@ class ChipArrangementTest {
         assertEquals(order, ChipArrangement.reorder(order, 1, 3))
         assertEquals(order, ChipArrangement.reorder(order, 3, 1))
     }
+
+    @Test
+    fun `stickers is registered, opens the panel and hides when the cloud is not allowed`() {
+        val key = com.manjul.aikeyboard.ime.text.key.KeyCode.STICKERS_PANEL
+        assertEquals(true, STICKERS in ChipId.registered)
+        assertEquals(key, STICKERS.keyCode)
+        assertEquals(STICKERS, ChipId.forKeyCode(key))
+        val noCloud = com.manjul.aikeyboard.ime.policy.PolicyDecision.Unrestricted.copy(allowCloud = false)
+        assertEquals(emptyList(), ChipArrangement.visible(listOf(STICKERS), ChipId.registered, noCloud, true))
+        val open = com.manjul.aikeyboard.ime.policy.PolicyDecision.Unrestricted
+        assertEquals(listOf(STICKERS), ChipArrangement.visible(listOf(STICKERS), ChipId.registered, open, true))
+    }
 }

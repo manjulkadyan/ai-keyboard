@@ -82,6 +82,7 @@ data class QuickActionArrangement(
             ),
             hiddenActions = listOf( // FORK(S1-smartbar)
                 QuickAction.InsertKey(TextKeyData.SETTINGS), // FORK(S3-ai): the 4th pin moves to the overflow
+                QuickAction.InsertKey(TextKeyData.STICKERS_PANEL), // FORK(S5-stickers): in the overflow, pinnable
                 QuickAction.InsertKey(TextKeyData.UNDO),
                 QuickAction.InsertKey(TextKeyData.REDO), // FORK(S1-smartbar)
                 QuickAction.InsertKey(TextKeyData.TOGGLE_INCOGNITO_MODE),

@@ -108,6 +108,8 @@ include(":tools:themegen")
 include(":tools:packbuild")
 // FORK(S5-content): signed content manifest, content sources and the pack downloader (plan Task 2)
 include(":core:content")
+// FORK(S5-stickers): the in-keyboard sticker panel (controller, Compose panel, premium card)
+include(":ime:stickers-ui")
 
 // FORK(S0-hardening): custom lint checks (TRD §2.3 "Process termination"), applied to :app via lintChecks
 include(":lint-rules")

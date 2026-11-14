@@ -422,6 +422,7 @@ dependencies {
     // FORK(S4-themes): the presets behind the Themes screen and the premium guard
     implementation(projects.core.theme)
     implementation(projects.core.content) // FORK(S5-content): content manifest, sources and the pack downloader
+    implementation(projects.ime.stickersUi) // FORK(S5-stickers): the in-keyboard sticker panel
 
     // FORK(S0-hardening): custom lint checks (ImeProcessTermination, TRD §2.3)
     lintChecks(projects.lintRules)

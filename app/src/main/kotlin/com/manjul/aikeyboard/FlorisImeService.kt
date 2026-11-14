@@ -119,6 +119,9 @@ import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.fork.voice.VoiceImeSession // FORK(S1-voice)
 import com.manjul.aikeyboard.fork.translate.TranslateImeSession // FORK(S2-bar)
 import com.manjul.aikeyboard.fork.dictionary.DefinitionCards // FORK(S5-dict)
+import com.manjul.aikeyboard.fork.stickers.StickerPanelLayout // FORK(S5-stickers)
+import com.manjul.aikeyboard.fork.stickers.StickersImeSession // FORK(S5-stickers)
+import com.manjul.aikeyboard.stickers // FORK(S5-stickers)
 import com.manjul.aikeyboard.fork.ai.AiConsentActivity // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.ai.AiImeSession // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.ai.copyAiOutput // FORK(S3-ai)
@@ -196,6 +199,12 @@ class FlorisImeService : LifecycleInputMethodService() {
         fun aiSessionOrNull(): AiImeSession? {
             val service = FlorisImeServiceReference.get() ?: return null
             return if (service::aiSession.isInitialized) service.aiSession else null
+        }
+
+        // FORK(S5-stickers): the sticker panel of the running service (chip, panel)
+        fun stickersSessionOrNull(): StickersImeSession? {
+            val service = FlorisImeServiceReference.get() ?: return null
+            return if (service::stickersSession.isInitialized) service.stickersSession else null
         }
 
         // FORK(S1-smartbar): "App made private" with Undo after the smartbar made the app private
@@ -343,6 +352,9 @@ class FlorisImeService : LifecycleInputMethodService() {
     // FORK(S3-ai): the ✦ AI rewrite; hidden unless allowAi && allowCloud, closed by every restriction, on hide and
     // on field change. Nothing is sent before the app's consent screen sets consentAiAt.
     private lateinit var aiSession: AiImeSession
+    // FORK(S5-stickers): the sticker panel; hidden unless allowCloud, closed by every restriction and on hide.
+    // Premium stickers need Pro; the share cache is swept at start and at each panel open.
+    private lateinit var stickersSession: StickersImeSession
     // FORK(S1-smartbar): "Make this app private" adds the app at once and offers Undo for 5 s in the smartbar;
     // a field change dismisses the offer (the app stays private). The package is never logged.
     private lateinit var privateAppUndo: PrivateAppUndo
@@ -417,6 +429,22 @@ class FlorisImeService : LifecycleInputMethodService() {
             copyToClipboard = { copyAiOutput(this, it) },
             openPro = { startActivity(proIntent(this)) },
         ).also { it.bindTo(policyController) }
+        // FORK(S5-stickers): see the stickersSession declaration
+        stickersSession = StickersImeSession(
+            context = this,
+            graph = stickers().value,
+            decision = { policyController.decision.value },
+            isPro = proGate(featureSettingsStore().value),
+            scope = lifecycleScope,
+            editor = { currentInputEditorInfo },
+            connection = { currentInputConnection },
+            showPanel = { show ->
+                val mode = activeState.imeUiMode
+                if (show) activeState.imeUiMode = ImeUiMode.STICKERS
+                else if (mode == ImeUiMode.STICKERS) activeState.imeUiMode = ImeUiMode.TEXT
+            },
+        ).also { it.bindTo(policyController) }
+        stickersSession.sweep() // FORK(S5-stickers): drop share files older than 24 h
         // FORK(S1-smartbar): see the privateAppUndo declaration
         privateAppUndo = privateAppsRepository().let { repo ->
             PrivateAppUndo(add = repo::add, remove = repo::remove, scope = lifecycleScope)
@@ -498,6 +526,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         voiceSession.destroy() // FORK(S1-voice)
         translateSession.destroy() // FORK(S2-bar)
         aiSession.onDestroy() // FORK(S3-ai)
+        stickersSession.close() // FORK(S5-stickers)
         inputFeedbackController.release() // FORK(S4-themes): the key sound pool
         FlorisImeServiceReference = WeakReference(null)
         inputWindowView = null
@@ -580,6 +609,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         translateSession.onFinishInputView() // FORK(S2-bar): hiding closes the bar, pair and mode are kept
         aiSession.onFinishInputView() // FORK(S3-ai): hiding cancels the stream and closes the sheet
         DefinitionCards.dismiss() // FORK(S5-dict): hiding closes the definition card
+        stickersSession.close() // FORK(S5-stickers): hiding closes the sticker panel
         editorInstance.handleFinishInputView()
     }
 
@@ -866,6 +896,7 @@ class FlorisImeService : LifecycleInputMethodService() {
                                 ImeUiMode.TEXT -> TextInputLayout()
                                 ImeUiMode.MEDIA -> MediaInputLayout()
                                 ImeUiMode.CLIPBOARD -> ClipboardInputLayout()
+                                ImeUiMode.STICKERS -> StickerPanelLayout() // FORK(S5-stickers)
                             }
                         }
                     }
