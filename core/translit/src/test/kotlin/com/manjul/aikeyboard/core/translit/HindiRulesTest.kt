@@ -24,14 +24,16 @@ class HindiRulesTest {
     }
 
     @Test fun everyNativeStringIsInTheScriptBlock() {
-        val romans = ('a'..'z').map { it.toString() } + listOf("kh", "gh", "ch", "sh", "th", "ph", "bh", "dh", "zh") +
-            listOf("aa", "ee", "ii", "oo", "uu", "ai", "au")
-        val rules = romans.flatMap { r ->
-            listOf(r, "x" + r, r + "x").flatMap { s -> s.indices.flatMap { table.matchesAt(s, it) } }
-        }.distinct()
-        assertTrue(rules.isNotEmpty())
-        for (rule in rules) {
-            assertTrue(rule.native.all { it in 'ऀ'..'ॿ' }, "rule ${rule.roman} has a native char outside the block")
-        }
+        RuleTableChecks.assertAllNativeInBlock(table, '\u0900'..'\u097F')
+    }
+
+    @Test fun rowsAreSortedByRoman() {
+        RuleTableChecks.assertSortedByRoman(TranslitLang.HI)
+    }
+
+    @Test fun wholeWordAaIsIndependentVowelNotMatra() {
+        val natives = table.matchesAt("aa", 0).filter { it.roman == "aa" }.map { it.native }
+        assertTrue("\u0906" in natives)
+        assertTrue("\u093E" !in natives)
     }
 }

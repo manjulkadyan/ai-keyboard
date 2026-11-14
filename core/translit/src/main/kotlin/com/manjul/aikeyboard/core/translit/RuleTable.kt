@@ -11,13 +11,15 @@ import java.util.Locale
  * Roman to native rules for one language, indexed by the first roman character. Rule text is user-independent data,
  * but inputs are user content: nothing here logs or puts input text into an exception message.
  */
-class RuleTable private constructor(val lang: TranslitLang, rules: List<Rule>) {
+class RuleTable private constructor(val lang: TranslitLang, internal val rules: List<Rule>) {
     private val byFirstChar: Map<Char, List<Rule>> = rules.groupBy { it.roman[0] }
-    private val ruleCount = rules.size
-
+    
     val maxRomanLength: Int = rules.maxOfOrNull { it.roman.length } ?: 0
 
-    /** Rules whose roman part starts at input[offset]. Position is checked against offset and input length. */
+    /**
+     * Rules whose roman part starts at input[offset]. Position is checked against offset and input length. MID and
+     * END never match at offset 0, so a whole-word vowel gets its word-start form only.
+     */
     fun matchesAt(input: String, offset: Int): List<Rule> {
         if (offset < 0 || offset >= input.length) return emptyList()
         val text = input.lowercase(Locale.ROOT)
@@ -34,10 +36,10 @@ class RuleTable private constructor(val lang: TranslitLang, rules: List<Rule>) {
         Position.ANY -> true
         Position.START -> offset == 0
         Position.MID -> offset > 0 && end < length
-        Position.END -> end == length
+        Position.END -> offset > 0 && end == length
     }
 
-    override fun toString(): String = "RuleTable(lang=${lang.tag}, rules=$ruleCount)"
+    override fun toString(): String = "RuleTable(lang=${lang.tag}, rules=${rules.size})"
 
     companion object {
         /** Columns: roman, native, cost, position. Blank lines and lines starting with # are skipped. */

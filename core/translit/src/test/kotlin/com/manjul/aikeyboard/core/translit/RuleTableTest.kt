@@ -32,6 +32,14 @@ class RuleTableTest {
         assertFalse(table().matchesAt("khaa", 2).any { it.roman == "a" })
     }
 
+    @Test fun endAndMidRulesNeverMatchAtOffsetZero() {
+        val t = RuleTable.parse(
+            TranslitLang.UR,
+            sequenceOf("a\t\u0627\t0.0\tstart", "a\t\u06C1\t0.0\tend", "a\t\t0.0\tmid"),
+        )
+        assertEquals(listOf("\u0627"), t.matchesAt("a", 0).map { it.native })
+    }
+
     @Test fun startRuleMatchesOnlyAtOffsetZero() {
         val t = RuleTable.parse(TranslitLang.UR, sequenceOf("a\tا\t0.0\tstart"))
         assertEquals(1, t.matchesAt("aa", 0).size)
