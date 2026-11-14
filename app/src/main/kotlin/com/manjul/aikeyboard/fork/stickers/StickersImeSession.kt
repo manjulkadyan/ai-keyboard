@@ -16,6 +16,7 @@ import com.manjul.aikeyboard.fork.policy.ImePolicyController
 import com.manjul.aikeyboard.ime.stickersui.StickerPanelController
 import com.manjul.aikeyboard.ime.stickersui.TapResult
 import com.manjul.aikeyboard.core.content.stickers.StickerUi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,7 +60,16 @@ class StickersImeSession(
         when (val result = controller.onStickerTapped(sticker)) {
             is TapResult.Insert -> {
                 val info = editor() ?: return
-                inserter.insert(result.sticker, info, connection())
+                val ic = connection()
+                scope.launch {
+                    try {
+                        inserter.insert(result.sticker, info, ic, ::allowed)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // a failed insert leaves the keyboard as it was
+                    }
+                }
             }
             TapResult.Blocked -> close()
             is TapResult.NeedsPro -> Unit // the panel shows the premium card; the user picks "See Pro"
@@ -76,6 +86,9 @@ class StickersImeSession(
         controller.close()
         showPanel(false)
     }
+
+    /** The field decision still lets a sticker go out (PC-1). Checked again after the file copy. */
+    private fun allowed(): Boolean = decision().let { it.allowCloud && !it.sensitive }
 
     private fun onDecisionChanged() {
         controller.onDecisionChanged()

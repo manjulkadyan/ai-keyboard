@@ -22,6 +22,8 @@ import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.AnalyticsSink
 import com.manjul.aikeyboard.core.content.stickers.StickerUi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -60,6 +62,7 @@ class StickerInserterTest {
                 }
             },
             notify = { notices += it },
+            io = Dispatchers.Unconfined,
         )
     }
 
@@ -98,7 +101,7 @@ class StickerInserterTest {
         )
     }
 
-    @Test fun `image mime accepted gives COMMIT_CONTENT with the file provider authority`() {
+    @Test fun `image mime accepted gives COMMIT_CONTENT with the file provider authority`() = runBlocking<Unit> {
         val ic = RecordingConnection(accept = true)
         assertEquals(InsertMethod.COMMIT_CONTENT, inserter.insert(sticker(), editor("image/*"), ic))
         val uri = assertNotNull(ic.committed).contentUri
@@ -113,7 +116,7 @@ class StickerInserterTest {
         assertTrue(event.params.values.none { it.toString().contains(host) })
     }
 
-    @Test fun `no mime types and a host share target gives SHARE to the host only`() {
+    @Test fun `no mime types and a host share target gives SHARE to the host only`() = runBlocking<Unit> {
         registerShareTarget()
         val ic = RecordingConnection(accept = true)
         assertEquals(InsertMethod.SHARE, inserter.insert(sticker(), editor(), ic))
@@ -129,12 +132,12 @@ class StickerInserterTest {
         assertEquals("share", events.single().params["method"])
     }
 
-    @Test fun `a host that refuses commitContent falls back to SHARE`() {
+    @Test fun `a host that refuses commitContent falls back to SHARE`() = runBlocking<Unit> {
         registerShareTarget()
         assertEquals(InsertMethod.SHARE, inserter.insert(sticker(), editor("image/png"), RecordingConnection(false)))
     }
 
-    @Test fun `no share target on API 33 and up gives CLIPBOARD`() {
+    @Test fun `no share target on API 33 and up gives CLIPBOARD`() = runBlocking<Unit> {
         assertEquals(InsertMethod.CLIPBOARD, inserter.insert(sticker(), editor(), RecordingConnection(true)))
         val clip = assertNotNull(app.getSystemService(ClipboardManager::class.java).primaryClip)
         assertEquals(authority, clip.getItemAt(0).uri.authority)
@@ -143,7 +146,7 @@ class StickerInserterTest {
         assertEquals("clipboard", events.single().params["method"])
     }
 
-    @Test fun `a premium sticker after Pro lapses gives null and no event`() {
+    @Test fun `a premium sticker after Pro lapses gives null and no event`() = runBlocking<Unit> {
         isPro = false
         val ic = RecordingConnection(accept = true)
         assertNull(inserter.insert(sticker(premium = true), editor("image/*"), ic))
@@ -152,9 +155,16 @@ class StickerInserterTest {
         assertTrue(File(app.cacheDir, "share").list().isNullOrEmpty())
     }
 
-    @Test fun `a premium sticker with Pro inserts and reports premium`() {
+    @Test fun `a premium sticker with Pro inserts and reports premium`() = runBlocking<Unit> {
         val method = inserter.insert(sticker(premium = true), editor("image/*"), RecordingConnection(true))
         assertEquals(InsertMethod.COMMIT_CONTENT, method)
         assertEquals("true", events.single().params["premium"].toString())
+    }
+
+    @Test fun `a field that turns sensitive during the copy gets nothing`() = runBlocking<Unit> {
+        val ic = RecordingConnection(accept = true)
+        assertNull(inserter.insert(sticker(), editor("image/*"), ic, allowed = { false }))
+        assertNull(ic.committed)
+        assertTrue(events.isEmpty())
     }
 }

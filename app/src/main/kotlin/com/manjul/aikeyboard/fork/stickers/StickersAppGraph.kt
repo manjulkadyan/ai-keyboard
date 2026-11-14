@@ -6,9 +6,11 @@
 package com.manjul.aikeyboard.fork.stickers
 
 import android.content.Context
+import android.net.ConnectivityManager
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.appDatabase
 import com.manjul.aikeyboard.contentManifest
+import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.AnalyticsSink
 import com.manjul.aikeyboard.core.content.stickers.StickerRepository
@@ -30,7 +32,18 @@ class StickersAppGraph(context: Context) {
             dao = app.appDatabase().value.stickerDao(),
             bundled = BundledStarterPack(app),
             analytics = analytics,
+            canDownload = ::canDownload,
         )
+    }
+
+    /**
+     * False while "Download on Wi-Fi only" (`contentWifiOnly`) is on and the active network is metered. The panel
+     * then shows "Waits for Wi-Fi" and nothing is fetched (S5 Task 6 review 1).
+     */
+    private fun canDownload(): Boolean {
+        if (!app.featureSettingsStore().value.current.contentWifiOnly) return true
+        val connectivity = app.getSystemService(ConnectivityManager::class.java) ?: return false
+        return !connectivity.isActiveNetworkMetered
     }
 
     val shareCache: ShareCache by lazy { ShareCache(app.cacheDir, System::currentTimeMillis) }

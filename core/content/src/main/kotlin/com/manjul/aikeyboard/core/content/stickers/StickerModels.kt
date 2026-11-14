@@ -35,6 +35,12 @@ interface StickerCatalog {
     suspend fun install(packId: String): Outcome<Unit>
 }
 
+/**
+ * [StickerCatalog.install] did not start: `contentWifiOnly` is on and the network is metered. Nothing was fetched;
+ * the panel says the pack waits for Wi-Fi and a tap on Wi-Fi downloads it.
+ */
+class WaitsForWifiException : IllegalStateException("sticker pack waits for Wi-Fi")
+
 /** The packs in the APK (the free `starter` pack, decision 14). They are always installed. */
 fun interface BundledPacks {
     fun packs(): List<StickerPackUi>

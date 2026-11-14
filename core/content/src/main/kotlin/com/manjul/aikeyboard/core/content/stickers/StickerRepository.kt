@@ -32,6 +32,8 @@ import java.io.File
  * sticker packs that are not installed yet. They are merged by id; a bundled pack wins over a stored or manifest pack
  * with the same id (plan F4). [install] emits `pack_download_start` and `pack_download_done` with `lang = "mul"` and
  * the pack kind only, never a URL or a path (plan F14). A pack whose files fail the SHA-256 check stores nothing.
+ * [canDownload] is false while `contentWifiOnly` is on and the network is metered: then [install] fetches nothing,
+ * emits no event and gives [WaitsForWifiException]. [refresh] and [install] never throw, except a cancellation.
  */
 class StickerRepository(
     private val manifest: ManifestCache,
@@ -40,6 +42,7 @@ class StickerRepository(
     private val bundled: BundledPacks,
     private val analytics: AnalyticsSink,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val canDownload: () -> Boolean = { true },
 ) : StickerCatalog {
     private val state = MutableStateFlow<List<StickerPackUi>>(emptyList())
     override val packs: StateFlow<List<StickerPackUi>> = state.asStateFlow()
@@ -56,10 +59,20 @@ class StickerRepository(
             null
         }
         if (remote != null) lastManifest = remote
-        publish()
+        safePublish()
     }
 
-    override suspend fun install(packId: String): Outcome<Unit> {
+    override suspend fun install(packId: String): Outcome<Unit> = try {
+        installChecked(packId)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        safePublish()
+        Outcome.Failure(e)
+    }
+
+    private suspend fun installChecked(packId: String): Outcome<Unit> {
+        if (!canDownload()) return Outcome.Failure(WaitsForWifiException())
         val spec = specFor(packId) ?: return Outcome.Failure(IllegalArgumentException("unknown sticker pack"))
         val bytes = spec.files.sumOf { it.bytes }
         val lang = PackDownloadWorker.lang(spec)
@@ -79,7 +92,7 @@ class StickerRepository(
                 if (outcome.error is PackHashMismatchException) PackResult.HASH_MISMATCH else PackResult.FAILED
         }
         analytics.log(EventCatalog.packDownloadDone(lang, kind, bytes, result))
-        publish()
+        safePublish()
         return when {
             result == PackResult.OK -> Outcome.Success(Unit)
             outcome is Outcome.Failure -> outcome
@@ -105,6 +118,17 @@ class StickerRepository(
         // The pack row has no URL: the manifest path is the same for every pack.
         dao.upsertPack(StickerPackEntity(spec.id, spec.title, spec.version, spec.premium, "", true, clock()))
         dao.upsertStickers(stickers)
+    }
+
+    /** A failed read of the stored packs keeps the last list. */
+    private suspend fun safePublish() {
+        try {
+            publish()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Keep the packs already shown.
+        }
     }
 
     private suspend fun publish() {

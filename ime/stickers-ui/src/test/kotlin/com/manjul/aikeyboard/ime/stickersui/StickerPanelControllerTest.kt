@@ -9,6 +9,7 @@ import com.manjul.aikeyboard.core.common.Outcome
 import com.manjul.aikeyboard.core.content.stickers.StickerCatalog
 import com.manjul.aikeyboard.core.content.stickers.StickerPackUi
 import com.manjul.aikeyboard.core.content.stickers.StickerUi
+import com.manjul.aikeyboard.core.content.stickers.WaitsForWifiException
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import com.manjul.aikeyboard.ime.policy.SensitivityReason
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,14 +33,17 @@ class StickerPanelControllerTest {
         override val packs: StateFlow<List<StickerPackUi>> = MutableStateFlow(packs)
         var refreshes = 0
         val installs = mutableListOf<String>()
+        var installResult: () -> Outcome<Unit> = { Outcome.Success(Unit) }
+        var refreshThrows = false
 
         override suspend fun refresh() {
             refreshes++
+            check(!refreshThrows) { "manifest failed" }
         }
 
         override suspend fun install(packId: String): Outcome<Unit> {
             installs += packId
-            return Outcome.Success(Unit)
+            return installResult()
         }
     }
 
@@ -129,5 +133,45 @@ class StickerPanelControllerTest {
         isPro = true
         controller.onPackSelected("starter_plus")
         assertEquals(listOf("starter_plus"), notInstalled.installs)
+    }
+
+    private fun TestScope.notInstalledFree(catalog: FakeCatalog) =
+        StickerPanelController(catalog, { isPro }, { decision }, TestScope(UnconfinedTestDispatcher(testScheduler)))
+
+    private fun freePackNotInstalled() = FakeCatalog(
+        listOf(StickerPackUi("more", "More", premium = false, installed = false, emptyList())),
+    )
+
+    @Test fun `wifi only on a metered network shows waits for wifi and not a failure`() = runTest {
+        val catalog = freePackNotInstalled()
+        catalog.installResult = { Outcome.Failure(WaitsForWifiException()) }
+        val controller = notInstalledFree(catalog)
+        controller.onOpen()
+        controller.onPackSelected("more")
+        val state = controller.state.value
+        assertTrue(state.waitsForWifi)
+        assertFalse(state.installFailed)
+        assertEquals(null, state.installing)
+        assertEquals(listOf("more"), catalog.installs)
+    }
+
+    @Test fun `an install that throws resets installing and the next tap tries again`() = runTest {
+        val catalog = freePackNotInstalled()
+        catalog.installResult = { error("disk gone") }
+        val controller = notInstalledFree(catalog)
+        controller.onOpen()
+        controller.onPackSelected("more")
+        assertEquals(null, controller.state.value.installing)
+        assertTrue(controller.state.value.installFailed)
+        controller.onPackSelected("more")
+        assertEquals(listOf("more", "more"), catalog.installs)
+    }
+
+    @Test fun `a refresh that throws does not crash the keyboard`() = runTest {
+        catalog.refreshThrows = true
+        val controller = controller()
+        controller.onOpen()
+        assertTrue(controller.state.value.open)
+        assertEquals(1, catalog.refreshes)
     }
 }

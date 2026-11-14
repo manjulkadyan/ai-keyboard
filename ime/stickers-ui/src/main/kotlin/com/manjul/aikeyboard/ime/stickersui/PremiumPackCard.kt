@@ -41,7 +41,8 @@ fun PremiumPackCard(onSeePro: () -> Unit, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(text = "👑 " + stringResource(R.string.stickers__premium_card), modifier = Modifier.weight(1f))
+            val text = stringResource(R.string.stickers__premium_card)
+            Text(text = stringResource(R.string.stickers__premium_card_badge, text), modifier = Modifier.weight(1f))
             Surface(
                 onClick = onSeePro,
                 modifier = Modifier.testTag(SEE_PRO_TAG),

@@ -75,6 +75,7 @@ fun StickerPanel(
         }
         val notice = when {
             state.installing != null -> stringResource(R.string.stickers__downloading)
+            state.waitsForWifi -> stringResource(R.string.stickers__waits_for_wifi)
             state.installFailed -> stringResource(R.string.stickers__download_failed)
             selected != null && !selected.installed && !state.premiumCard ->
                 stringResource(R.string.stickers__not_installed)
@@ -99,17 +100,18 @@ fun StickerPanel(
 @Composable
 private fun PackTab(title: String, premium: Boolean, selected: Boolean, onClick: () -> Unit) {
     val color = LocalContentColor.current
-    val badge = stringResource(R.string.stickers__premium_badge)
+    val description = stringResource(R.string.stickers__premium_badge, title)
+    val label = if (premium) stringResource(R.string.stickers__premium_tab, title) else title
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(50),
         color = if (selected) color.copy(alpha = 0.15f) else Color.Transparent,
         contentColor = color,
         border = BorderStroke(1.dp, color.copy(alpha = if (selected) 0.8f else 0.4f)),
-        modifier = if (premium) Modifier.semantics { contentDescription = "$title, $badge" } else Modifier,
+        modifier = if (premium) Modifier.semantics { contentDescription = description } else Modifier,
     ) {
         Text(
-            text = if (premium) "$title 👑" else title,
+            text = label,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             maxLines = 1,
         )

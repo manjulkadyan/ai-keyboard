@@ -8,8 +8,10 @@ package com.manjul.aikeyboard.ime.stickersui
 import com.manjul.aikeyboard.core.content.stickers.StickerCatalog
 import com.manjul.aikeyboard.core.content.stickers.StickerPackUi
 import com.manjul.aikeyboard.core.content.stickers.StickerUi
+import com.manjul.aikeyboard.core.content.stickers.WaitsForWifiException
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import com.manjul.aikeyboard.core.common.Outcome
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +28,8 @@ data class StickerPanelState(
     val premiumCard: Boolean = false,
     val installing: String? = null,
     val installFailed: Boolean = false,
+    /** The last install did not start: `contentWifiOnly` is on and the network is metered. */
+    val waitsForWifi: Boolean = false,
 ) {
     val selected: StickerPackUi? get() = packs.firstOrNull { it.id == selectedPackId } ?: packs.firstOrNull()
 }
@@ -66,7 +70,7 @@ class StickerPanelController(
             close()
             return
         }
-        mutableState.update { it.copy(open = true, premiumCard = false, installFailed = false) }
+        mutableState.update { it.copy(open = true, premiumCard = false, installFailed = false, waitsForWifi = false) }
         if (packsJob?.isActive != true) {
             packsJob = scope.launch {
                 repo.packs.collect { packs ->
@@ -77,7 +81,7 @@ class StickerPanelController(
                 }
             }
         }
-        scope.launch { repo.refresh() }
+        scope.launch { guarded { repo.refresh() } }
     }
 
     /** The policy changed while the panel is open: a field that does not allow stickers closes it. */
@@ -118,10 +122,28 @@ class StickerPanelController(
     }
 
     private fun install(id: String) {
-        mutableState.update { it.copy(installing = id, installFailed = false) }
+        mutableState.update { it.copy(installing = id, installFailed = false, waitsForWifi = false) }
         scope.launch {
-            val ok = repo.install(id) is Outcome.Success
-            mutableState.update { it.copy(installing = null, installFailed = !ok) }
+            var outcome: Outcome<Unit>? = null
+            try {
+                guarded { outcome = repo.install(id) }
+            } finally {
+                val result = outcome
+                val wifi = result is Outcome.Failure && result.error is WaitsForWifiException
+                val failed = result !is Outcome.Success && !wifi
+                mutableState.update { it.copy(installing = null, installFailed = failed, waitsForWifi = wifi) }
+            }
+        }
+    }
+
+    /** Runs [block] in the IME scope: an error never crashes the keyboard, a cancellation still cancels. */
+    private suspend fun guarded(block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // The panel shows what it has; nothing about the error is logged.
         }
     }
 

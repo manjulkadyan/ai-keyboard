@@ -40,8 +40,10 @@ class StickerRepositoryTest {
         .allowMainThreadQueries()
         .build()
     private val events = mutableListOf<AnalyticsEvent>()
+    private var sinkThrows = false
     private val sink = object : AnalyticsSink {
         override fun log(event: AnalyticsEvent) {
+            check(!sinkThrows) { "sink failed" }
             events += event
         }
     }
@@ -71,10 +73,13 @@ class StickerRepositoryTest {
         }
     }
 
-    private fun repository(files: Map<String, ByteArray>): StickerRepository {
-        val source = FakeContentSource(files)
+    private var source = FakeContentSource()
+
+    private fun repository(files: Map<String, ByteArray>, canDownload: () -> Boolean = { true }): StickerRepository {
+        source = FakeContentSource(files)
         val cache = ManifestCache(tmp.newFolder(), source, ManifestVerifier(TestContent.publicKeyBase64)) { 1L }
-        return StickerRepository(cache, PackDownloader(source, tmp.newFolder()), db.stickerDao(), starter, sink)
+        val downloader = PackDownloader(source, tmp.newFolder())
+        return StickerRepository(cache, downloader, db.stickerDao(), starter, sink, canDownload = canDownload)
     }
 
     @Test fun `the starter pack is listed with no manifest`() = runBlocking {
@@ -129,6 +134,26 @@ class StickerRepositoryTest {
         assertTrue(db.stickerDao().stickers("starter_plus").isEmpty())
         assertFalse(repo.packs.value.single { it.id == "starter_plus" }.installed)
         assertEquals("hash_mismatch", events.last().params["result"])
+    }
+
+    @Test fun `wifi only on a metered network downloads nothing`() = runBlocking {
+        val repo = repository(files(withManifest = true), canDownload = { false })
+        repo.refresh()
+        val before = source.requests.size
+        val outcome = assertIs<Outcome.Failure>(repo.install("starter_plus"))
+        assertIs<WaitsForWifiException>(outcome.error)
+        assertEquals(before, source.requests.size)
+        assertTrue(events.isEmpty())
+        assertTrue(db.stickerDao().packs().isEmpty())
+        assertFalse(repo.packs.value.single { it.id == "starter_plus" }.installed)
+    }
+
+    @Test fun `an install that throws gives a failure and no crash`() = runBlocking {
+        val repo = repository(files(withManifest = true))
+        repo.refresh()
+        sinkThrows = true // an exception outside the downloader, which reports its own errors as a Failure
+        assertIs<Outcome.Failure>(repo.install("starter_plus"))
+        assertFalse(repo.packs.value.single { it.id == "starter_plus" }.installed)
     }
 
     @Test fun `the bundled pack wins on a duplicate id`() = runBlocking {

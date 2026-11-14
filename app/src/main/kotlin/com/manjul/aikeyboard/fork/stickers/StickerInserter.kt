@@ -27,6 +27,9 @@ import com.manjul.aikeyboard.core.analytics.AnalyticsSink
 import com.manjul.aikeyboard.core.analytics.EventCatalog
 import com.manjul.aikeyboard.core.analytics.StickerMethod
 import com.manjul.aikeyboard.core.content.stickers.StickerUi
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** How a sticker reached the host app. [wire] is the `sticker_send` `method` value. */
 enum class InsertMethod(val wire: String, internal val analytics: StickerMethod) {
@@ -47,6 +50,10 @@ enum class InsertMethod(val wire: String, internal val analytics: StickerMethod)
  * [isPro] is checked again for a premium sticker: without Pro nothing is staged or sent and the result is null.
  * `sticker_send` fires once per non-null result. The host package name is only used to address the share intent;
  * it is never logged.
+ *
+ * The file copy and the share target lookup run on [io]. commitContent, the share activity and the clipboard run on
+ * the caller's dispatcher, which is the main thread in the IME. [insert] checks [allowed] again after the copy, so
+ * a field that turned sensitive meanwhile gets nothing.
  */
 class StickerInserter(
     private val context: Context,
@@ -54,11 +61,22 @@ class StickerInserter(
     private val isPro: () -> Boolean,
     private val analytics: AnalyticsSink,
     private val notify: (Int) -> Unit = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() },
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    fun insert(sticker: StickerUi, editor: EditorInfo, ic: InputConnection?): InsertMethod? {
+    suspend fun insert(
+        sticker: StickerUi,
+        editor: EditorInfo,
+        ic: InputConnection?,
+        allowed: () -> Boolean = { true },
+    ): InsertMethod? {
         if (sticker.premium && !isPro()) return null
-        val uri = runCatching { uriFor(shareCache.stage(sticker.file)) }.getOrNull()
-        val method = uri?.let { send(it, editor, ic) }
+        val host = editor.packageName
+        val staged = withContext(io) {
+            val uri = runCatching { uriFor(shareCache.stage(sticker.file)) }.getOrNull()
+            uri?.let { Staged(it, shareIntent(it, host)) }
+        }
+        if (!allowed() || (sticker.premium && !isPro())) return null
+        val method = staged?.let { send(it, editor, ic) }
         if (method == null) {
             notify(NOT_ACCEPTED_NOTICE)
             return null
@@ -67,10 +85,12 @@ class StickerInserter(
         return method
     }
 
-    private fun send(uri: Uri, editor: EditorInfo, ic: InputConnection?): InsertMethod? = when {
-        ic != null && acceptsPng(editor) && commit(uri, editor, ic) -> InsertMethod.COMMIT_CONTENT
-        share(uri, editor.packageName) -> InsertMethod.SHARE
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && copy(uri) -> {
+    private class Staged(val uri: Uri, val share: Intent?)
+
+    private fun send(staged: Staged, editor: EditorInfo, ic: InputConnection?): InsertMethod? = when {
+        ic != null && acceptsPng(editor) && commit(staged.uri, editor, ic) -> InsertMethod.COMMIT_CONTENT
+        staged.share != null && share(staged.share) -> InsertMethod.SHARE
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && copy(staged.uri) -> {
             notify(COPIED_NOTICE)
             InsertMethod.CLIPBOARD
         }
@@ -100,15 +120,19 @@ class StickerInserter(
         return runCatching { InputConnectionCompat.commitContent(ic, editor, info, flags, null) }.getOrDefault(false)
     }
 
-    private fun share(uri: Uri, host: String?): Boolean {
-        if (host.isNullOrEmpty()) return false
+    /** The share intent for [host], or null when the host has no share target. Runs off the main thread. */
+    private fun shareIntent(uri: Uri, host: String?): Intent? {
+        if (host.isNullOrEmpty()) return null
         val intent = Intent(Intent.ACTION_SEND)
             .setType(PNG)
             .setPackage(host)
             .putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.clipData = ClipData(ClipDescription("", arrayOf(PNG)), ClipData.Item(uri))
-        if (intent.resolveActivity(context.packageManager) == null) return false
+        return intent.takeIf { it.resolveActivity(context.packageManager) != null }
+    }
+
+    private fun share(intent: Intent): Boolean {
         return try {
             context.startActivity(intent)
             true

@@ -14,6 +14,12 @@
     <string name="stickers__not_installed" tools:ignore="MissingTranslation">Tap the pack to download it</string>
     <!-- Content description of one sticker. %1$d is its number in the pack. -->
     <string name="stickers__sticker" tools:ignore="MissingTranslation">Sticker %1$d</string>
-    <!-- Content description of the premium badge on a pack tab. -->
-    <string name="stickers__premium_badge" tools:ignore="MissingTranslation">Pro pack</string>
+    <!-- Content description of a premium pack tab. %1$s is the pack title. -->
+    <string name="stickers__premium_badge" tools:ignore="MissingTranslation">%1$s, Pro pack</string>
+    <!-- Label of a premium pack tab. %1$s is the pack title; the crown marks a Pro pack. -->
+    <string name="stickers__premium_tab" tools:ignore="MissingTranslation">%1$s 👑</string>
+    <!-- Premium card text with its crown. %1$s is stickers__premium_card. -->
+    <string name="stickers__premium_card_badge" tools:ignore="MissingTranslation">👑 %1$s</string>
+    <!-- Shown when "Download on Wi-Fi only" is on and the network is metered. Nothing was downloaded. -->
+    <string name="stickers__waits_for_wifi" tools:ignore="MissingTranslation">This pack waits for Wi-Fi. To download it now, turn off Download on Wi-Fi only in Offline languages.</string>
 </resources>
