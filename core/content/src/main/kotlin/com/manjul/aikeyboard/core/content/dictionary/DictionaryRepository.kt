@@ -49,15 +49,17 @@ class DictionaryRepository(
     private val analytics: AnalyticsSink,
     private val clock: () -> Long,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Ends the lease that [reader] gave out. The pack reader stays open until this runs. */
+    private val release: (DictionaryPackReader) -> Unit = {},
 ) {
     /** The keyboard card uses only this: the pack, never the network or the online cache. */
     suspend fun lookupOffline(word: String): LookupResult = withContext(io) {
         val pack = safely { reader() }
-        val definitions = pack?.let { p -> safely { p.find(word) } }.orEmpty()
+        val (definitions, attribution) = inPack(pack, word)
         val result = LookupResult(
             definitions = definitions,
             offline = true,
-            attribution = if (definitions.isEmpty()) null else pack?.attribution,
+            attribution = if (definitions.isEmpty()) null else attribution,
             packMissing = pack == null,
         )
         result.also(::log)
@@ -68,8 +70,8 @@ class DictionaryRepository(
     private suspend fun find(word: String, allowNetwork: Boolean): LookupResult {
         val pack = safely { reader() }
         val packMissing = pack == null
-        val inPack = pack?.let { p -> safely { p.find(word) } }.orEmpty()
-        if (inPack.isNotEmpty()) return LookupResult(inPack, true, pack?.attribution, packMissing).also(::log)
+        val (inPack, attribution) = inPack(pack, word)
+        if (inPack.isNotEmpty()) return LookupResult(inPack, true, attribution, packMissing).also(::log)
 
         val norm = HeadwordNorm.of(word)
         if (norm.isEmpty()) return LookupResult(emptyList(), true, null, packMissing).also(::log)
@@ -144,6 +146,16 @@ class DictionaryRepository(
     }
 
     /** Runs [block] and drops any failure without logging it, since a message can hold the word. */
+    /** Reads the pack, then ends the reader's lease, so a swapped-out pack closes only after this lookup. */
+    private fun inPack(pack: DictionaryPackReader?, word: String): Pair<List<Definition>, Attribution?> {
+        pack ?: return emptyList<Definition>() to null
+        return try {
+            (safely { pack.find(word) }.orEmpty()) to pack.attribution
+        } finally {
+            safely { release(pack) }
+        }
+    }
+
     private inline fun <T> safely(block: () -> T): T? = try {
         block()
     } catch (e: CancellationException) {

@@ -59,6 +59,7 @@ class DictionaryAppGraph(context: Context) {
     val repository: DictionaryRepository by lazy {
         DictionaryRepository(
             reader = readers::current,
+            release = readers::release,
             dao = app.appDatabase().value.dictionaryDao(),
             // Created only when an app lookup needs kb-api; the keyboard card never gets here.
             client = { app.aiAppGraph().value.dictionary.value },
@@ -97,20 +98,41 @@ class DictionaryAppGraph(context: Context) {
     }
 }
 
-/** Keeps one open reader for the installed pack file and reopens it when the file changes or goes away. */
+/**
+ * Keeps one open reader for the installed pack file and reopens it when the file changes or goes away. Each [current]
+ * is a lease that the caller ends with [release]. A reader that is swapped out closes at its last release, so a
+ * lookup that is still running never reads a closed database.
+ */
 internal class PackReaders(private val installed: () -> File?) {
     private var open: Pair<File, DictionaryPackReader>? = null
+    private val leases = HashMap<DictionaryPackReader, Int>()
 
     @Synchronized
     fun current(): DictionaryPackReader? {
         val file = installed()
         val cached = open
-        if (cached != null && file != null && cached.first == file && file.isFile) return cached.second
-        cached?.second?.close()
+        if (cached != null && file != null && cached.first == file && file.isFile) return lease(cached.second)
         open = null
+        cached?.second?.let { if (!leases.containsKey(it)) it.close() }
         file ?: return null
         val reader = DictionaryPackReader.open(file) ?: return null
         open = file to reader
+        return lease(reader)
+    }
+
+    @Synchronized
+    fun release(reader: DictionaryPackReader) {
+        val count = leases[reader] ?: return
+        if (count > 1) {
+            leases[reader] = count - 1
+            return
+        }
+        leases.remove(reader)
+        if (open?.second !== reader) reader.close()
+    }
+
+    private fun lease(reader: DictionaryPackReader): DictionaryPackReader {
+        leases[reader] = (leases[reader] ?: 0) + 1
         return reader
     }
 }

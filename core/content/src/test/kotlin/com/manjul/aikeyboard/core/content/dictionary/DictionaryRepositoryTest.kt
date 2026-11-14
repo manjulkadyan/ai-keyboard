@@ -144,6 +144,20 @@ class DictionaryRepositoryTest {
         assertEquals(1, db.dictionaryDao().find("en", "zebra").size)
     }
 
+    @Test fun `every lookup that leases the pack reader releases it once, after the read`() = runBlocking {
+        val released = mutableListOf<DictionaryPackReader>()
+        val pack = assertNotNull(reader)
+        val repo = DictionaryRepository(
+            reader = { pack }, dao = db.dictionaryDao(), client = { null }, settings = settings,
+            analytics = analytics, clock = { now }, release = { released += it },
+        )
+        assertEquals("run", repo.lookupOffline("run").definitions.first().headword)
+        assertEquals(1, released.size)
+        repo.lookup("run", allowNetwork = false)
+        repo.lookup("zebra", allowNetwork = false)
+        assertEquals(listOf(pack, pack, pack), released)
+    }
+
     @Test fun `lookupOffline never calls the client`() = runBlocking {
         server.enqueue(found("zebra"))
         val repo = repo()
