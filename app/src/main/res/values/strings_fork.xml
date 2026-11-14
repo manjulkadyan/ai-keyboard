@@ -483,6 +483,8 @@
     <string name="phrasebook__more_cd" tools:ignore="MissingTranslation">More actions</string>
     <string name="phrasebook__edit" tools:ignore="MissingTranslation">Edit</string>
     <string name="phrasebook__delete" tools:ignore="MissingTranslation">Delete</string>
+    <string name="phrasebook__delete_confirm" tools:ignore="MissingTranslation">Delete this phrase?</string>
+    <string name="phrasebook__back_cd" tools:ignore="MissingTranslation">Back</string>
     <string name="phrasebook__add" tools:ignore="MissingTranslation">Add phrase</string>
     <string name="phrasebook__add_title" tools:ignore="MissingTranslation">New phrase</string>
     <string name="phrasebook__edit_title" tools:ignore="MissingTranslation">Edit phrase</string>

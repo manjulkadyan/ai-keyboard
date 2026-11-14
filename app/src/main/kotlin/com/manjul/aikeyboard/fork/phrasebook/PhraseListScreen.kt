@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -130,6 +131,7 @@ private fun PhraseRow(
             )
         }
         var menu by remember { mutableStateOf(false) }
+        var confirmDelete by remember { mutableStateOf(false) }
         IconButton(onClick = { menu = true }) {
             Icon(Icons.Default.MoreVert, contentDescription = stringRes(R.string.phrasebook__more_cd))
         }
@@ -149,9 +151,24 @@ private fun PhraseRow(
                 )
                 DropdownMenuItem(
                     text = { Text(stringRes(R.string.phrasebook__delete)) },
-                    onClick = { menu = false; onDelete(phrase) },
+                    onClick = { menu = false; confirmDelete = true },
                 )
             }
+        }
+        if (confirmDelete) {
+            // A delete has no undo, so it asks first (final review m4).
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                text = { Text(stringRes(R.string.phrasebook__delete_confirm)) },
+                confirmButton = {
+                    TextButton(onClick = { confirmDelete = false; onDelete(phrase) }) {
+                        Text(stringRes(R.string.phrasebook__delete))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = false }) { Text(stringRes(R.string.phrasebook__cancel)) }
+                },
+            )
         }
     }
 }

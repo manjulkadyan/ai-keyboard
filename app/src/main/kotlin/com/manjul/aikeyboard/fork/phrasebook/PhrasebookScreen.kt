@@ -143,9 +143,7 @@ fun PhrasebookScreen() = FlorisScreen {
 
     navigationIcon {
         val navController = LocalNavController.current
-        IconButton(onClick = { if (!vm.closeCategory()) navController.popBackStack() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-        }
+        PhrasebookBackButton(onBack = { if (!vm.closeCategory()) navController.popBackStack() })
     }
 
     actions {
@@ -230,6 +228,14 @@ fun PhrasebookScreen() = FlorisScreen {
                 onDismiss = { editing = null },
             )
         }
+    }
+}
+
+/** The top bar's back arrow: it closes the open category, else leaves the screen. */
+@Composable
+internal fun PhrasebookBackButton(onBack: () -> Unit) {
+    IconButton(onClick = onBack) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringRes(R.string.phrasebook__back_cd))
     }
 }
 

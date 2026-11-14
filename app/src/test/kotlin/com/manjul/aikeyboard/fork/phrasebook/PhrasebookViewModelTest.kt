@@ -8,6 +8,7 @@ package com.manjul.aikeyboard.fork.phrasebook
 import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.SavedStateHandle
@@ -173,6 +174,47 @@ class PhrasebookViewModelTest {
         compose.onNodeWithText("Bye.").assertExists()
         compose.onNodeWithText("Download language").performClick()
         assertEquals(1, downloads)
+    }
+
+    @Test
+    fun deletingOwnPhraseAsksFirstAndCancelKeepsIt() {
+        val deleted = mutableListOf<Phrase>()
+        val own = phrase("es").copy(ref = "u:7", text = "My own line.", translation = null, machine = false, own = true)
+        compose.setContent {
+            ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
+                PhraseListContent(
+                    state = PhrasebookUiState(target = "es", category = "my_phrases", phrases = listOf(own)),
+                    onSpeak = {}, onFavourite = {}, onShare = {}, onCopy = {}, onEdit = {},
+                    onDelete = { deleted += it },
+                    onDownload = {},
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Delete").performClick()
+        assertEquals(emptyList(), deleted)
+        compose.onNodeWithText("Delete this phrase?").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(emptyList(), deleted)
+        compose.onNodeWithText("My own line.").assertExists()
+
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Delete").performClick()
+        compose.onNodeWithText("Delete this phrase?").assertExists()
+        compose.onNodeWithText("Delete").performClick()
+        assertEquals(listOf(own), deleted)
+    }
+
+    @Test
+    fun theBackArrowHasALabel() {
+        var backs = 0
+        compose.setContent {
+            ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
+                PhrasebookBackButton(onBack = { backs++ })
+            }
+        }
+        compose.onNodeWithContentDescription("Back").performClick()
+        assertEquals(1, backs)
     }
 
     private fun runTestUnconfined(block: suspend TestScope.() -> Unit) =
