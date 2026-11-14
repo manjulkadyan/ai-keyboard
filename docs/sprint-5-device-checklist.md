@@ -31,7 +31,7 @@ Result cell starts empty.
 |---|---|---|
 | `com.manjul.aikeyboard.fork.clipboard.KeystoreKeyProviderTest` | `-Pandroid.testInstrumentationRunnerArguments.class=<class>` | PASS (2 tests) |
 | `com.manjul.aikeyboard.fork.stickers.StickerCompatInsertTest` | same | PASS after fix `70d86ddf`. It failed first: the share receiver Activity runs in the test package's process, so the test's static latch never released |
-| `com.manjul.aikeyboard.isolation.ImeOnlyColdStartTest` | same | FAIL ("Fresh process expected, GMA already loaded"). `MobileAds`, `GoogleMobileAdsFacade` and `AdsAppGraph` are already loaded before the test types anything. `Routes` and `GmaAdLoaders` are loaded too, and `NativeAdSlot` and `TranslatorScreen` are not. Not fixed: the cause is not found yet (see Open issues). Do not read this row as a pass. I.1 of Sprint 4 stays open |
+| `com.manjul.aikeyboard.isolation.ImeOnlyColdStartTest` | same | PASS on API 37 after the test fix in this commit. It failed first because the test loaded the classes itself: on ART, `ClassLoader.findLoadedClass` falls back to the dex lookup and defines a class that is not loaded yet, so every check for an existing class returned "loaded" (`NativeAdSlot` and `TranslatorScreen` read "not loaded" only because they are file names, not classes). The test now reads loaded classes from a heap dump of its process. A second fault was hidden behind it: API 37 prints `mCurImeId`, not `mCurMethodId`, in `dumpsys input_method`. No production change: no ad class loads in an IME-only process. I.1 of Sprint 4 is closed on API 37; an API 34 run is still to do |
 
 ## D. Dictionary
 
@@ -94,10 +94,8 @@ Result cell starts empty.
 
 ## Open issues
 
-- `ImeOnlyColdStartTest` fails on API 37 at its first assertion, before the test types anything: the GMA classes are
-  loaded when the instrumentation starts the app process. This may be a real regression (the S5 Routes and Dictionary
-  changes pull `app.ads` classes into the app process) or class verification on a newer ART. It needs a look at the
-  classes that load `AdsAppGraph` in a fresh process, and a run on an API 34 emulator to separate the two.
+- `ImeOnlyColdStartTest` passes on API 37 after its test fix (see section C). It has not run on API 34 yet. Run it once
+  on an API 34 emulator to confirm the `mCurMethodId` branch and the heap dump read.
 
 ## Open questions for product
 
