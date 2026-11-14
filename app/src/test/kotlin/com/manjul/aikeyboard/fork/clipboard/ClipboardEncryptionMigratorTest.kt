@@ -173,6 +173,34 @@ class ClipboardEncryptionMigratorTest {
         assertFalse(isPermanentKeyLoss(IllegalStateException()))
     }
 
+    @Test fun `a bad tag with a key store cause is a loss, an unrecoverable key with one is not`() {
+        val badTag = AEADBadTagException().apply { initCause(androidKeyStoreException()) }
+        assertTrue(isPermanentKeyLoss(badTag))
+        assertTrue(isPermanentKeyLoss(IllegalStateException(badTag)))
+        assertTrue(isPermanentKeyLoss(AEADBadTagException().apply { initCause(KeyStoreException()) }))
+        assertFalse(isPermanentKeyLoss(UnrecoverableKeyException().apply { initCause(androidKeyStoreException()) }))
+        assertFalse(isPermanentKeyLoss(UnrecoverableKeyException().apply { initCause(KeyStoreException()) }))
+    }
+
+    @Test fun `a bad tag thrown with a key store cause wipes the history once`() = runBlocking {
+        migrator.migrate()
+        keys.failure = AEADBadTagException().apply { initCause(androidKeyStoreException()) }
+        assertEquals(ClipboardEncryptionMigrator.Result.Lost, migrator.migrate())
+        assertEquals(emptyList(), dao.getAll())
+        assertEquals(1, keys.deletes)
+        assertEquals(1, filesDeleted)
+        assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
+    }
+
+    @Test fun `an unrecoverable key with a framework key store cause wipes nothing`() = runBlocking {
+        migrator.migrate()
+        keys.failure = UnrecoverableKeyException().apply { initCause(androidKeyStoreException()) }
+        assertEquals(ClipboardEncryptionMigrator.Result.NoKey, migrator.migrate())
+        assertEquals(3, dao.getAll().size)
+        assertEquals(0, keys.deletes)
+        assertTrue(ShadowLog.getLogsForTag(ClipboardWipe.TAG).isEmpty())
+    }
+
     @Test fun `a wrapped key store error leaves every row and wipes nothing`() = runBlocking {
         migrator.migrate()
         keys.failure = TestKeys.wrappedKeyStoreError()

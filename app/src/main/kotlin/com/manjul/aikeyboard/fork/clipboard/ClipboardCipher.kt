@@ -39,7 +39,8 @@ sealed interface KeyLookup {
 
 /**
  * True for a real key loss. Only these count:
- * - a bad GCM tag from a present key ([AEADBadTagException])
+ * - a bad GCM tag from a present key ([AEADBadTagException]) anywhere in the cause chain, also with a key store
+ *   error behind it (keystore2 attaches one to a real bad tag)
  * - a [KeyPermanentlyInvalidatedException] anywhere in the cause chain
  * - an [UnrecoverableKeyException] with no key store error in its cause chain
  *
@@ -50,9 +51,11 @@ sealed interface KeyLookup {
  */
 internal fun isPermanentKeyLoss(error: Throwable): Boolean {
     val chain = causeChain(error)
-    if (chain.any { it is KeyPermanentlyInvalidatedException }) return true
+    // keystore2 attaches a KeyStoreException as the cause of a real GCM bad tag, so the bad tag and
+    // invalidation checks run before the key store error rule.
+    if (chain.any { it is AEADBadTagException || it is KeyPermanentlyInvalidatedException }) return true
     if (chain.any(::isKeyStoreError)) return false
-    return chain.any { it is AEADBadTagException || it is UnrecoverableKeyException }
+    return chain.any { it is UnrecoverableKeyException }
 }
 
 /** [KeyLookup.Lost] for a real loss (see [isPermanentKeyLoss]), else [KeyLookup.Unavailable]. */
