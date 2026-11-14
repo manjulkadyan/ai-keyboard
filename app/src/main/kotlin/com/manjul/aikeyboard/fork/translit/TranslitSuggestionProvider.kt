@@ -35,7 +35,7 @@ class TranslitSuggestionProvider(
 
     /** The check `AutocorrectGate` reads on space; `en.sdict` loads on first use (decision 7). */
     val englishCheck = EnglishCheck(
-        english = { graph().englishDictionary() },
+        english = { graph().englishIfLoaded() }, // Never loads on the space path.
         nativeFrequency = { graph().nativeFrequency(it.lang, it.text.toString()) },
     )
 
@@ -64,7 +64,7 @@ class TranslitSuggestionProvider(
         val typed = content.composingText
         if (typed.isEmpty() || !hasLatinLetter(typed)) return emptyList()
         val g = graph()
-        if (typed.length > 2) g.englishDictionary() // Warm it here, off the main thread, for the space gate.
+        g.englishDictionary() // Warm up for the space gate, which only reads it if loaded (also for "ok", "hi").
         val engine = try {
             g.engine(lang)
         } catch (_: IllegalStateException) {

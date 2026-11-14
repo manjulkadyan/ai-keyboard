@@ -135,9 +135,10 @@ object DefinitionCards {
     fun saveMapping() {
         val card = _state.value ?: return
         val candidate = card.mapping ?: return
+        val handler = saveMappingHandler ?: return
         if (card.mappingSaved) return
         _state.value = card.copy(mappingSaved = true)
-        saveMappingHandler?.invoke(candidate)
+        handler(candidate)
     }
 
     /**
@@ -191,6 +192,7 @@ fun BoxScope.DefinitionCardOverlay() {
             },
             onRemove = DefinitionCards::removeSuggestion,
             onSaveMapping = DefinitionCards::saveMapping,
+            canSave = DefinitionCards.saveMappingHandler != null,
             onClose = DefinitionCards::dismiss,
         )
     }
@@ -204,6 +206,7 @@ internal fun DefinitionCardContent(
     onRemove: () -> Unit,
     onClose: () -> Unit,
     onSaveMapping: () -> Unit = {},
+    canSave: Boolean = true,
 ) {
     val color = LocalContentColor.current
     Column(
@@ -230,7 +233,7 @@ internal fun DefinitionCardContent(
                     Text(stringRes(R.string.dictionary__card_remove))
                 }
             }
-            if (ui.mapping != null) {
+            if (ui.mapping != null && canSave) {
                 if (ui.mappingSaved) {
                     Text(stringRes(R.string.translit__mapping_saved), color = color)
                 } else {

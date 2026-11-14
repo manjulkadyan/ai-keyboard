@@ -35,7 +35,7 @@ open class TranslitGraph(
     private val engines = HashMap<TranslitLang, TranslitEngine>()
     private val lexicons = ConcurrentHashMap<TranslitLang, SdictLexicon>()
     private val englishLock = Any()
-    private var english: SuggestDictionary? = null
+    @Volatile private var english: SuggestDictionary? = null
     private var englishTried = false
     private val loadMutex = Mutex()
 
@@ -64,9 +64,12 @@ open class TranslitGraph(
     /** The native lexicon frequency of [word] once the engine for [lang] is loaded, else null. */
     fun nativeFrequency(lang: TranslitLang, word: String): Int? = lexicons[lang]?.frequency(word)
 
+    /** `en.sdict` if a warm-up already loaded it, else null. Never loads and never blocks: safe on the space path. */
+    fun englishIfLoaded(): SuggestDictionary? = english
+
     /**
-     * `en.sdict`, loaded once on first use (decision 7). Null when it is missing or unreadable; that is remembered, so
-     * a bad file is not re-read on every word. Blocking: the provider warms it off the main thread.
+     * Warm-up: `en.sdict`, loaded once on first use (decision 7). Null when it is missing or unreadable; that is remembered, so
+     * a bad file is not re-read on every word. Blocking: only the suggestion path calls it, never the space gate.
      */
     open fun englishDictionary(): SuggestDictionary? = synchronized(englishLock) {
         if (!englishTried) {

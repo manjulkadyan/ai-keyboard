@@ -7,7 +7,11 @@ package com.manjul.aikeyboard.fork.translit
 
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
+import com.manjul.aikeyboard.fork.suggest.SuggestContext
+import com.manjul.aikeyboard.ime.policy.FieldDescriptor
+import com.manjul.aikeyboard.ime.policy.PolicyContext
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
+import com.manjul.aikeyboard.ime.policy.SensitiveFieldPolicy
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -26,8 +30,19 @@ class TranslitFieldRulesTest {
 
     @Test fun `plain text allows`() = assertTrue(allows(text))
 
-    @Test fun `the no personalized learning flag alone allows`() =
-        assertTrue(allows(text, EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING))
+    @Test fun `the no personalized learning flag blocks through the real policy`() {
+        val options = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+        val decision = SensitiveFieldPolicy.evaluate(
+            FieldDescriptor(null, text, options, null, null),
+            PolicyContext(false, false, emptySet(), emptySet()),
+        )
+        // The rule ignores imeOptions itself; the policy marks the field sensitive and the decision blocks it.
+        assertFalse(allows(text, options, decision))
+        val context = SuggestContext()
+        context.update(EditorInfo().apply { inputType = text; imeOptions = options }, decision)
+        assertFalse(context.fieldAllowsTranslitCommit)
+        assertFalse(context.allowSuggestions)
+    }
 
     @Test fun `password variations block`() {
         assertFalse(allows(text or InputType.TYPE_TEXT_VARIATION_PASSWORD))

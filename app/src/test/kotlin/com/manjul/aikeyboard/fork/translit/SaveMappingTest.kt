@@ -108,6 +108,25 @@ class SaveMappingTest {
         assertEquals(1, saved)
     }
 
+    @Test fun `without a handler the action is hidden and nothing shows saved`() {
+        field()
+        DefinitionCards.saveMappingHandler = null
+        val lookup = LookupResult(emptyList(), offline = true, attribution = null)
+        DefinitionCards.show("کیا", false, lookup = { lookup }, remove = { false }, mapping = candidate())
+        DefinitionCards.saveMapping()
+        assertEquals(false, DefinitionCards.state.value?.mappingSaved)
+        val handler: ((TranslitCandidate) -> Unit)? = DefinitionCards.saveMappingHandler
+        compose.setContent {
+            ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
+                DefinitionCardContent(
+                    ui = DefinitionCardUi("کیا", learned = false, mapping = candidate()),
+                    onMore = {}, onRemove = {}, onClose = {}, canSave = handler != null,
+                )
+            }
+        }
+        compose.onNodeWithText("Save mapping").assertDoesNotExist()
+    }
+
     @Test fun `the card saves through the handler once and then shows Mapping saved`() {
         field()
         val saved = mutableListOf<TranslitCandidate>()

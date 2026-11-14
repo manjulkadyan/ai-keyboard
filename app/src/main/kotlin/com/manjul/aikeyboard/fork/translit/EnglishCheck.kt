@@ -12,7 +12,8 @@ import com.manjul.aikeyboard.core.translit.Source
  * Keeps a common English word ("phone", "meeting") as Latin instead of turning it into a native word on space. The
  * Roman word is user content: nothing here logs it.
  *
- * @param english the shipped `en.sdict`, or null when it is missing or unreadable (then nothing is kept as Latin).
+ * @param english the shipped `en.sdict` if it is already loaded, else null (then nothing is kept as Latin). It must
+ * never load or block: `keepsLatin` runs on the space path.
  * @param nativeFrequency the lexicon frequency (1..255) of a native candidate, or null when unknown.
  */
 class EnglishCheck(
