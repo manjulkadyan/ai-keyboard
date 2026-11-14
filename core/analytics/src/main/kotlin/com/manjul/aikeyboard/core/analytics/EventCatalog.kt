@@ -64,6 +64,7 @@ object EventCatalog {
     const val DELETE_DATA = "delete_data"
     const val DICTIONARY_LOOKUP = "dictionary_lookup"
     const val STICKER_SEND = "sticker_send"
+    const val TRANSLIT_COMMIT = "translit_commit"
 
     /** User property: one of [ProStatus]. */
     const val USER_PROPERTY_PRO_STATUS = "pro_status"
@@ -116,6 +117,7 @@ object EventCatalog {
         DELETE_DATA to emptySet(),
         DICTIONARY_LOOKUP to setOf("offline", "found"),
         STICKER_SEND to setOf("pack_id", "premium", "method"),
+        TRANSLIT_COMMIT to setOf("lang", "source"),
     )
 
     val allNames: List<String> = paramRegistry.keys.toList()
@@ -324,6 +326,14 @@ object EventCatalog {
         "premium" to premium,
         "method" to method.value,
     )
+
+    /**
+     * One Roman typing commit (S6, PRD FR-24 and §12): a transliteration chip picked, or a space that
+     * committed one. [lang] is the native language tag ("ur" or "hi"). Callers sample it at 1%. The Roman
+     * word, the committed text and their lengths are never sent.
+     */
+    fun translitCommit(lang: String, source: TranslitCommitSource) =
+        event(TRANSLIT_COMMIT, "lang" to tag(lang), "source" to source.value)
 
     /**
      * The ad SDK reported revenue for one impression (S4 Task 7, GMA `OnPaidEventListener`). [placement] is a

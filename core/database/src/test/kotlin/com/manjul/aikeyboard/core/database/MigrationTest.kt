@@ -50,6 +50,19 @@ class MigrationTest {
         db.execSQL("INSERT INTO user_word (locale, word, count, last_used_at, blocked) VALUES ('en', 'zork', 3, 9, 0)")
     }
 
+    private fun createV3(file: File) = create(file, 3) { db ->
+        db.execSQL(
+            "INSERT INTO translation_history (source_text, target_text, source_lang, target_lang, engine, " +
+                "origin, is_favorite, created_at) VALUES ('hello', 'hola', 'en', 'es', 'mlkit', 'text', 1, 42)",
+        )
+        db.execSQL("INSERT INTO user_word (locale, word, count, last_used_at, blocked) VALUES ('en', 'zork', 3, 9, 0)")
+        db.execSQL(
+            "INSERT INTO user_phrase (text, translation, target_lang, created_at, updated_at) " +
+                "VALUES ('on my way', NULL, NULL, 1, 2)",
+        )
+        db.execSQL("INSERT INTO phrase_favourite (phrase_ref, created_at) VALUES ('c:1', 5)")
+    }
+
     /** Creates [file] with the exact SQL of `schemas/.../<version>.json`, then runs [rows] on it. */
     private fun create(file: File, version: Int, rows: (SQLiteDatabase) -> Unit) {
         val json = File(schemaDir, "$version.json").readText()
@@ -113,7 +126,7 @@ class MigrationTest {
                 assertEquals(listOf("zork"), words.map { it.word })
                 assertEquals(3, words[0].count)
                 val sql = db.openHelper.readableDatabase
-                assertEquals(3, sql.version)
+                assertEquals(AppDatabase.VERSION, sql.version)
 
                 val tables = sql.query("SELECT name FROM sqlite_master WHERE type = 'table'").use { c ->
                     buildSet { while (c.moveToNext()) add(c.getString(0)) }
@@ -128,6 +141,36 @@ class MigrationTest {
                 // The new tables work after the migration.
                 db.phraseDao().toggleFavourite("c:1", now = 1)
                 assertEquals(true, db.phraseDao().isFavourite("c:1"))
+            } finally {
+                db.close()
+                file.delete()
+            }
+        }
+
+    @Test fun `v3 with rows in the S5 tables migrates to v4, keeps them and adds an empty translit_mapping`() =
+        runBlocking {
+            assertEquals(true, File(schemaDir, "4.json").isFile, "schema 4 must be exported")
+            val file = app.getDatabasePath("migration_test_v3.db").apply { parentFile?.mkdirs(); delete() }
+            createV3(file)
+
+            val db = Room.databaseBuilder(app, AppDatabase::class.java, file.absolutePath)
+                .allowMainThreadQueries()
+                .build()
+            try {
+                assertEquals(listOf("on my way"), db.phraseDao().observePhrases().first().map { it.text })
+                assertEquals(listOf("c:1"), db.phraseDao().observeFavourites().first().map { it.phraseRef })
+                assertEquals(listOf("zork"), db.userWordDao().words("en").map { it.word })
+                assertEquals(
+                    listOf("hello"),
+                    db.translationHistoryDao().observe(null, favoritesOnly = false, limit = 10).first()
+                        .map { it.sourceText },
+                )
+                val sql = db.openHelper.readableDatabase
+                assertEquals(4, sql.version)
+                assertEquals(emptyList(), db.translitMappingDao().all("ur"))
+                db.translitMappingDao()
+                    .upsert(TranslitMappingEntity(lang = "ur", roman = "kya", native = "x", createdAt = 1))
+                assertEquals(1, db.translitMappingDao().all("ur").size)
             } finally {
                 db.close()
                 file.delete()

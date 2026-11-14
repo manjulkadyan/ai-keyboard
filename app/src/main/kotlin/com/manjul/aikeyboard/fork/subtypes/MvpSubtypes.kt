@@ -21,9 +21,14 @@ fun missingSubtypeTags(existing: List<FlorisLocale>, wanted: List<String>): List
     return wanted.filter { taken.add(FlorisLocale.fromTag(it)) }
 }
 
-/** Preset for [locale]: exact locale match first, then any preset of the same language. */
+/**
+ * Preset for [locale]: exact locale match first, then any preset of the same language. The language fallback skips
+ * presets whose locale has a variant (the Roman subtypes `ur-PK-roman`, `hi-IN-roman`), so a plain `ur` or `hi`
+ * never gets a Roman preset.
+ */
 fun findPreset(presets: List<SubtypePreset>?, locale: FlorisLocale): SubtypePreset? =
-    presets?.find { it.locale == locale } ?: presets?.find { it.locale.language == locale.language }
+    presets?.find { it.locale == locale }
+        ?: presets?.find { it.locale.language == locale.language && it.locale.base.variant.isEmpty() }
 
 /**
  * [current] plus one subtype per missing tag of [tags], built from [presets] in tag order. Tags without a

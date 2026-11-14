@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S6-translit): Roman subtypes (see docs/FORK_PATCHES.md)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +41,7 @@ import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.app.enumDisplayEntriesOf
+import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider // FORK(S6-translit): Beta label
 import com.manjul.aikeyboard.ime.core.DisplayLanguageNamesIn
 import com.manjul.aikeyboard.ime.core.Subtype
 import com.manjul.aikeyboard.ime.keyboard.LayoutType
@@ -114,6 +116,12 @@ fun LocalizationScreen() = FlorisScreen {
                 navController.navigate(Routes.Settings.LanguagePackManager(LanguagePackManagerScreenAction.MANAGE))
             },
         )
+        // FORK(S6-translit): Roman typing (Beta) settings: the user's own Roman to native words
+        Preference(
+            title = stringRes(R.string.roman_typing__entry),
+            summary = stringRes(R.string.roman_typing__entry_summary),
+            onClick = { navController.navigate(Routes.Settings.RomanTyping) },
+        )
         PreferenceGroup(title = stringRes(R.string.settings__localization__group_subtypes__label)) {
             val subtypes by subtypeManager.subtypesFlow.collectAsState()
             if (subtypes.isEmpty()) {
@@ -135,11 +143,22 @@ fun LocalizationScreen() = FlorisScreen {
                         "symbols_name" to (sMeta?.label ?: "null"),
                         "currency_set_name" to (currMeta?.label ?: "null"),
                     )
+                    val name = when (displayLanguageNamesIn) {
+                        DisplayLanguageNamesIn.SYSTEM_LOCALE -> subtype.primaryLocale.displayName()
+                        DisplayLanguageNamesIn.NATIVE_LOCALE -> subtype.primaryLocale.displayName(subtype.primaryLocale)
+                    }
+                    // FORK(S6-translit): the Roman subtypes are labelled Beta
+                    val title = if (subtype.nlpProviders.suggestion == TranslitSuggestionProvider.ProviderId) {
+                        stringRes(
+                            R.string.translit__subtype_with_beta,
+                            "name" to name,
+                            "beta" to stringRes(R.string.subtype__beta_label),
+                        )
+                    } else {
+                        name
+                    }
                     Preference(
-                        title = when (displayLanguageNamesIn) {
-                            DisplayLanguageNamesIn.SYSTEM_LOCALE -> subtype.primaryLocale.displayName()
-                            DisplayLanguageNamesIn.NATIVE_LOCALE -> subtype.primaryLocale.displayName(subtype.primaryLocale)
-                        },
+                        title = title,
                         summary = summary,
                         modifier = Modifier.combinedClickable(
                             onClick = {

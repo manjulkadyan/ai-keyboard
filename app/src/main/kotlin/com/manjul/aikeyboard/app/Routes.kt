@@ -81,6 +81,7 @@ import com.manjul.aikeyboard.fork.settings.OfflineLanguagesScreen // FORK(S2-pac
 import com.manjul.aikeyboard.fork.translator.HistoryScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.translator.TranslatorScreen // FORK(S2-translator)
 import com.manjul.aikeyboard.fork.dictionary.DictionaryLookupScreen // FORK(S5-dict)
+import com.manjul.aikeyboard.fork.translit.RomanTypingScreen // FORK(S6-translit)
 import com.manjul.aikeyboard.fork.phrasebook.PhrasebookScreen // FORK(S5-phrasebook)
 import com.manjul.aikeyboard.fork.paywall.PaywallRoute // FORK(S4-paywall)
 import com.manjul.aikeyboard.fork.paywall.PaywallTrigger // FORK(S4-paywall)
@@ -256,6 +257,11 @@ object Routes {
         @Serializable
         @Deeplink("settings/ai")
         object Ai
+
+        // FORK(S6-translit): Roman typing (Beta), the user's own Roman to native words
+        @Serializable
+        @Deeplink("settings/roman-typing")
+        object RomanTyping
 
         @Serializable
         @Deeplink("settings/typing")
@@ -448,6 +454,7 @@ object Routes {
                 AiSettingsScreen(isPro = remember(store) { proGate(store) })
             }
 
+            composableWithDeepLink(Settings.RomanTyping::class) { RomanTypingScreen() } // FORK(S6-translit)
             composableWithDeepLink(Settings.Typing::class) { TypingScreen() }
 
             composableWithDeepLink(Settings.Dictionary::class) { DictionaryScreen() }

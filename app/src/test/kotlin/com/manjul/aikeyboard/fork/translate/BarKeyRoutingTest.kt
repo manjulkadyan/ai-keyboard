@@ -13,7 +13,9 @@ import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.translate.EngineId
 import com.manjul.aikeyboard.core.translate.Lang
 import com.manjul.aikeyboard.core.translate.TranslateResult
+import com.manjul.aikeyboard.core.translit.TranslitLang
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
+import com.manjul.aikeyboard.fork.translit.BarTranslitControllerTest
 import com.manjul.aikeyboard.ime.text.key.KeyCode
 import com.manjul.aikeyboard.ime.translateui.BarUiState
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -35,7 +37,7 @@ import kotlin.test.assertTrue
 class BarKeyRoutingTest {
     private val app = RuntimeEnvironment.getApplication()
 
-    private class Rig(scope: TestScope, app: android.app.Application) {
+    private class Rig(scope: TestScope, app: android.app.Application, translit: TranslitLang? = null) {
         val edit = EditText(app).apply {
             setText("host text")
             setSelection(4)
@@ -58,18 +60,23 @@ class BarKeyRoutingTest {
             engine = { req, _, _ -> TranslateResult.Ok("t:${req.text}", Lang.English, EngineId.MLKIT) },
             cache = { null },
             openOfflineLanguages = {},
+            translitLang = { translit },
+            translitGraph = { BarTranslitControllerTest.FakeGraph(setOf("क्या")) },
+            translitCompute = StandardTestDispatcher(scope.testScheduler),
         )
         val input get() = (session.ui as? BarUiState.Open)?.input
         val host get() = edit.text.toString()
     }
 
-    private fun run(block: suspend TestScope.(Rig) -> Unit) = runTest(StandardTestDispatcher()) {
-        val r = Rig(this, app)
-        r.policy.onStartInput(EditorInfo().apply { packageName = "some.app"; inputType = InputType.TYPE_CLASS_TEXT }, false)
-        r.session.toggle()
-        runCurrent()
-        block(r)
-    }
+    private fun run(translit: TranslitLang? = null, block: suspend TestScope.(Rig) -> Unit) =
+        runTest(StandardTestDispatcher()) {
+            val r = Rig(this, app, translit)
+            val field = EditorInfo().apply { packageName = "some.app"; inputType = InputType.TYPE_CLASS_TEXT }
+            r.policy.onStartInput(field, false)
+            r.session.toggle()
+            runCurrent()
+            block(r)
+        }
 
     private fun key(event: Int, code: Int, meta: Int = 0) = KeyEvent(0, 0, KeyEvent.ACTION_DOWN, code, 0, meta)
 
@@ -137,5 +144,39 @@ class BarKeyRoutingTest {
         assertFalse(BarKeyRouter.onPaste(r.session, "x"))
         assertFalse(BarKeyRouter.onHardwareKey(r.session, KeyEvent.KEYCODE_A, key(0, KeyEvent.KEYCODE_A)))
         assertFalse(BarKeyRouter.onKey(null, 'a'.code, "a"))
+    }
+
+    @Test fun aRomanSubtypeSendsLettersSpaceAndBackspaceThroughTheTransliterator() = run(TranslitLang.HI) { r ->
+        for (ch in "kya") assertTrue(BarKeyRouter.onKey(r.session, ch.code, ch.toString()))
+        runCurrent()
+        assertEquals("क्या", r.session.barTranslit?.candidates?.value?.first()?.text)
+        assertTrue(BarKeyRouter.onKey(r.session, KeyCode.SPACE, null))
+        runCurrent()
+        assertEquals("क्या ", r.input)
+        assertTrue(BarKeyRouter.onKey(r.session, KeyCode.DELETE, null))
+        runCurrent()
+        assertEquals("kya", r.input)
+        assertTrue(BarKeyRouter.onHardwareKey(r.session, KeyEvent.KEYCODE_SPACE, key(0, KeyEvent.KEYCODE_SPACE)))
+        runCurrent()
+        assertEquals("क्या ", r.input)
+        assertEquals("host text", r.host)
+    }
+
+    @Test fun aFieldChangeWhileTheBarIsOpenClearsTheRomanStrip() = run(TranslitLang.HI) { r ->
+        for (ch in "kya") assertTrue(BarKeyRouter.onKey(r.session, ch.code, ch.toString()))
+        runCurrent()
+        assertTrue(r.session.barTranslit?.candidates?.value.orEmpty().isNotEmpty())
+        val next = EditorInfo().apply { packageName = "other.app"; inputType = InputType.TYPE_CLASS_TEXT }
+        r.policy.onStartInput(next, false)
+        runCurrent()
+        assertTrue(r.session.barTranslit?.candidates?.value.isNullOrEmpty())
+    }
+
+    @Test fun anEnglishSubtypeKeepsTheS2Path() = run(null) { r ->
+        for (ch in "kya") assertTrue(BarKeyRouter.onKey(r.session, ch.code, ch.toString()))
+        assertTrue(BarKeyRouter.onKey(r.session, KeyCode.SPACE, null))
+        runCurrent()
+        assertEquals("kya ", r.input)
+        assertTrue(r.session.barTranslit?.candidates?.value.isNullOrEmpty())
     }
 }

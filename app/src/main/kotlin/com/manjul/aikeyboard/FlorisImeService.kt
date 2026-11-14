@@ -136,6 +136,9 @@ import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
 import com.manjul.aikeyboard.core.datastore.isProAt // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.themes.PremiumThemeGuard // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.perf.ImeTrace // FORK(S4-perf)
+import com.manjul.aikeyboard.fork.translit.SaveMappingHandler // FORK(S6-translit)
+import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider // FORK(S6-translit)
+import kotlinx.coroutines.Dispatchers // FORK(S6-translit)
 import kotlinx.coroutines.flow.first // FORK(S4-themes)
 import kotlinx.coroutines.launch // FORK(S4-themes)
 import java.lang.ref.WeakReference
@@ -344,6 +347,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     // cached. FORK(S4-rc): forced packages are the `policy_force_sensitive_packages` kill switch, read from the
     // Remote Config mirror on each evaluation (the IME never talks to Firebase).
     private lateinit var policyController: ImePolicyController
+    private var saveMappingHandler: SaveMappingHandler? = null // FORK(S6-translit)
     // FORK(S1-voice): in-keyboard voice typing; cancelled by every policy restriction and when the keyboard hides
     private lateinit var voiceSession: VoiceImeSession
     // FORK(S2-bar): the Translate bar; closed by every policy restriction, on hide and on field change. Its
@@ -382,6 +386,14 @@ class FlorisImeService : LifecycleInputMethodService() {
         )
         // Settings can arrive after the field started: recompute the editor state from the new decision.
         policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
+        // FORK(S6-translit): the card's "Save mapping" writes the user's Roman mapping (re-checks at tap time)
+        val saveHandler = SaveMappingHandler(
+            repository = { translitMappings().value },
+            scope = lifecycleScope,
+            io = Dispatchers.IO,
+        )
+        saveMappingHandler = saveHandler
+        DefinitionCards.saveMappingHandler = saveHandler
         // FORK(S3-suggest): suggestions, autocorrect and learning follow every decision for the current field
         policyController.decision.collectIn(lifecycleScope) { suggestContext().onDecision(it) }
         // FORK(S1-policy): an open clipboard history panel closes when the field turns more restrictive
@@ -412,6 +424,8 @@ class FlorisImeService : LifecycleInputMethodService() {
             scope = lifecycleScope,
             subtypeLang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
             beforeToggle = { voiceSession.controller.cancel(EndReason.FIELD_CHANGE.value) },
+            // FORK(S6-translit): Roman typing in the bar follows the active Roman subtype
+            translitLang = { TranslitSuggestionProvider.romanLangOf(subtypeManager.activeSubtype) },
         )
         // FORK(S3-ai): see the aiSession declaration
         aiSession = AiImeSession(
@@ -526,6 +540,8 @@ class FlorisImeService : LifecycleInputMethodService() {
         voiceSession.destroy() // FORK(S1-voice)
         translateSession.destroy() // FORK(S2-bar)
         aiSession.onDestroy() // FORK(S3-ai)
+        // FORK(S6-translit): clear the save handler only if it is still this service's
+        if (DefinitionCards.saveMappingHandler === saveMappingHandler) DefinitionCards.saveMappingHandler = null
         stickersSession.close() // FORK(S5-stickers)
         inputFeedbackController.release() // FORK(S4-themes): the key sound pool
         FlorisImeServiceReference = WeakReference(null)

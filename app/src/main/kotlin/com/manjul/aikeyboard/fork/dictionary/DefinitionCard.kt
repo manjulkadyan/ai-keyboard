@@ -38,6 +38,8 @@ import com.manjul.aikeyboard.dictionary
 import com.manjul.aikeyboard.fork.routes.AppIntents
 import com.manjul.aikeyboard.fork.routes.RouteRegistry
 import com.manjul.aikeyboard.fork.suggest.LatinWordCandidate
+import com.manjul.aikeyboard.fork.translit.TranslitCandidate
+import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider
 import com.manjul.aikeyboard.fork.voice.BackDismisses
 import com.manjul.aikeyboard.ime.nlp.ClipboardSuggestionCandidate
 import com.manjul.aikeyboard.ime.nlp.EmojiSuggestionCandidate
@@ -62,6 +64,11 @@ data class DefinitionCardUi(
     /** A learned word: the card offers "Remove suggestion" (plan decision 21). */
     val learned: Boolean,
     val result: LookupResult? = null,
+    /** A native transliteration candidate the card may save as a mapping (S6), else null. */
+    val mapping: TranslitCandidate? = null,
+    val mappingSaved: Boolean = false,
+    /** The last "Save mapping" was blocked or failed: the card says "Not saved" and offers the action again. */
+    val mappingFailed: Boolean = false,
 ) {
     val first: Definition? get() = result?.definitions?.firstOrNull()
 
@@ -82,15 +89,26 @@ object DefinitionCards {
 
     private var job: Job? = null
     private var remove: (() -> Boolean)? = null
+    @Volatile private var saving = false
+
+    /** Saves a mapping for a native transliteration candidate. The second argument reports whether it was written. */
+    @Volatile var saveMappingHandler: ((TranslitCandidate, (Boolean) -> Unit) -> Unit)? = null
 
     /**
      * Opens the card for [word]. [remove] is upstream's suggestion removal, offered only when [learned]. [lookup] is
      * the offline lookup.
      */
-    fun show(word: String, learned: Boolean, lookup: suspend (String) -> LookupResult, remove: () -> Boolean) {
+    fun show(
+        word: String,
+        learned: Boolean,
+        lookup: suspend (String) -> LookupResult,
+        remove: () -> Boolean,
+        mapping: TranslitCandidate? = null,
+    ) {
         job?.cancel()
+        saving = false
         this.remove = if (learned) remove else null
-        _state.value = DefinitionCardUi(word = word, learned = learned)
+        _state.value = DefinitionCardUi(word = word, learned = learned, mapping = mapping)
         job = scope.launch {
             val result = lookup(word)
             _state.update { if (it?.word == word) it.copy(result = result) else it }
@@ -111,6 +129,25 @@ object DefinitionCards {
         action?.invoke()
     }
 
+    /** The candidate "Save mapping" applies to: native only, and only where learning is allowed. */
+    internal fun mappingFor(candidate: SuggestionCandidate): TranslitCandidate? =
+        (candidate as? TranslitCandidate)?.takeIf {
+            !it.latin && (it.sourceProvider as? TranslitSuggestionProvider)?.canSaveMapping() == true
+        }
+
+    /** "Save mapping": hands the candidate to [saveMappingHandler], once per card. */
+    fun saveMapping() {
+        val card = _state.value ?: return
+        val candidate = card.mapping ?: return
+        val handler = saveMappingHandler ?: return
+        if (card.mappingSaved || saving) return
+        saving = true
+        handler(candidate) { ok ->
+            saving = false
+            _state.update { if (it?.mapping === candidate) it.copy(mappingSaved = ok, mappingFailed = !ok) else it }
+        }
+    }
+
     /**
      * The suggestion strip's long-press. A word suggestion opens the card and returns true. Clipboard and emoji
      * suggestions return null, so the caller keeps upstream's behaviour.
@@ -123,7 +160,14 @@ object DefinitionCards {
             runCatching { context.userWordRepository().value.boost(candidate.language, word.lowercase()) > 0 }
                 .getOrDefault(false)
         val app = context.applicationContext
-        show(word, learned, lookup = { app.dictionary().value.repository.lookupOffline(it) }, remove = remove)
+        // "Save mapping" shows only for a native candidate, and only where learning is allowed.
+        show(
+            word,
+            learned,
+            lookup = { app.dictionary().value.repository.lookupOffline(it) },
+            remove = remove,
+            mapping = mappingFor(candidate),
+        )
         return true
     }
 }
@@ -154,6 +198,8 @@ fun BoxScope.DefinitionCardOverlay() {
                 }
             },
             onRemove = DefinitionCards::removeSuggestion,
+            onSaveMapping = DefinitionCards::saveMapping,
+            canSave = DefinitionCards.saveMappingHandler != null,
             onClose = DefinitionCards::dismiss,
         )
     }
@@ -166,6 +212,8 @@ internal fun DefinitionCardContent(
     onMore: () -> Unit,
     onRemove: () -> Unit,
     onClose: () -> Unit,
+    onSaveMapping: () -> Unit = {},
+    canSave: Boolean = true,
 ) {
     val color = LocalContentColor.current
     Column(
@@ -190,6 +238,16 @@ internal fun DefinitionCardContent(
             if (ui.learned) {
                 TextButton(onClick = onRemove, colors = buttons) {
                     Text(stringRes(R.string.dictionary__card_remove))
+                }
+            }
+            if (ui.mapping != null && canSave) {
+                if (ui.mappingSaved) {
+                    Text(stringRes(R.string.translit__mapping_saved), color = color)
+                } else {
+                    if (ui.mappingFailed) Text(stringRes(R.string.translit__mapping_not_saved), color = color)
+                    TextButton(onClick = onSaveMapping, colors = buttons) {
+                        Text(stringRes(R.string.translit__save_mapping))
+                    }
                 }
             }
             TextButton(onClick = onClose, colors = buttons) { Text(stringRes(R.string.dictionary__card_close)) }

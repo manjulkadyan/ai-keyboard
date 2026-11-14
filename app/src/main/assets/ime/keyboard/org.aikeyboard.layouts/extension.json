@@ -27,5 +27,29 @@
         "direction": "ltr"
       }
     ]
-  }
+  },
+  "subtypePresets": [
+    {
+      "languageTag": "ur-PK-roman",
+      "composer": "org.florisboard.composers:appender",
+      "nlpProviders": {
+        "spelling": "org.florisboard.nlp.providers.fallback",
+        "suggestion": "com.manjul.aikeyboard.nlp.providers.translit"
+      },
+      "currencySet": "org.florisboard.currencysets:pakistani_rupee",
+      "popupMapping": "org.florisboard.localization:ur-PK",
+      "preferred": { "characters": "org.florisboard.layouts:qwerty" }
+    },
+    {
+      "languageTag": "hi-IN-roman",
+      "composer": "org.florisboard.composers:appender",
+      "nlpProviders": {
+        "spelling": "org.florisboard.nlp.providers.fallback",
+        "suggestion": "com.manjul.aikeyboard.nlp.providers.translit"
+      },
+      "currencySet": "org.florisboard.currencysets:indian_rupee",
+      "popupMapping": "org.florisboard.localization:hi-IN",
+      "preferred": { "characters": "org.florisboard.layouts:qwerty" }
+    }
+  ]
 }

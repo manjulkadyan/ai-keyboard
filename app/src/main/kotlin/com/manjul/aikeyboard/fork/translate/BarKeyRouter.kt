@@ -15,6 +15,9 @@ import com.manjul.aikeyboard.ime.text.key.KeyCode
  * Keys that could change or delete host text without the bar (forward delete, cut, undo, redo, select) are
  * swallowed. Each function returns true when it consumed the input; the caller then does nothing else.
  * Everything else (shift, layout switches, the mic and Translate chips, arrows, hide) keeps working as usual.
+ *
+ * In a Roman subtype (S6), letters, space and backspace go through [TranslateImeSession.barTranslit] instead, which
+ * transliterates the word in progress; with any other subtype it declines and the S2 path below runs unchanged.
  */
 object BarKeyRouter {
     /** Keys that would edit or select host text behind the bar: consumed and ignored while the bar is open. */
@@ -35,13 +38,20 @@ object BarKeyRouter {
     fun onKey(bar: TranslateImeSession?, code: Int, text: String?): Boolean {
         if (bar == null || !bar.capturingInput) return false
         val buffer = bar.controller.buffer
+        val translit = bar.barTranslit
         when (code) {
-            KeyCode.DELETE -> buffer.backspace()
-            KeyCode.DELETE_WORD -> buffer.deleteWord()
+            KeyCode.DELETE -> if (translit?.onBackspace() != true) buffer.backspace()
+            KeyCode.DELETE_WORD -> {
+                translit?.reset()
+                buffer.deleteWord()
+            }
             KeyCode.ENTER -> bar.insert()
-            KeyCode.SPACE, KeyCode.CJK_SPACE -> buffer.type(" ")
+            KeyCode.SPACE, KeyCode.CJK_SPACE -> if (translit?.onSpace() != true) buffer.type(" ")
             in Swallowed -> Unit
-            else -> if (!text.isNullOrEmpty()) buffer.type(text) else return false
+            else -> when {
+                text.isNullOrEmpty() -> return false
+                translit?.onLetter(text) != true -> buffer.type(text)
+            }
         }
         return true
     }
@@ -49,6 +59,7 @@ object BarKeyRouter {
     /** A suggestion tap or a glide word: appended as its own word. */
     fun onWord(bar: TranslateImeSession?, word: String): Boolean {
         if (bar == null || !bar.capturingInput) return false
+        bar.barTranslit?.reset()
         val buffer = bar.controller.buffer
         val current = buffer.text.value
         buffer.type(if (current.isEmpty() || current.last().isWhitespace()) word else " $word")
@@ -58,6 +69,7 @@ object BarKeyRouter {
     /** A paste (clipboard key, history item, clipboard suggestion). [text] is null for images and video: dropped. */
     fun onPaste(bar: TranslateImeSession?, text: String?): Boolean {
         if (bar == null || !bar.capturingInput) return false
+        bar.barTranslit?.reset()
         if (!text.isNullOrEmpty()) bar.controller.buffer.paste(text)
         return true
     }
@@ -66,17 +78,19 @@ object BarKeyRouter {
     fun onHardwareKey(bar: TranslateImeSession?, keyCode: Int, event: KeyEvent?): Boolean {
         if (bar == null || !bar.capturingInput) return false
         val buffer = bar.controller.buffer
+        val translit = bar.barTranslit
         when (keyCode) {
-            KeyEvent.KEYCODE_DEL -> buffer.backspace()
+            KeyEvent.KEYCODE_DEL -> if (translit?.onBackspace() != true) buffer.backspace()
             KeyEvent.KEYCODE_FORWARD_DEL -> Unit
             KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> bar.insert()
-            KeyEvent.KEYCODE_SPACE -> buffer.type(" ")
+            KeyEvent.KEYCODE_SPACE -> if (translit?.onSpace() != true) buffer.type(" ")
             // API 33+ closes the bar through the predictive back callback (SmartbarTranslateBar).
             KeyEvent.KEYCODE_BACK -> if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) bar.close() else return false
             else -> {
                 val ch = event?.unicodeChar ?: 0
                 if (ch <= 0 || event?.isCtrlPressed == true || event?.isAltPressed == true) return false
-                buffer.type(String(Character.toChars(ch)))
+                val typed = String(Character.toChars(ch))
+                if (translit?.onLetter(typed) != true) buffer.type(typed)
             }
         }
         return true

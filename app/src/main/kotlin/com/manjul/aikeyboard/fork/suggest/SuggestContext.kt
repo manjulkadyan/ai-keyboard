@@ -6,6 +6,7 @@
 package com.manjul.aikeyboard.fork.suggest
 
 import android.view.inputmethod.EditorInfo
+import com.manjul.aikeyboard.fork.translit.TranslitFieldRules
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 
 /**
@@ -15,6 +16,9 @@ import com.manjul.aikeyboard.ime.policy.PolicyDecision
  */
 class SuggestContext {
     @Volatile var fieldAllowsAutocorrect: Boolean = false
+
+    /** A space may commit a native transliteration candidate here (plan decision 8). */
+    @Volatile var fieldAllowsTranslitCommit: Boolean = false
     @Volatile var allowLearning: Boolean = false
     @Volatile var allowSuggestions: Boolean = false
 
@@ -45,6 +49,7 @@ class SuggestContext {
     /** The decision for the current field changed (settings arrived, incognito toggled, field closed). */
     fun onDecision(decision: PolicyDecision) {
         fieldAllowsAutocorrect = hasField && FieldAutocorrectRules.allows(inputType, imeOptions, decision)
+        fieldAllowsTranslitCommit = hasField && TranslitFieldRules.allowsSpaceCommit(inputType, imeOptions, decision)
         val learning = hasField && decision.allowLearning
         if (allowLearning && !learning) epoch++
         allowLearning = learning
@@ -58,6 +63,7 @@ class SuggestContext {
         inputType = 0
         imeOptions = 0
         fieldAllowsAutocorrect = false
+        fieldAllowsTranslitCommit = false
         allowLearning = false
         allowSuggestions = false
         allowSuggestionHistory = false

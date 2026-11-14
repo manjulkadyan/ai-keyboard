@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026. FORK(S6-translit): Roman subtypes (see docs/FORK_PATCHES.md)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +22,7 @@ import android.os.SystemClock
 import android.util.LruCache
 import androidx.lifecycle.MutableLiveData
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.appContext // FORK(S6-translit)
 import com.manjul.aikeyboard.clipboardManager
 import com.manjul.aikeyboard.editorInstance
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
@@ -31,6 +33,11 @@ import com.manjul.aikeyboard.ime.editor.EditorRange
 import com.manjul.aikeyboard.ime.media.emoji.EmojiSuggestionProvider
 import com.manjul.aikeyboard.ime.nlp.han.HanShapeBasedLanguageProvider
 import com.manjul.aikeyboard.ime.nlp.latin.LatinLanguageProvider
+import com.manjul.aikeyboard.fork.translit.TranslitAnalytics // FORK(S6-translit)
+import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider // FORK(S6-translit)
+import com.manjul.aikeyboard.suggestContext // FORK(S6-translit)
+import com.manjul.aikeyboard.translitGraph // FORK(S6-translit)
+import com.manjul.aikeyboard.translitMappings // FORK(S6-translit)
 import com.manjul.aikeyboard.keyboardManager
 import com.manjul.aikeyboard.lib.util.NetworkUtils
 import com.manjul.aikeyboard.subtypeManager
@@ -69,6 +76,17 @@ class NlpManager(context: Context) {
         mapOf(
             LatinLanguageProvider.ProviderId to ProviderInstanceWrapper(LatinLanguageProvider(context)),
             HanShapeBasedLanguageProvider.ProviderId to ProviderInstanceWrapper(HanShapeBasedLanguageProvider(context)),
+            // FORK(S6-translit): Roman Urdu and Hinglish suggestions for the opt-in Roman subtypes
+            TranslitSuggestionProvider.ProviderId to ProviderInstanceWrapper(
+                TranslitSuggestionProvider(
+                    graph = { context.translitGraph().value },
+                    context = context.suggestContext(),
+                    isPrivateSession = { keyboardManager.activeState.isIncognitoMode },
+                    loadMappings = { context.translitMappings().value.load(it) },
+                    // FORK(S6-translit): sampled translit_commit through the consent-aware relay
+                    analytics = TranslitAnalytics({ context.appContext().value.analytics.value.log(it) }),
+                ),
+            ),
         )
     }
     // lock unnecessary because values constant

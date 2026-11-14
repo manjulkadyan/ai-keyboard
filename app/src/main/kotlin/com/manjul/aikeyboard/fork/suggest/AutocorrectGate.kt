@@ -5,6 +5,9 @@
 
 package com.manjul.aikeyboard.fork.suggest
 
+import com.manjul.aikeyboard.fork.translit.TranslitCandidate
+import com.manjul.aikeyboard.fork.translit.TranslitSpaceGate
+import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider
 import com.manjul.aikeyboard.ime.nlp.SuggestionCandidate
 
 /**
@@ -14,6 +17,10 @@ import com.manjul.aikeyboard.ime.nlp.SuggestionCandidate
  */
 object AutocorrectGate {
     fun onSpace(candidate: SuggestionCandidate?, composingText: String, context: SuggestContext): SuggestionCandidate? {
+        if (candidate is TranslitCandidate) {
+            val english = (candidate.sourceProvider as? TranslitSuggestionProvider)?.englishCheck ?: return null
+            return TranslitSpaceGate.onSpace(candidate, composingText, context, english)
+        }
         if (candidate !is LatinWordCandidate) return candidate
         return candidate.takeIf {
             it.isEligibleForAutoCommit && context.fieldAllowsAutocorrect && it.typed == composingText
@@ -22,5 +29,5 @@ object AutocorrectGate {
 
     /** Punctuation, media keys and other non-space triggers never apply our autocorrect. */
     fun onOtherKey(candidate: SuggestionCandidate?): SuggestionCandidate? =
-        candidate.takeUnless { it is LatinWordCandidate }
+        candidate.takeUnless { it is LatinWordCandidate || it is TranslitCandidate } // The Roman text stays (S6).
 }

@@ -130,3 +130,6 @@ enum class UpdateTypeParam(val value: String) { FLEXIBLE("flexible"), IMMEDIATE(
 
 /** `update_prompt{result}`: what the user did with the Play update dialog, or [FAILED] when Play could not run it. */
 enum class UpdateResultParam(val value: String) { ACCEPTED("accepted"), DECLINED("declined"), FAILED("failed") }
+
+/** `translit_commit{source}`: whether the committed chip was a native candidate or the Roman word kept as typed. */
+enum class TranslitCommitSource(val value: String) { CANDIDATE("candidate"), LATIN("latin") }

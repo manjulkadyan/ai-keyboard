@@ -29,6 +29,7 @@ import com.manjul.aikeyboard.fork.policy.PolicyStateDerivation
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
+import com.manjul.aikeyboard.fork.translit.IncognitoBoosts // FORK(S6-translit)
 import com.manjul.aikeyboard.clipboardManager
 import com.manjul.aikeyboard.ime.ImeUiMode
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFileStorage
@@ -144,7 +145,9 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
 
     fun applyPolicyDecision(decision: PolicyDecision) {
         activeState.isComposingEnabled = PolicyStateDerivation.composingEnabled(upstreamComposingEnabled, decision)
+        val wasIncognito = activeState.isIncognitoMode // FORK(S6-translit): boosts end when incognito begins
         activeState.isIncognitoMode = PolicyStateDerivation.incognito(upstreamIncognitoMode, decision)
+        IncognitoBoosts.onChange(appContext, wasIncognito, activeState.isIncognitoMode) // FORK(S6-translit)
     }
 
     override fun handleSelectionUpdate(oldSelection: EditorRange, newSelection: EditorRange, composing: EditorRange) {
