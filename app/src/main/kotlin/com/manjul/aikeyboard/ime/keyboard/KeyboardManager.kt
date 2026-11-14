@@ -38,6 +38,7 @@ import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.fork.translit.IncognitoBoosts // FORK(S6-translit)
+import com.manjul.aikeyboard.fork.translit.TranslitRevert // FORK(S6-translit)
 import com.manjul.aikeyboard.clipboardManager
 import com.manjul.aikeyboard.editorInstance
 import com.manjul.aikeyboard.extensionManager
@@ -104,6 +105,9 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     private val subtypeManager by context.subtypeManager()
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    // FORK(S6-translit): backspace right after a Roman space commit puts the Roman word back once (decision 4)
+    private val translitRevert = TranslitRevert.forIme { editorInstance.activeInfo.isRawInputEditor }
 
     // FORK(S1-smartbar): fail closed when the IME service (and with it the policy controller) is not running
     private fun policyDecision(): PolicyDecision =
@@ -302,6 +306,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     fun commitCandidate(candidate: SuggestionCandidate) {
+        translitRevert.invalidate() // FORK(S6-translit): a strip tap ends the Roman undo; a space records a new one
         scope.launch {
             candidate.sourceProvider?.notifySuggestionAccepted(subtypeManager.activeSubtype, candidate)
         }
@@ -448,7 +453,18 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             it.isManualSelectionModeEnd = false
         }
         revertPreviouslyAcceptedCandidate()
+        // FORK(S6-translit): "native + space" becomes the Roman word once; the next backspace deletes one character
+        if (unit == OperationUnit.CHARACTERS && revertTranslitSpaceCommit()) return
         editorInstance.deleteBackwards(unit)
+    }
+
+    // FORK(S6-translit): the upstream record is cleared by the space after the commit, so TranslitRevert keeps its own
+    private fun revertTranslitSpaceCommit(): Boolean {
+        val reverted = translitRevert.undo() ?: return false
+        reverted.sourceProvider?.let { provider ->
+            scope.launch { provider.notifySuggestionReverted(subtypeManager.activeSubtype, reverted) }
+        }
+        return true
     }
 
     /**
@@ -566,6 +582,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
      * but skips handling changing to characters keyboard and double space periods.
      */
     fun handleHardwareKeyboardSpace() {
+        translitRevert.invalidate() // FORK(S6-translit): the Roman undo is for the soft space bar only
         val candidate = spaceAutoCommitCandidate() // FORK(S3-suggest)
         candidate?.let { commitCandidate(it) }
         // Skip handling changing to characters keyboard and double space periods
@@ -607,6 +624,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         if (!subtypeManager.activeSubtype.primaryLocale.supportsAutoSpace &&
                 candidate != null) { /* Do nothing */ } else {
             editorInstance.commitText(KeyCode.SPACE.toChar().toString())
+            translitRevert.onSpace(candidate, spaceCommitted = true) // FORK(S6-translit): only a Roman commit counts
         }
     }
 
@@ -723,6 +741,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
 
     // FORK(S4-perf): aikb_key_commit trace section around the key handler (TRD §6.4 key press to commit)
     override fun onInputKeyUp(data: KeyData) = ImeTrace.keyCommit { activeState.batchEdit {
+        // FORK(S6-translit): any key but backspace and shift ends the Roman undo (space records a new one)
+        if (data.code != KeyCode.DELETE && data.code != KeyCode.SHIFT) translitRevert.invalidate()
         // FORK(S2-bar): while the Translate bar is open, text keys, space, backspace and Enter edit the bar only
         if (routeToTranslateBar(data)) return@batchEdit
         when (data.code) {

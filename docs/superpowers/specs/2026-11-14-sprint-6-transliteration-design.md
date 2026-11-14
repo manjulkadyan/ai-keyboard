@@ -138,9 +138,10 @@ A new pure Kotlin module. It applies `aikeyboard.jvm.library` and depends on `:c
   is committed as typed.
 - Roman mode stays on with the global suggestions setting off. The provider forces suggestions on through
   `providerForcesSuggestionOn`, as zhengma does (our call).
-- Backspace right after a commit restores the Roman text once. In the host field, this uses the upstream revert path
-  (`phantomSpace.candidateForRevert` and `notifySuggestionReverted`). The `:ime:editing` own-write undo applies only in
-  the translate bar.
+- Backspace right after a commit restores the Roman text once. In the host field, this uses a fork record
+  (`fork/translit/TranslitRevert`, plan decision 4), because the space after the commit clears the upstream
+  `phantomSpace.candidateForRevert`. `notifySuggestionReverted` still removes the boost. The `:ime:editing` own-write
+  undo applies in the translate bar.
 
 Space-commit (our call):
 

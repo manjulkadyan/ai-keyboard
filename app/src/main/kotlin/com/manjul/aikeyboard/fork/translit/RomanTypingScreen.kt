@@ -35,6 +35,8 @@ import com.manjul.aikeyboard.core.database.TranslitMappingEntity
 import com.manjul.aikeyboard.core.translit.TranslitLang
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.translitMappings
+import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
@@ -89,7 +91,7 @@ internal suspend fun saveOrFalse(
     replaceId: Long?,
 ): Boolean = try {
     repo.save(lang, roman, native).also { if (it && replaceId != null) repo.delete(replaceId) }
-} catch (e: kotlinx.coroutines.CancellationException) {
+} catch (e: CancellationException) {
     throw e
 } catch (_: Exception) {
     false
@@ -124,7 +126,12 @@ internal fun RomanTypingContent(
                         R.string.roman_typing__language_hi
                     }
                     val name = stringRes(nameRes)
-                    Text(if (l == lang) "● $name" else name)
+                    val label = if (l == lang) {
+                        stringRes(R.string.roman_typing__language_selected, "name" to name)
+                    } else {
+                        name
+                    }
+                    Text(label)
                 }
             }
         }
@@ -185,7 +192,7 @@ private fun MappingDialog(
 ) {
     var roman by remember { mutableStateOf(initial?.roman.orEmpty()) }
     var native by remember { mutableStateOf(initial?.native.orEmpty()) }
-    val key = roman.trim().lowercase(java.util.Locale.ROOT)
+    val key = roman.trim().lowercase(Locale.ROOT)
     val romanOk = CustomMappingsRepository.isValidRoman(key)
     val nativeOk = CustomMappingsRepository.isValidNative(native.trim())
     AlertDialog(

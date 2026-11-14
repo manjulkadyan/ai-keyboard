@@ -7,6 +7,7 @@ package com.manjul.aikeyboard.fork.translit
 
 import com.manjul.aikeyboard.core.suggest.SuggestDictionary
 import com.manjul.aikeyboard.core.translit.Source
+import java.util.Locale
 
 /**
  * Keeps a common English word ("phone", "meeting") as Latin instead of turning it into a native word on space. The
@@ -24,7 +25,7 @@ class EnglishCheck(
     /** True when the Roman word is a common English word that no lexicon or mapping candidate beats. */
     fun keepsLatin(roman: String, top: TranslitCandidate): Boolean {
         if (top.source != Source.LEXICON) return false // A mapping always wins; rule-only output has no claim.
-        if (roman.length <= SHORT_WORD && roman.lowercase() !in SHORT_ALLOW) return false
+        if (roman.length <= SHORT_WORD && roman.lowercase(Locale.ROOT) !in SHORT_ALLOW) return false
         val en = english()?.frequency(roman) ?: 0
         if (en < threshold) return false
         return (nativeFrequency(top) ?: 0) < en

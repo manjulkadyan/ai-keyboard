@@ -110,6 +110,7 @@ class TranslateImeSession(
             // onFinishInput reports "no field"; onFinishInput itself has closed the bar by then.
             if (d === ImePolicyController.NoField) return@addRestrictionListener
             val c = _controller.value ?: return@addRestrictionListener
+            barTranslit?.reset() // A new field: no Roman strip or undo from the old one.
             if (!d.allowTranslate) c.onPolicyRestricted(d) else c.onFieldChanged()
         }
     }

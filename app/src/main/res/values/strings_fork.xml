@@ -37,7 +37,7 @@
     <string name="translit__save_mapping" tools:ignore="MissingTranslation">Save mapping</string>
     <string name="translit__mapping_not_saved" tools:ignore="MissingTranslation">Not saved</string>
     <string name="translit__mapping_saved" tools:ignore="MissingTranslation">Mapping saved</string>
-    <string name="translit__latin_chip_description" tools:ignore="MissingTranslation">Keep the Roman spelling</string>
+    <string name="translit__latin_chip_description" tools:ignore="MissingTranslation">{word}, keep the Roman spelling</string>
 
     <!-- Smartbar private lock indicator and the "Make this app private" quick action. -->
     <string name="private_lock__description" tools:ignore="MissingTranslation">Private field. Translation, voice and learning are off</string>
@@ -550,6 +550,7 @@
     <string name="roman_typing__entry_summary" tools:ignore="MissingTranslation">Beta. Save your own spellings for Roman Urdu and Hinglish.</string>
     <string name="roman_typing__language_ur" tools:ignore="MissingTranslation">Urdu</string>
     <string name="roman_typing__language_hi" tools:ignore="MissingTranslation">Hindi</string>
+    <string name="roman_typing__language_selected" tools:ignore="MissingTranslation">● {name}</string>
     <string name="roman_typing__summary" tools:ignore="MissingTranslation">Your own spellings. A saved word always wins over the keyboard\'s guess. They stay on this phone.</string>
     <string name="roman_typing__empty" tools:ignore="MissingTranslation">No saved words yet.</string>
     <string name="roman_typing__add" tools:ignore="MissingTranslation">Add a word</string>

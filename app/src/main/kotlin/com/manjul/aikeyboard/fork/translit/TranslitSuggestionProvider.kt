@@ -5,7 +5,6 @@
 
 package com.manjul.aikeyboard.fork.translit
 
-import com.manjul.aikeyboard.core.translit.Source
 import com.manjul.aikeyboard.core.translit.TranslitLang
 import com.manjul.aikeyboard.fork.suggest.SuggestContext
 import com.manjul.aikeyboard.ime.core.Subtype
@@ -42,10 +41,7 @@ class TranslitSuggestionProvider(
     override val providerId = ProviderId
 
     /** The check `AutocorrectGate` reads on space; `en.sdict` loads on first use (decision 7). */
-    val englishCheck = EnglishCheck(
-        english = { graph().englishIfLoaded() }, // Never loads on the space path.
-        nativeFrequency = { graph().nativeFrequency(it.lang, it.text.toString()) },
-    )
+    val englishCheck = TranslitCandidates.englishCheck(graph)
 
     override val forcesSuggestionOn: Boolean = true
 
@@ -87,33 +83,7 @@ class TranslitSuggestionProvider(
             return emptyList()
         }
         // The Latin chip takes the last slot of the strip.
-        val nativeMax = maxCandidateCount - 1
-        val natives = if (nativeMax > 0) engine.suggest(typed, nativeMax, g.boostFor(lang, typed)) else emptyList()
-        val out = ArrayList<SuggestionCandidate>(natives.size + 1)
-        natives.forEachIndexed { i, c ->
-            out += TranslitCandidate(
-                text = c.native,
-                confidence = 1.0 / (i + 1),
-                // Only the top candidate, and only for a mapping or a lexicon word (spec).
-                isEligibleForAutoCommit = i == 0 && (c.source == Source.MAPPING || c.source == Source.LEXICON),
-                sourceProvider = this,
-                typed = typed,
-                lang = lang,
-                source = c.source,
-                latin = false,
-            )
-        }
-        out += TranslitCandidate(
-            text = typed,
-            confidence = 0.0,
-            isEligibleForAutoCommit = false,
-            sourceProvider = this,
-            typed = typed,
-            lang = lang,
-            source = Source.RULES,
-            latin = true,
-        )
-        return out
+        return TranslitCandidates.build(engine, typed, lang, maxCandidateCount, g.boostFor(lang, typed), this)
     }
 
     /** "Save mapping" is offered only where learning is (not incognito, not a no-learning field). */
@@ -132,7 +102,8 @@ class TranslitSuggestionProvider(
     override suspend fun notifySuggestionReverted(subtype: Subtype, candidate: SuggestionCandidate) {
         if (candidate !is TranslitCandidate || candidate.latin) return
         graph().unboost(candidate.lang, candidate.typed, candidate.text.toString())
-        // The upstream revert path puts the Roman text back (decision 4).
+        // Only the learning is undone here. KeyboardManager's S6 hook (TranslitRevert) puts the Roman text back in
+        // the host after a space commit (decision 4); the upstream revert path never edits the text itself.
     }
 
     override suspend fun removeSuggestion(subtype: Subtype, candidate: SuggestionCandidate): Boolean = false

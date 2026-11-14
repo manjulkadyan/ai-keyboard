@@ -7,7 +7,6 @@ package com.manjul.aikeyboard.fork.translit
 
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.RateSampler
-import com.manjul.aikeyboard.core.translit.Source
 import com.manjul.aikeyboard.core.translit.TranslitLang
 import com.manjul.aikeyboard.ime.editing.OwnWriteUndo
 import com.manjul.aikeyboard.ime.policy.PolicyDecision
@@ -48,19 +47,13 @@ class BarTranslitController(
 ) {
     private val commits = TranslitAnalytics(analytics, sampler)
     private val undo = OwnWriteUndo(BarBufferTarget(buffer), clock)
-    private val englishCheck = EnglishCheck(
-        english = { graph().englishIfLoaded() }, // Never loads on the space path.
-        nativeFrequency = { graph().nativeFrequency(it.lang, it.text.toString()) },
-    )
+    private val englishCheck = TranslitCandidates.englishCheck(graph)
     private var job: Job? = null
 
     private val _candidates = MutableStateFlow<List<TranslitCandidate>>(emptyList())
 
     /** The strip for the Roman word in progress: native candidates, then the Latin chip. Empty when there is none. */
     val candidates: StateFlow<List<TranslitCandidate>> = _candidates.asStateFlow()
-
-    /** True while a Roman subtype is active, so the strip shows [candidates] instead of host suggestions. */
-    val active: Boolean get() = lang() != null
 
     fun onLetter(text: String): Boolean {
         val l = lang() ?: return false
@@ -75,7 +68,7 @@ class BarTranslitController(
         val word = currentWord()
         val top = _candidates.value.firstOrNull()
         clearCandidates()
-        if (top != null && commitsOnSpace(top, word)) {
+        if (top != null && TranslitSpaceGate.commits(top, word, englishCheck)) {
             commit(top, word)
         } else {
             undo.invalidate()
@@ -106,12 +99,6 @@ class BarTranslitController(
     fun reset() {
         clearCandidates()
         undo.invalidate()
-    }
-
-    private fun commitsOnSpace(top: TranslitCandidate, word: String): Boolean {
-        if (top.typed != word || top.latin || !top.isEligibleForAutoCommit) return false
-        if (top.source != Source.MAPPING && top.source != Source.LEXICON) return false
-        return !englishCheck.keepsLatin(word, top)
     }
 
     /** Replaces the Roman word with [candidate] plus a space; a native word can be undone once. */
@@ -156,27 +143,9 @@ class BarTranslitController(
         } catch (_: IllegalStateException) {
             return emptyList() // No dictionary: no strip, as in the host provider.
         }
-        val natives = engine.suggest(word, STRIP_SIZE - 1, g.boostFor(l, word))
-        val out = natives.mapIndexedTo(ArrayList(STRIP_SIZE)) { i, c ->
-            TranslitCandidate(
-                text = c.native,
-                confidence = 1.0 / (i + 1),
-                isEligibleForAutoCommit = i == 0 && (c.source == Source.MAPPING || c.source == Source.LEXICON),
-                sourceProvider = null,
-                typed = word,
-                lang = l,
-                source = c.source,
-                latin = false,
-            )
-        }
-        out += TranslitCandidate(word, 0.0, false, null, word, l, Source.RULES, latin = true)
-        return out
+        // Nothing is learned in the bar, but a host boost still ranks, as in the host strip.
+        return TranslitCandidates.build(engine, word, l, TranslitCandidates.STRIP_SIZE, g.boostFor(l, word), null)
     }
 
     override fun toString(): String = "BarTranslitController(candidates=${_candidates.value.size})"
-
-    private companion object {
-        /** The strip size the host asks for (S3-suggest), so the bar shows the same number of chips. */
-        const val STRIP_SIZE = 3
-    }
 }

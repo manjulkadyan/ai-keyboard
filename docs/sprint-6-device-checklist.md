@@ -23,10 +23,10 @@ The floors are regression floors (measured minus 3 points). They are not the PRD
 
 ## Automated exit check (sandbox, 2026-11-14)
 
-All six commands from the exit check passed: `assembleDebug`, `test testDebugUnitTest :build-logic:convention:test`,
-`check :app:lintDebug`, the 16 KB alignment check (23 libraries, 4 unaligned 32-bit, informational), the fork markers
-check and the data-flows check (37 tracked artifacts). Output tails are in
-`.superpowers/sdd/2026-11-14-sprint-6/task-7-report.md`.
+All six commands from the exit check passed at commit 63e06e51: `assembleDebug`,
+`test testDebugUnitTest :build-logic:convention:test`, `check :app:lintDebug`, the 16 KB alignment check (23
+libraries, 4 unaligned 32-bit, informational), the fork markers check and the data-flows check (37 tracked artifacts).
+In one line: the build, all unit tests, lint and the four checks passed, with no new lint issue.
 
 ## T. Roman typing
 
@@ -36,7 +36,7 @@ check and the data-flows check (37 tracked artifacts). Output tails are in
 | T.2 | Candidates on space | Switch to "Urdu (Roman)". In a chat app type "kya haal hai" with a space after each word | The strip shows native candidates and the Latin chip. A space commits the top native candidate | |
 | T.3 | Latin chip and rule-only words | Type "kya" and tap the Latin chip. Then type a word that only the rules can spell and press space | The chip keeps "kya" in Latin. The rule-only word stays Roman on space | |
 | T.4 | English words stay Latin | Type "meeting", "phone" and "ok", each followed by space | Each stays Latin after the space | |
-| T.5 | Backspace undo | Type a Roman word and a space so it commits as native. Press Backspace once | The Roman word comes back once. A second Backspace deletes as normal | |
+| T.5 | Backspace undo | In a host field (not the Translate bar), type a Roman word and a space so it commits as native. Press Backspace once. Then type another key before a Backspace and check that nothing is restored | The host field shows the Roman word again, without the space. A second Backspace deletes one character. After another key, Backspace deletes as normal | |
 | T.6 | Hindi (Roman) | Add "Hindi (Roman)" and repeat T.2 to T.5 | Same results, with Devanagari candidates | |
 | T.7 | Global suggestions off | Turn the global suggestions setting off. Type in "Urdu (Roman)" | The Roman strip still shows | |
 | T.8 | Sensitive fields | Type in a password field, a URL bar and an email field | No strip and no native commit in each | |
@@ -50,7 +50,7 @@ check and the data-flows check (37 tracked artifacts). Output tails are in
 | T.16 | Offline and network | Turn on flight mode and repeat T.2 to T.12. Then run a proxy capture while typing | Every check still works. The capture shows no request from the keyboard | |
 | T.17 | Log audit | Install a release build. Capture logcat during T.2 to T.12 and search it | No Roman word, candidate or mapping appears | |
 | T.18 | Preset merge | On a clean install open Settings, Languages, Add subtype. Look for both Roman presets. A unit test joins the JSON itself, so only the device proves the real `KeyboardManager` merge | "Urdu (Roman)" and "Hindi (Roman)" both appear and can be added | |
-| T.19 | Incognito mid-session | In "Urdu (Roman)" type and accept a word twice so it gets a boost. Turn incognito on with the toggle key, then type the same word. Turn incognito off. Repeat with a field that forces incognito (for example a Chrome incognito tab) | After incognito turns on, the boost is gone and the word ranks as a fresh word. This holds for both the toggle key and the forced field | |
+| T.19 | Incognito mid-session | In "Urdu (Roman)" type and accept a word twice so it gets a boost. Turn incognito on with the toggle key, then type the same word. Turn incognito off. Repeat with a field that has `IME_FLAG_NO_PERSONALIZED_LEARNING` | After incognito turns on, the boost is gone and the word ranks as a fresh word. This holds for both the toggle key and the forced field | |
 | T.20 | Field with no suggestions | Open a host field that sets `TYPE_TEXT_FLAG_NO_SUGGESTIONS`. Open the Translate bar and type a Roman word | Record what the Roman strip does (shows or hides) and whether space commits. This is an open product question (question 7) | |
 
 ## Open questions for product

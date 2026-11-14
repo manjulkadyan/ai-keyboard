@@ -45,6 +45,7 @@ import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.fork.dictionary.DefinitionCards // FORK(S5-dict)
 import com.manjul.aikeyboard.fork.smartbar.barTranslitStripOrNull // FORK(S6-translit)
 import com.manjul.aikeyboard.fork.translit.TranslitCandidate // FORK(S6-translit)
+import com.manjul.aikeyboard.fork.translit.latinChipSemantics // FORK(S6-translit)
 import com.manjul.aikeyboard.ime.nlp.ClipboardSuggestionCandidate
 import com.manjul.aikeyboard.ime.nlp.SuggestionCandidate
 import com.manjul.aikeyboard.ime.theme.FlorisImeUi
@@ -180,6 +181,7 @@ private fun CandidateItem(
         attributes = attributes,
         selector = selector,
         modifier = modifier
+            .latinChipSemantics(candidate) // FORK(S6-translit): the Latin chip says it keeps the Roman spelling
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()

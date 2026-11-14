@@ -32,7 +32,10 @@ open class TranslitGraph(
 ) {
     val mappings: Map<TranslitLang, CustomMappings> = TranslitLang.entries.associateWith { CustomMappings() }
 
-    private val engines = HashMap<TranslitLang, TranslitEngine>()
+    private val engines = ConcurrentHashMap<TranslitLang, TranslitEngine>()
+
+    /** Languages whose dictionary was missing or unreadable: not re-read on every word. Guarded by [loadMutex]. */
+    private val failed = HashSet<TranslitLang>()
     private val lexicons = ConcurrentHashMap<TranslitLang, SdictLexicon>()
     private val englishLock = Any()
     @Volatile private var english: SuggestDictionary? = null
@@ -45,8 +48,19 @@ open class TranslitGraph(
             size > MAX_BOOSTS
     }
 
+    /**
+     * The engine for [lang], loaded on first use. Throws [IllegalStateException] when its dictionary is missing or
+     * unreadable. That failure is remembered for the process, so later calls throw at once without a re-read.
+     */
     open suspend fun engine(lang: TranslitLang): TranslitEngine = loadMutex.withLock {
-        engines[lang] ?: withContext(io) { load(lang) }.also { engines[lang] = it }
+        engines[lang]?.let { return@withLock it }
+        check(lang !in failed) { "Dictionary unavailable for ${lang.tag}" } // No typed text in the message.
+        try {
+            withContext(io) { load(lang) }.also { engines[lang] = it }
+        } catch (e: IllegalStateException) {
+            failed += lang
+            throw e
+        }
     }
 
     private fun load(lang: TranslitLang): TranslitEngine {
@@ -68,8 +82,9 @@ open class TranslitGraph(
     fun englishIfLoaded(): SuggestDictionary? = english
 
     /**
-     * Warm-up: `en.sdict`, loaded once on first use (decision 7). Null when it is missing or unreadable; that is remembered, so
-     * a bad file is not re-read on every word. Blocking: only the suggestion path calls it, never the space gate.
+     * Warm-up: `en.sdict`, loaded once on first use (decision 7). Null when it is missing or unreadable. That is
+     * remembered, so a bad file is not re-read on every word. Blocking: only the suggestion path calls it, never the
+     * space gate.
      */
     open fun englishDictionary(): SuggestDictionary? = synchronized(englishLock) {
         if (!englishTried) {

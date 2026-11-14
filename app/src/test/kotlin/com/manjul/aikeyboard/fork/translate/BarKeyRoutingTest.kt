@@ -162,6 +162,16 @@ class BarKeyRoutingTest {
         assertEquals("host text", r.host)
     }
 
+    @Test fun aFieldChangeWhileTheBarIsOpenClearsTheRomanStrip() = run(TranslitLang.HI) { r ->
+        for (ch in "kya") assertTrue(BarKeyRouter.onKey(r.session, ch.code, ch.toString()))
+        runCurrent()
+        assertTrue(r.session.barTranslit?.candidates?.value.orEmpty().isNotEmpty())
+        val next = EditorInfo().apply { packageName = "other.app"; inputType = InputType.TYPE_CLASS_TEXT }
+        r.policy.onStartInput(next, false)
+        runCurrent()
+        assertTrue(r.session.barTranslit?.candidates?.value.isNullOrEmpty())
+    }
+
     @Test fun anEnglishSubtypeKeepsTheS2Path() = run(null) { r ->
         for (ch in "kya") assertTrue(BarKeyRouter.onKey(r.session, ch.code, ch.toString()))
         assertTrue(BarKeyRouter.onKey(r.session, KeyCode.SPACE, null))

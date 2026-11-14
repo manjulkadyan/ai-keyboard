@@ -45,18 +45,18 @@ class BarTranslitControllerTest {
         override fun englishDictionary() = null
     }
 
-    private class Rig(scope: TestScope, lang: TranslitLang?) {
+    class Rig(scope: TestScope, lang: TranslitLang?, val graph: TranslitGraph = FakeGraph(setOf("کیا", "क्या"))) {
         val buffer = BarBuffer()
         val events = mutableListOf<AnalyticsEvent>()
         var now = 0L
         var lang: TranslitLang? = lang
-        val graph = FakeGraph(setOf("کیا", "क्या"))
+        var decision: PolicyDecision = PolicyDecision.Unrestricted
         val dispatcher = StandardTestDispatcher(scope.testScheduler)
         val controller = BarTranslitController(
             buffer = buffer,
             graph = { graph },
             lang = { this.lang },
-            decision = { PolicyDecision.Unrestricted },
+            decision = { decision },
             analytics = { events += it },
             sampler = RateSampler(1.0) { 0.0 },
             scope = scope.backgroundScope,
@@ -153,6 +153,17 @@ class BarTranslitControllerTest {
         r.controller.onBackspace()
         assertEquals("کیا", r.buffer.text.value)
         assertTrue(r.controller.candidates.value.isEmpty())
+    }
+
+    @Test fun noStripAndNoSpaceCommitWithoutTheSuggestionStrip() = run(TranslitLang.UR) { r ->
+        r.decision = PolicyDecision.Unrestricted.copy(allowSuggestionStrip = false)
+        r.type("kya", this)
+        assertTrue(r.controller.candidates.value.isEmpty())
+        assertTrue(r.controller.onSpace())
+        runCurrent()
+        assertEquals("kya ", r.buffer.text.value)
+        assertTrue(r.controller.candidates.value.isEmpty())
+        assertTrue(r.events.isEmpty())
     }
 
     @Test fun toStringHoldsNoText() = run(TranslitLang.UR) { r ->
