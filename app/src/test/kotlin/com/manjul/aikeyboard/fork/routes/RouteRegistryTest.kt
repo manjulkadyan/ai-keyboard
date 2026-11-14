@@ -72,6 +72,8 @@ class RouteRegistryTest {
                 "settings/typing", "settings/privacy", "settings/subscription", "settings/about",
                 // S5-dict: the Dictionary screen
                 "dictionary",
+                // S5-phrasebook: the Phrasebook screen
+                "phrasebook",
             ),
             RouteRegistry.routes.keys,
         )
@@ -199,6 +201,16 @@ class RouteRegistryTest {
         DictionaryHandoff.offer("run")
         assertEquals("run", DictionaryHandoff.take())
         assertNull(DictionaryHandoff.take())
+    }
+
+    @Test
+    fun phrasebookResolvesByExtraAndByLink() {
+        val byExtra = RouteRegistry.resolve("phrasebook", null)
+        assertEquals("phrasebook", byExtra.path)
+        assertFalse(byExtra.unknown)
+        assertEquals("phrasebook", RouteRegistry.resolve(null, Uri.parse("app://phrasebook")).path)
+        assertEquals("phrasebook", RouteRegistry.resolve(null, Uri.parse("ui://florisboard/phrasebook?x=1")).path)
+        assertTrue(RouteRegistry.resolve("phrasebook/greetings", null).unknown)
     }
 
     @Test

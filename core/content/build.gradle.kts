@@ -47,4 +47,8 @@ tasks.withType<Test>().configureEach {
     systemProperty("content.fixtureKeyPem", fixtureKey.asFile.absolutePath)
     inputs.dir(contentDir).withPropertyName("fixtureContent")
     inputs.file(fixtureKey).withPropertyName("fixtureKey")
+    // S5-phrasebook: the bundled phrasebook DB, read in place
+    val phrasebookDb = root.file("app/src/main/assets/phrasebook/phrasebook-1.db")
+    systemProperty("content.phrasebookDb", phrasebookDb.asFile.absolutePath)
+    inputs.file(phrasebookDb).withPropertyName("phrasebookDb")
 }

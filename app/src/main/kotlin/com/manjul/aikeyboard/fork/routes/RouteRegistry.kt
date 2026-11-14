@@ -42,6 +42,7 @@ object RouteRegistry {
     const val PAYWALL = "paywall"
     const val THEMES = "themes"
     const val DICTIONARY = "dictionary"
+    const val PHRASEBOOK = "phrasebook"
     const val SETTINGS = SettingsSection.ROOT_ROUTE
 
     private const val HOME_PATH = "settings/home"
@@ -64,6 +65,7 @@ object RouteRegistry {
         THEMES to "themes", // S4-themes: the Themes screen
         SETTINGS to SettingsSection.ROOT_ROUTE, // S4-settings: the Settings tree
         DICTIONARY to "dictionary", // S5-dict: the Dictionary screen; its word comes only from the extra
+        PHRASEBOOK to "phrasebook", // S5-phrasebook: the Phrasebook screen
     ) + SettingsSection.entries.associate { it.route to it.path } +
         PaywallTrigger.entries.filter { it.deepLinkable }.map(::paywallPath).associateWith { it }
 

@@ -84,6 +84,7 @@ import com.manjul.aikeyboard.core.content.download.PackDownloadWorkerFactory // 
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent // FORK(S5-dict)
 import com.manjul.aikeyboard.core.analytics.AnalyticsSink // FORK(S5-dict)
 import com.manjul.aikeyboard.fork.dictionary.DictionaryAppGraph // FORK(S5-dict)
+import com.manjul.aikeyboard.fork.phrasebook.PhrasebookAppGraph // FORK(S5-phrasebook)
 import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdict)
@@ -185,6 +186,7 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     // FORK(S5-dict): pack downloads and the dictionary (pack, online cache, kb-api); all built on first use
     val packDownloader = lazy { PackDownloader(contentSource.value, ContentDirs.packs(this)) }
     val dictionary = lazy { DictionaryAppGraph(this) }
+    val phrasebook = lazy { PhrasebookAppGraph(this) } // FORK(S5-phrasebook): built on first use
     val translationHistory = lazy { TranslationHistoryRepository(appDatabase.value.translationHistoryDao()) }
     // FORK(S3-userdict): on-device user dictionary (user_word); opened on first use, written on a background worker
     val userWordRepository = lazy {
@@ -382,6 +384,9 @@ fun Context.contentManifest() = this.florisApplication().contentManifest
 fun Context.packDownloader() = this.florisApplication().packDownloader
 
 fun Context.dictionary() = this.florisApplication().dictionary
+
+// FORK(S5-phrasebook): accessor for the phrasebook
+fun Context.phrasebook() = this.florisApplication().phrasebook
 
 // FORK(S5-dict): a function as an analytics sink (events only)
 private fun relaySink(log: (AnalyticsEvent) -> Unit): AnalyticsSink = object : AnalyticsSink {

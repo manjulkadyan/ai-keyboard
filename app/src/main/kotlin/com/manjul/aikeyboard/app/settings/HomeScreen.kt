@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.automirrored.filled.MenuBook // FORK(S5-dict)
+import androidx.compose.material.icons.filled.Forum // FORK(S5-phrasebook)
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Language
@@ -142,6 +143,12 @@ fun HomeScreen() = FlorisScreen {
             icon = Icons.AutoMirrored.Filled.MenuBook,
             title = stringRes(R.string.dictionary__title),
             onClick = { navController.navigate(Routes.Dictionary) },
+        )
+        // FORK(S5-phrasebook): "Phrasebook" entry (S-04) for the Phrasebook screen (S-17)
+        Preference(
+            icon = Icons.Default.Forum,
+            title = stringRes(R.string.phrasebook__home_entry),
+            onClick = { navController.navigate(Routes.Phrasebook) },
         )
         // FORK(S4-themes): "Appearance" entry for the Themes screen (presets, key border, key sound)
         Preference(

@@ -462,4 +462,46 @@
     <string name="offline_languages__dictionary_downloading" tools:ignore="MissingTranslation">Downloading</string>
     <string name="offline_languages__dictionary_ready" tools:ignore="MissingTranslation">Downloaded, version {version}</string>
     <string name="offline_languages__dictionary_unavailable" tools:ignore="MissingTranslation">Not available right now</string>
+    <!-- S5-phrasebook: the Phrasebook screen (S-17); category names keyed by category_key -->
+    <string name="phrasebook__title" tools:ignore="MissingTranslation">Phrasebook</string>
+    <string name="phrasebook__home_entry" tools:ignore="MissingTranslation">Phrasebook</string>
+    <string name="phrasebook__target_label" tools:ignore="MissingTranslation">Show in: {language}</string>
+    <string name="phrasebook__target_cd" tools:ignore="MissingTranslation">Change the language</string>
+    <string name="phrasebook__machine" tools:ignore="MissingTranslation">Machine translated</string>
+    <string name="phrasebook__download" tools:ignore="MissingTranslation">Download language</string>
+    <string name="phrasebook__no_pack" tools:ignore="MissingTranslation">Download the {language} language to see these phrases in {language}. The phrases stay in English until then.</string>
+    <string name="phrasebook__send" tools:ignore="MissingTranslation">Send via keyboard</string>
+    <string name="phrasebook__copy" tools:ignore="MissingTranslation">Copy</string>
+    <string name="phrasebook__copied" tools:ignore="MissingTranslation">Copied</string>
+    <string name="phrasebook__favourite_cd" tools:ignore="MissingTranslation">Favourite</string>
+    <string name="phrasebook__unfavourite_cd" tools:ignore="MissingTranslation">Remove from favourites</string>
+    <string name="phrasebook__more_cd" tools:ignore="MissingTranslation">More actions</string>
+    <string name="phrasebook__edit" tools:ignore="MissingTranslation">Edit</string>
+    <string name="phrasebook__delete" tools:ignore="MissingTranslation">Delete</string>
+    <string name="phrasebook__add" tools:ignore="MissingTranslation">Add phrase</string>
+    <string name="phrasebook__add_title" tools:ignore="MissingTranslation">New phrase</string>
+    <string name="phrasebook__edit_title" tools:ignore="MissingTranslation">Edit phrase</string>
+    <string name="phrasebook__field_label" tools:ignore="MissingTranslation">Phrase</string>
+    <string name="phrasebook__field_count" tools:ignore="MissingTranslation">{count} / {max}</string>
+    <string name="phrasebook__too_long" tools:ignore="MissingTranslation">A phrase can have at most {max} characters.</string>
+    <string name="phrasebook__save" tools:ignore="MissingTranslation">Save</string>
+    <string name="phrasebook__cancel" tools:ignore="MissingTranslation">Cancel</string>
+    <string name="phrasebook__empty_favourites" tools:ignore="MissingTranslation">Tap the star on a phrase to add it here.</string>
+    <string name="phrasebook__empty_own" tools:ignore="MissingTranslation">Add your own phrases with the + button.</string>
+    <string name="phrasebook__unavailable" tools:ignore="MissingTranslation">The phrasebook could not be opened.</string>
+    <string name="phrasebook__no_voice" tools:ignore="MissingTranslation">No voice for this language on this phone.</string>
+    <string name="phrasebook__category_favourites" tools:ignore="MissingTranslation">Favourites</string>
+    <string name="phrasebook__category_my_phrases" tools:ignore="MissingTranslation">My phrases</string>
+    <string name="phrasebook__category_greetings" tools:ignore="MissingTranslation">Greetings</string>
+    <string name="phrasebook__category_basics" tools:ignore="MissingTranslation">Basics</string>
+    <string name="phrasebook__category_directions" tools:ignore="MissingTranslation">Directions</string>
+    <string name="phrasebook__category_transport" tools:ignore="MissingTranslation">Transport</string>
+    <string name="phrasebook__category_hotel" tools:ignore="MissingTranslation">Hotel</string>
+    <string name="phrasebook__category_food" tools:ignore="MissingTranslation">Food and drink</string>
+    <string name="phrasebook__category_shopping" tools:ignore="MissingTranslation">Shopping</string>
+    <string name="phrasebook__category_emergency" tools:ignore="MissingTranslation">Emergency</string>
+    <string name="phrasebook__category_health" tools:ignore="MissingTranslation">Health</string>
+    <string name="phrasebook__category_numbers_time" tools:ignore="MissingTranslation">Numbers and time</string>
+    <string name="phrasebook__category_small_talk" tools:ignore="MissingTranslation">Small talk</string>
+    <string name="phrasebook__category_phone_internet" tools:ignore="MissingTranslation">Phone and internet</string>
 </resources>
