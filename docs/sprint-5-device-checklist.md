@@ -9,7 +9,8 @@ Suggested devices: a Pixel and a Samsung (API 33+), one API 26-30 phone, and a l
 rows. Sticker and Pro rows need a licence tester account and a build installed from a Play test track.
 
 Fill in the Result column only after running the check. Record device, Android version, build and date there. Every
-Result cell starts empty.
+Result cell in the device check tables (sections D to X) starts empty. The automated and instrumented tables already
+hold their results.
 
 ## Automated exit check (sandbox, 2026-11-14)
 
@@ -31,7 +32,7 @@ Result cell starts empty.
 |---|---|---|
 | `com.manjul.aikeyboard.fork.clipboard.KeystoreKeyProviderTest` | `-Pandroid.testInstrumentationRunnerArguments.class=<class>` | PASS (2 tests) |
 | `com.manjul.aikeyboard.fork.stickers.StickerCompatInsertTest` | same | PASS after fix `70d86ddf`. It failed first: the share receiver Activity runs in the test package's process, so the test's static latch never released |
-| `com.manjul.aikeyboard.isolation.ImeOnlyColdStartTest` | same | PASS on API 37 after the test fix in this commit. It failed first because the test loaded the classes itself: on ART, `ClassLoader.findLoadedClass` falls back to the dex lookup and defines a class that is not loaded yet, so every check for an existing class returned "loaded" (`NativeAdSlot` and `TranslatorScreen` read "not loaded" only because they are file names, not classes). The test now reads loaded classes from a heap dump of its process. A second fault was hidden behind it: API 37 prints `mCurImeId`, not `mCurMethodId`, in `dumpsys input_method`. No production change: no ad class loads in an IME-only process. I.1 of Sprint 4 is closed on API 37; an API 34 run is still to do |
+| `com.manjul.aikeyboard.isolation.ImeOnlyColdStartTest` | same | PASS on API 37 after test fix `81bf8425`. It failed first because the test loaded the classes itself: on ART, `ClassLoader.findLoadedClass` falls back to the dex lookup and defines a class that is not loaded yet, so every check for an existing class returned "loaded" (`NativeAdSlot` and `TranslatorScreen` read "not loaded" only because they are file names, not classes). The test now reads loaded classes from a heap dump of its process. A second fault was hidden behind it: API 37 prints `mCurImeId`, not `mCurMethodId`, in `dumpsys input_method`. No production change: no ad class loads in an IME-only process. I.1 of Sprint 4 is closed on API 37; an API 34 run is still to do |
 
 ## D. Dictionary
 
@@ -94,8 +95,8 @@ Result cell starts empty.
 
 ## Open issues
 
-- `ImeOnlyColdStartTest` passes on API 37 after its test fix (see section C). It has not run on API 34 yet. Run it once
-  on an API 34 emulator to confirm the `mCurMethodId` branch and the heap dump read.
+- `ImeOnlyColdStartTest` passes on API 37 after its test fix (see "Instrumented runs"). It has not run on API 34 yet.
+  Run it once on an API 34 emulator to confirm the `mCurMethodId` branch and the heap dump read.
 
 ## Open questions for product
 
