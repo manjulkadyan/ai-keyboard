@@ -30,6 +30,9 @@
     <string name="subtype__ur_pk" tools:ignore="MissingTranslation">اردو</string>
     <string name="subtype__id" tools:ignore="MissingTranslation">Bahasa Indonesia</string>
     <string name="subtype__hi_in" tools:ignore="MissingTranslation">हिन्दी</string>
+    <string name="subtype__ur_pk_roman" tools:ignore="MissingTranslation">Roman Urdu</string>
+    <string name="subtype__hi_in_roman" tools:ignore="MissingTranslation">Hinglish</string>
+    <string name="subtype__beta_label" tools:ignore="MissingTranslation">Beta</string>
 
     <!-- Smartbar private lock indicator and the "Make this app private" quick action. -->
     <string name="private_lock__description" tools:ignore="MissingTranslation">Private field. Translation, voice and learning are off</string>

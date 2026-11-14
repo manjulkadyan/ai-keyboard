@@ -91,6 +91,7 @@ import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdict)
 import com.manjul.aikeyboard.core.tts.TtsManager
 import com.manjul.aikeyboard.fork.suggest.SuggestContext // FORK(S3-suggest)
+import com.manjul.aikeyboard.fork.translit.TranslitGraph // FORK(S6-translit)
 import com.manjul.aikeyboard.fork.ai.AiAppGraph // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.rc.FirebaseGraph // FORK(S4-rc)
 import com.manjul.aikeyboard.fork.billing.BillingAppGraph // FORK(S4-billing)
@@ -199,6 +200,10 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     }
     // FORK(S3-suggest): field facts for the suggestion provider, set by FlorisImeService (fails closed until then)
     val suggestContext = SuggestContext()
+    // FORK(S6-translit): Roman Urdu / Hinglish engines (one per language, loaded on first use) and in-memory boosts
+    val translitGraph = lazy {
+        TranslitGraph(openAsset = { path -> assets.open(path) }, io = Dispatchers.IO)
+    }
     // FORK(S2-translator): the process's one TextToSpeech holder; the engine binds on the first acquire()
     val ttsManager = lazy { TtsManager(this) }
     // FORK(S3-ai): config, kb-api tokens, cloud engine, LRU, pause gate, reports; no HTTP client or Firebase until used
@@ -399,6 +404,9 @@ private fun relaySink(log: (AnalyticsEvent) -> Unit): AnalyticsSink = object : A
 
 // FORK(S3-suggest): accessor for the suggestion field facts
 fun Context.suggestContext() = this.florisApplication().suggestContext
+
+// FORK(S6-translit): accessor for the transliteration engines
+fun Context.translitGraph() = this.florisApplication().translitGraph
 
 // FORK(S3-ai): accessor for the app-wide AI pieces
 fun Context.aiAppGraph() = this.florisApplication().aiAppGraph

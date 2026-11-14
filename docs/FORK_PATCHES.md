@@ -227,6 +227,9 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/provider/ClipboardDatabase.kt` | S5-clipboard | `ClipboardHistoryDao.replaceText(id, plain, sealed)`: the migrator's compare-and-set update of the text column only, so a pin or delete that raced it is kept. No schema change |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/clipboard/ClipboardInputLayout.kt` | S5-clipboard | Smart chips (`fork.clipboard.SmartChips`, up to 3 email, link and phone chips) under each text item, found at render time and never on a masked item. A tap commits the value through `EditorInstance.commitClipboardItem`, so the Translate bar routing still applies. Chips reuse the filter chip Snygg elements |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt` | S5-color | `Routes.CustomColors` (`themes/custom`) renders `fork/themes/CustomThemeScreen`. It opens from the Themes screen only and is not on the `RouteRegistry` allow-list |
+| `app/src/main/kotlin/com/manjul/aikeyboard/ime/nlp/NlpManager.kt` | S6-translit | One more entry in the `providers` map: `TranslitSuggestionProvider` (id `com.manjul.aikeyboard.nlp.providers.translit`), used only by the opt-in Roman subtypes `ur-PK-roman` and `hi-IN-roman` |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S6-translit | Lazy `translitGraph` (`TranslitGraph`: one engine per language on first use, in-memory boosts) and the `Context.translitGraph()` accessor |
+| `app/build.gradle.kts` | S6-translit | `implementation(projects.core.translit)` |
 
 ## Decisions
 

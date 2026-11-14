@@ -31,7 +31,12 @@ class DefaultSubtypesTest {
             .map { File(it, "assets/ime/keyboard/org.florisboard.localization/extension.json") }
             .firstOrNull { it.isFile } ?: fail("extension.json not found")
         val array = Json.parseToJsonElement(file.readText()).jsonObject.getValue("subtypePresets").jsonArray
-        SubtypeJsonConfig.decodeFromJsonElement(ListSerializer(SubtypePreset.serializer()), array)
+        val native = SubtypeJsonConfig.decodeFromJsonElement(ListSerializer(SubtypePreset.serializer()), array)
+        // S6: the Roman presets come from the fork extension; the lookup must not pick them by language.
+        val forkFile = File(file.parentFile.parentFile, "org.aikeyboard.layouts/extension.json")
+        val forkArray = Json.parseToJsonElement(forkFile.readText()).jsonObject.getValue("subtypePresets").jsonArray
+        // Roman presets first: the worst case for a language fallback.
+        SubtypeJsonConfig.decodeFromJsonElement(ListSerializer(SubtypePreset.serializer()), forkArray) + native
     }
 
     private fun seed(current: List<Subtype>, vararg tags: String, baseId: Long = 1000) =
@@ -92,5 +97,27 @@ class DefaultSubtypesTest {
     @Test
     fun `tags without a preset are skipped`() {
         assertEquals(emptyList(), seed(emptyList(), "xx-YY"))
+    }
+
+    @Test
+    fun `exact ur-PK and hi-IN get the native presets`() {
+        assertEquals("org.florisboard.layouts:urdu_phonetic", findPreset(presets, FlorisLocale.fromTag("ur-PK"))!!.preferred.characters.toString())
+        assertEquals("org.florisboard.layouts:hindi_in", findPreset(presets, FlorisLocale.fromTag("hi-IN"))!!.preferred.characters.toString())
+    }
+
+    @Test
+    fun `the Roman presets exist but a bare language never returns them`() {
+        assertNotNull(findPreset(presets, FlorisLocale.fromTag("ur-PK-roman")))
+        for (tag in listOf("ur", "hi")) {
+            val found = findPreset(presets, FlorisLocale.fromTag(tag))!!
+            assertEquals("", found.locale.base.variant)
+        }
+    }
+
+    @Test
+    fun `a fresh install seeds no Roman subtype`() {
+        val seeded = seed(emptyList(), *MVP_LANGUAGE_TAGS.toTypedArray())
+        assertEquals(MVP_LANGUAGE_TAGS.size, seeded.size)
+        assertEquals(emptyList(), seeded.filter { it.primaryLocale.base.variant == "roman" })
     }
 }

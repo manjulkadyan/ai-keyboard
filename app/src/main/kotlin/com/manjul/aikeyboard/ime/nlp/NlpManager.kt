@@ -31,6 +31,9 @@ import com.manjul.aikeyboard.ime.editor.EditorRange
 import com.manjul.aikeyboard.ime.media.emoji.EmojiSuggestionProvider
 import com.manjul.aikeyboard.ime.nlp.han.HanShapeBasedLanguageProvider
 import com.manjul.aikeyboard.ime.nlp.latin.LatinLanguageProvider
+import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider // FORK(S6-translit)
+import com.manjul.aikeyboard.suggestContext // FORK(S6-translit)
+import com.manjul.aikeyboard.translitGraph // FORK(S6-translit)
 import com.manjul.aikeyboard.keyboardManager
 import com.manjul.aikeyboard.lib.util.NetworkUtils
 import com.manjul.aikeyboard.subtypeManager
@@ -69,6 +72,14 @@ class NlpManager(context: Context) {
         mapOf(
             LatinLanguageProvider.ProviderId to ProviderInstanceWrapper(LatinLanguageProvider(context)),
             HanShapeBasedLanguageProvider.ProviderId to ProviderInstanceWrapper(HanShapeBasedLanguageProvider(context)),
+            // FORK(S6-translit): Roman Urdu and Hinglish suggestions for the opt-in Roman subtypes
+            TranslitSuggestionProvider.ProviderId to ProviderInstanceWrapper(
+                TranslitSuggestionProvider(
+                    graph = { context.translitGraph().value },
+                    context = context.suggestContext(),
+                    isPrivateSession = { keyboardManager.activeState.isIncognitoMode },
+                ),
+            ),
         )
     }
     // lock unnecessary because values constant

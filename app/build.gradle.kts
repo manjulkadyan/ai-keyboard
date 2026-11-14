@@ -411,6 +411,7 @@ dependencies {
     implementation(projects.core.database)
     implementation(projects.core.tts)
     implementation(projects.core.suggest) // FORK(S3-suggest): suggestion engine behind LatinLanguageProvider
+    implementation(projects.core.translit) // FORK(S6-translit): Roman Urdu and Hinglish transliteration
     // FORK(S3-net): remote config defaults, the kb-api AI client, its OkHttp factory and lazy Firebase tokens
     implementation(projects.core.config)
     implementation(projects.core.ai)
