@@ -510,4 +510,8 @@
     <string name="phrasebook__category_numbers_time" tools:ignore="MissingTranslation">Numbers and time</string>
     <string name="phrasebook__category_small_talk" tools:ignore="MissingTranslation">Small talk</string>
     <string name="phrasebook__category_phone_internet" tools:ignore="MissingTranslation">Phone and internet</string>
+    <!-- S5 Task 7: clipboard smart chips -->
+    <string name="clipboard__smart_chip_email" tools:ignore="MissingTranslation">Insert email address {value}</string>
+    <string name="clipboard__smart_chip_url" tools:ignore="MissingTranslation">Insert link {value}</string>
+    <string name="clipboard__smart_chip_phone" tools:ignore="MissingTranslation">Insert phone number {value}</string>
 </resources>

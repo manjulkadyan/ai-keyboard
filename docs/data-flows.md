@@ -145,6 +145,13 @@ release builds without one send nothing.
 | `dictionary_lookup` event | `offline` (no online answer was used) and `found` booleans | Yes, when analytics is allowed | Analytics relay | Once per query on the screen, "Define" and the keyboard card | Never the word, the definitions or the source app |
 | `onlineDictionary` | A boolean | No | `FeatureSettings` on the device | The Dictionary screen menu switch (default on) | Off keeps the screen and "Define" offline-only |
 
+## Clipboard history (Sprint 1, encrypted in Sprint 5)
+
+| Flow | Data | Leaves the device? | Where to | When | Notes |
+|---|---|---|---|---|---|
+| Clipboard history (`clipboard_history` Room DB, upstream `ClipboardManager`) | Copied text, its time, pinned flag and MIME types; image and video clips as files | No | Room on the device; media in `no_backup/clipboard_files/` and the `clipboard_files` DB | Only while clipboard history is on (off by default) and the field decision allows it; sensitive clips and OTPs are never stored (S1) | Encrypted at rest: the text column is AES-256-GCM (`e1:` prefix) with a key in AndroidKeyStore (`aikb_clipboard_v1`, no user auth). Rows from before S5 are sealed once at start. A lost key, or a row that no longer opens, deletes all rows, the media files and the key; one WARN without content. With no key, new clips are not stored. Image and video files are not encrypted (plan decision 15). Not in backups. Cleared by Delete my data. The in-app backup export (upstream Backup screen) still writes history text in plain JSON to a file the user picks |
+| Clipboard smart chips (`fork/clipboard/SmartChips`) | Emails, links and phone numbers found in a shown text item | No | — | At render time in the clipboard panel; none on a masked item | Never stored, logged or sent to analytics. A tap commits the value to the focused field |
+
 ## Delete my data (Sprint 4)
 
 Settings → Privacy → Clear data and Delete my data both open one screen (`fork/privacy/DeleteDataScreen`). It has
