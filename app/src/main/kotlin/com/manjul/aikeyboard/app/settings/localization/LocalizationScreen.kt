@@ -40,6 +40,7 @@ import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.app.enumDisplayEntriesOf
+import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider // FORK(S6-translit): Beta label
 import com.manjul.aikeyboard.ime.core.DisplayLanguageNamesIn
 import com.manjul.aikeyboard.ime.core.Subtype
 import com.manjul.aikeyboard.ime.keyboard.LayoutType
@@ -135,11 +136,22 @@ fun LocalizationScreen() = FlorisScreen {
                         "symbols_name" to (sMeta?.label ?: "null"),
                         "currency_set_name" to (currMeta?.label ?: "null"),
                     )
+                    val name = when (displayLanguageNamesIn) {
+                        DisplayLanguageNamesIn.SYSTEM_LOCALE -> subtype.primaryLocale.displayName()
+                        DisplayLanguageNamesIn.NATIVE_LOCALE -> subtype.primaryLocale.displayName(subtype.primaryLocale)
+                    }
+                    // FORK(S6-translit): the Roman subtypes are labelled Beta
+                    val title = if (subtype.nlpProviders.suggestion == TranslitSuggestionProvider.ProviderId) {
+                        stringRes(
+                            R.string.translit__subtype_with_beta,
+                            "name" to name,
+                            "beta" to stringRes(R.string.subtype__beta_label),
+                        )
+                    } else {
+                        name
+                    }
                     Preference(
-                        title = when (displayLanguageNamesIn) {
-                            DisplayLanguageNamesIn.SYSTEM_LOCALE -> subtype.primaryLocale.displayName()
-                            DisplayLanguageNamesIn.NATIVE_LOCALE -> subtype.primaryLocale.displayName(subtype.primaryLocale)
-                        },
+                        title = title,
                         summary = summary,
                         modifier = Modifier.combinedClickable(
                             onClick = {

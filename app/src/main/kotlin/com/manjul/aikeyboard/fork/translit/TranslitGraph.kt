@@ -5,6 +5,8 @@
 
 package com.manjul.aikeyboard.fork.translit
 
+import com.manjul.aikeyboard.core.suggest.DictionaryFormat
+import com.manjul.aikeyboard.core.suggest.SuggestDictionary
 import com.manjul.aikeyboard.core.translit.CustomMappings
 import com.manjul.aikeyboard.core.translit.RuleTable
 import com.manjul.aikeyboard.core.translit.SdictLexicon
@@ -13,6 +15,7 @@ import com.manjul.aikeyboard.core.translit.TranslitLang
 import java.io.IOException
 import java.io.InputStream
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -30,6 +33,10 @@ open class TranslitGraph(
     val mappings: Map<TranslitLang, CustomMappings> = TranslitLang.entries.associateWith { CustomMappings() }
 
     private val engines = HashMap<TranslitLang, TranslitEngine>()
+    private val lexicons = ConcurrentHashMap<TranslitLang, SdictLexicon>()
+    private val englishLock = Any()
+    private var english: SuggestDictionary? = null
+    private var englishTried = false
     private val loadMutex = Mutex()
 
     private val boostLock = Any()
@@ -50,7 +57,29 @@ open class TranslitGraph(
         } catch (_: IllegalArgumentException) {
             throw IllegalStateException("Dictionary unreadable for ${lang.tag}") // Corrupt or newer file.
         }
+        lexicons[lang] = lexicon
         return TranslitEngine(lang, RuleTable.load(lang), lexicon, mappings.getValue(lang))
+    }
+
+    /** The native lexicon frequency of [word] once the engine for [lang] is loaded, else null. */
+    fun nativeFrequency(lang: TranslitLang, word: String): Int? = lexicons[lang]?.frequency(word)
+
+    /**
+     * `en.sdict`, loaded once on first use (decision 7). Null when it is missing or unreadable; that is remembered, so
+     * a bad file is not re-read on every word. Blocking: the provider warms it off the main thread.
+     */
+    open fun englishDictionary(): SuggestDictionary? = synchronized(englishLock) {
+        if (!englishTried) {
+            englishTried = true
+            english = try {
+                openAsset("dict/en.sdict").buffered().use { DictionaryFormat.read(it) }
+            } catch (_: IOException) {
+                null
+            } catch (_: RuntimeException) {
+                null // Corrupt or newer file (IllegalArgumentException) or an unusable source. No text kept.
+            }
+        }
+        english
     }
 
     /** One more use of [native] for [roman]. */

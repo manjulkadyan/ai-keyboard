@@ -33,6 +33,10 @@
     <string name="subtype__ur_pk_roman" tools:ignore="MissingTranslation">Roman Urdu</string>
     <string name="subtype__hi_in_roman" tools:ignore="MissingTranslation">Hinglish</string>
     <string name="subtype__beta_label" tools:ignore="MissingTranslation">Beta</string>
+    <string name="translit__subtype_with_beta" tools:ignore="MissingTranslation">{name} ({beta})</string>
+    <string name="translit__save_mapping" tools:ignore="MissingTranslation">Save mapping</string>
+    <string name="translit__mapping_saved" tools:ignore="MissingTranslation">Mapping saved</string>
+    <string name="translit__latin_chip_description" tools:ignore="MissingTranslation">Keep the Roman spelling</string>
 
     <!-- Smartbar private lock indicator and the "Make this app private" quick action. -->
     <string name="private_lock__description" tools:ignore="MissingTranslation">Private field. Translation, voice and learning are off</string>

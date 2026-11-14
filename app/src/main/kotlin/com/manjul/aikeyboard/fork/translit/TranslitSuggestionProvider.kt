@@ -33,6 +33,12 @@ class TranslitSuggestionProvider(
 
     override val providerId = ProviderId
 
+    /** The check `AutocorrectGate` reads on space; `en.sdict` loads on first use (decision 7). */
+    val englishCheck = EnglishCheck(
+        english = { graph().englishDictionary() },
+        nativeFrequency = { graph().nativeFrequency(it.lang, it.text.toString()) },
+    )
+
     override val forcesSuggestionOn: Boolean = true
 
     override suspend fun create() {}
@@ -58,6 +64,7 @@ class TranslitSuggestionProvider(
         val typed = content.composingText
         if (typed.isEmpty() || !hasLatinLetter(typed)) return emptyList()
         val g = graph()
+        if (typed.length > 2) g.englishDictionary() // Warm it here, off the main thread, for the space gate.
         val engine = try {
             g.engine(lang)
         } catch (_: IllegalStateException) {
@@ -92,6 +99,9 @@ class TranslitSuggestionProvider(
         )
         return out
     }
+
+    /** "Save mapping" is offered only where learning is (not incognito, not a no-learning field). */
+    fun canSaveMapping(): Boolean = learningAllowed()
 
     private fun learningAllowed() = context.allowLearning && !isPrivateSession()
 
