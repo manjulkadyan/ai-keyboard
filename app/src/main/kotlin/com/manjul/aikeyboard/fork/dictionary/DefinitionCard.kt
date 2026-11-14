@@ -67,6 +67,8 @@ data class DefinitionCardUi(
     /** A native transliteration candidate the card may save as a mapping (S6), else null. */
     val mapping: TranslitCandidate? = null,
     val mappingSaved: Boolean = false,
+    /** The last "Save mapping" was blocked or failed: the card says "Not saved" and offers the action again. */
+    val mappingFailed: Boolean = false,
 ) {
     val first: Definition? get() = result?.definitions?.firstOrNull()
 
@@ -87,9 +89,10 @@ object DefinitionCards {
 
     private var job: Job? = null
     private var remove: (() -> Boolean)? = null
+    @Volatile private var saving = false
 
-    /** Saves a mapping for a native transliteration candidate. Task 5 wires it to the repository. */
-    @Volatile var saveMappingHandler: ((TranslitCandidate) -> Unit)? = null
+    /** Saves a mapping for a native transliteration candidate. The second argument reports whether it was written. */
+    @Volatile var saveMappingHandler: ((TranslitCandidate, (Boolean) -> Unit) -> Unit)? = null
 
     /**
      * Opens the card for [word]. [remove] is upstream's suggestion removal, offered only when [learned]. [lookup] is
@@ -103,6 +106,7 @@ object DefinitionCards {
         mapping: TranslitCandidate? = null,
     ) {
         job?.cancel()
+        saving = false
         this.remove = if (learned) remove else null
         _state.value = DefinitionCardUi(word = word, learned = learned, mapping = mapping)
         job = scope.launch {
@@ -136,9 +140,12 @@ object DefinitionCards {
         val card = _state.value ?: return
         val candidate = card.mapping ?: return
         val handler = saveMappingHandler ?: return
-        if (card.mappingSaved) return
-        _state.value = card.copy(mappingSaved = true)
-        handler(candidate)
+        if (card.mappingSaved || saving) return
+        saving = true
+        handler(candidate) { ok ->
+            saving = false
+            _state.update { if (it?.mapping === candidate) it.copy(mappingSaved = ok, mappingFailed = !ok) else it }
+        }
     }
 
     /**
@@ -237,6 +244,7 @@ internal fun DefinitionCardContent(
                 if (ui.mappingSaved) {
                     Text(stringRes(R.string.translit__mapping_saved), color = color)
                 } else {
+                    if (ui.mappingFailed) Text(stringRes(R.string.translit__mapping_not_saved), color = color)
                     TextButton(onClick = onSaveMapping, colors = buttons) {
                         Text(stringRes(R.string.translit__save_mapping))
                     }

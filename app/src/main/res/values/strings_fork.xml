@@ -35,6 +35,7 @@
     <string name="subtype__beta_label" tools:ignore="MissingTranslation">Beta</string>
     <string name="translit__subtype_with_beta" tools:ignore="MissingTranslation">{name} ({beta})</string>
     <string name="translit__save_mapping" tools:ignore="MissingTranslation">Save mapping</string>
+    <string name="translit__mapping_not_saved" tools:ignore="MissingTranslation">Not saved</string>
     <string name="translit__mapping_saved" tools:ignore="MissingTranslation">Mapping saved</string>
     <string name="translit__latin_chip_description" tools:ignore="MissingTranslation">Keep the Roman spelling</string>
 
@@ -557,6 +558,7 @@
     <string name="roman_typing__native_label" tools:ignore="MissingTranslation">Your word</string>
     <string name="roman_typing__roman_error" tools:ignore="MissingTranslation">Use the letters a to z only.</string>
     <string name="roman_typing__native_error" tools:ignore="MissingTranslation">Enter a word of up to 40 characters.</string>
+    <string name="roman_typing__not_saved" tools:ignore="MissingTranslation">Not saved</string>
     <string name="roman_typing__save" tools:ignore="MissingTranslation">Save</string>
     <string name="roman_typing__cancel" tools:ignore="MissingTranslation">Cancel</string>
     <string name="roman_typing__delete" tools:ignore="MissingTranslation">Delete</string>

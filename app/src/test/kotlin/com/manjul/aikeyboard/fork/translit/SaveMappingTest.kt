@@ -115,7 +115,7 @@ class SaveMappingTest {
         DefinitionCards.show("کیا", false, lookup = { lookup }, remove = { false }, mapping = candidate())
         DefinitionCards.saveMapping()
         assertEquals(false, DefinitionCards.state.value?.mappingSaved)
-        val handler: ((TranslitCandidate) -> Unit)? = DefinitionCards.saveMappingHandler
+        val handler: ((TranslitCandidate, (Boolean) -> Unit) -> Unit)? = DefinitionCards.saveMappingHandler
         compose.setContent {
             ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
                 DefinitionCardContent(
@@ -130,12 +130,40 @@ class SaveMappingTest {
     @Test fun `the card saves through the handler once and then shows Mapping saved`() {
         field()
         val saved = mutableListOf<TranslitCandidate>()
-        DefinitionCards.saveMappingHandler = { saved += it }
+        DefinitionCards.saveMappingHandler = { c, done -> saved += c; done(true) }
         val lookup = LookupResult(emptyList(), offline = true, attribution = null)
         DefinitionCards.show("کیا", false, lookup = { lookup }, remove = { false }, mapping = candidate())
         DefinitionCards.saveMapping()
         DefinitionCards.saveMapping()
         assertEquals(1, saved.size)
         assertEquals(true, DefinitionCards.state.value?.mappingSaved)
+    }
+
+    @Test fun `a dropped save is not shown as saved, says Not saved and can be tried again`() {
+        field()
+        var ok = false
+        DefinitionCards.saveMappingHandler = { _, done -> done(ok) }
+        val lookup = LookupResult(emptyList(), offline = true, attribution = null)
+        DefinitionCards.show("کیا", false, lookup = { lookup }, remove = { false }, mapping = candidate())
+        DefinitionCards.saveMapping()
+        assertEquals(false, DefinitionCards.state.value?.mappingSaved)
+        assertEquals(true, DefinitionCards.state.value?.mappingFailed)
+        ok = true
+        DefinitionCards.saveMapping()
+        assertEquals(true, DefinitionCards.state.value?.mappingSaved)
+        assertEquals(false, DefinitionCards.state.value?.mappingFailed)
+    }
+
+    @Test fun `the card shows Not saved after a failed save`() {
+        compose.setContent {
+            ProvideLocalizedResources(LocalContext.current, appName = R.string.app_name) {
+                DefinitionCardContent(
+                    ui = DefinitionCardUi("کیا", learned = false, mapping = candidate(), mappingFailed = true),
+                    onMore = {}, onRemove = {}, onClose = {}, canSave = true,
+                )
+            }
+        }
+        compose.onNodeWithText("Not saved").assertExists()
+        compose.onNodeWithText("Save mapping").assertExists()
     }
 }

@@ -37,6 +37,7 @@ import com.manjul.aikeyboard.fork.perf.ImeTrace // FORK(S4-perf)
 import com.manjul.aikeyboard.R
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.appContext
+import com.manjul.aikeyboard.fork.translit.IncognitoBoosts // FORK(S6-translit)
 import com.manjul.aikeyboard.clipboardManager
 import com.manjul.aikeyboard.editorInstance
 import com.manjul.aikeyboard.extensionManager
@@ -615,6 +616,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     private suspend fun handleToggleIncognitoMode() {
         prefs.suggestion.forceIncognitoModeFromDynamic.set(!prefs.suggestion.forceIncognitoModeFromDynamic.get())
         val newState = !activeState.isIncognitoMode
+        IncognitoBoosts.onChange(appContext, activeState.isIncognitoMode, newState) // FORK(S6-translit)
         activeState.isIncognitoMode = newState
         lastToastReference.get()?.cancel()
         lastToastReference = WeakReference(

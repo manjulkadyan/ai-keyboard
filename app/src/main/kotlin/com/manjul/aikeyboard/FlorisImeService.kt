@@ -346,6 +346,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     // cached. FORK(S4-rc): forced packages are the `policy_force_sensitive_packages` kill switch, read from the
     // Remote Config mirror on each evaluation (the IME never talks to Firebase).
     private lateinit var policyController: ImePolicyController
+    private var saveMappingHandler: SaveMappingHandler? = null // FORK(S6-translit)
     // FORK(S1-voice): in-keyboard voice typing; cancelled by every policy restriction and when the keyboard hides
     private lateinit var voiceSession: VoiceImeSession
     // FORK(S2-bar): the Translate bar; closed by every policy restriction, on hide and on field change. Its
@@ -384,12 +385,14 @@ class FlorisImeService : LifecycleInputMethodService() {
         )
         // Settings can arrive after the field started: recompute the editor state from the new decision.
         policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
-        // FORK(S6-translit): the card's "Save mapping" writes the user's Roman mapping (re-checks learning at tap time)
-        DefinitionCards.saveMappingHandler = SaveMappingHandler(
+        // FORK(S6-translit): the card's "Save mapping" writes the user's Roman mapping (re-checks at tap time)
+        val saveHandler = SaveMappingHandler(
             repository = { translitMappings().value },
             scope = lifecycleScope,
             io = Dispatchers.IO,
         )
+        saveMappingHandler = saveHandler
+        DefinitionCards.saveMappingHandler = saveHandler
         // FORK(S3-suggest): suggestions, autocorrect and learning follow every decision for the current field
         policyController.decision.collectIn(lifecycleScope) { suggestContext().onDecision(it) }
         // FORK(S1-policy): an open clipboard history panel closes when the field turns more restrictive
@@ -534,7 +537,8 @@ class FlorisImeService : LifecycleInputMethodService() {
         voiceSession.destroy() // FORK(S1-voice)
         translateSession.destroy() // FORK(S2-bar)
         aiSession.onDestroy() // FORK(S3-ai)
-        DefinitionCards.saveMappingHandler = null // FORK(S6-translit): the handler belongs to this service
+        // FORK(S6-translit): clear the save handler only if it is still this service's
+        if (DefinitionCards.saveMappingHandler === saveMappingHandler) DefinitionCards.saveMappingHandler = null
         stickersSession.close() // FORK(S5-stickers)
         inputFeedbackController.release() // FORK(S4-themes): the key sound pool
         FlorisImeServiceReference = WeakReference(null)

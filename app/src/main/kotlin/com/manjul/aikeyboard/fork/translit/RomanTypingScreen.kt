@@ -5,6 +5,7 @@
 
 package com.manjul.aikeyboard.fork.translit
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -67,16 +68,31 @@ fun RomanTypingScreen() = FlorisScreen {
             onSave = { roman, native, replaceId ->
                 // Room off the main thread; a failure is not shown with its text and does not crash.
                 scope.launch {
-                    runCatching {
-                        withContext(Dispatchers.IO) {
-                            if (repo.save(lang, roman, native)) replaceId?.let { repo.delete(it) }
-                        }
-                    }
+                    val saved = withContext(Dispatchers.IO) { saveOrFalse(repo, lang, roman, native, replaceId) }
+                    if (!saved) Toast.makeText(context, R.string.roman_typing__not_saved, Toast.LENGTH_SHORT).show()
                 }
             },
             onDelete = { id -> scope.launch { runCatching { withContext(Dispatchers.IO) { repo.delete(id) } } } },
         )
     }
+}
+
+/**
+ * Saves a word and, when an edit changed the Roman spelling, drops the old row. False when learning is blocked or the
+ * write failed (no text kept), so the screen can say "Not saved".
+ */
+internal suspend fun saveOrFalse(
+    repo: CustomMappingsRepository,
+    lang: TranslitLang,
+    roman: String,
+    native: String,
+    replaceId: Long?,
+): Boolean = try {
+    repo.save(lang, roman, native).also { if (it && replaceId != null) repo.delete(replaceId) }
+} catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
+} catch (_: Exception) {
+    false
 }
 
 /** What the add or edit dialog is for: a new word, or [row] being edited. */
@@ -102,9 +118,12 @@ internal fun RomanTypingContent(
         Row(modifier = Modifier.padding(horizontal = 8.dp)) {
             for (l in TranslitLang.entries) {
                 TextButton(onClick = { onLang(l) }) {
-                    val name = stringRes(
-                        if (l == TranslitLang.UR) R.string.roman_typing__language_ur else R.string.roman_typing__language_hi,
-                    )
+                    val nameRes = if (l == TranslitLang.UR) {
+                        R.string.roman_typing__language_ur
+                    } else {
+                        R.string.roman_typing__language_hi
+                    }
+                    val name = stringRes(nameRes)
                     Text(if (l == lang) "● $name" else name)
                 }
             }

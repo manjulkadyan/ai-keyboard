@@ -9,6 +9,7 @@ import androidx.room.Room
 import com.manjul.aikeyboard.core.database.AppDatabase
 import com.manjul.aikeyboard.core.translit.TranslitLang
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Test
@@ -101,19 +102,61 @@ class CustomMappingsRepositoryTest {
         fun candidate(latin: Boolean = false) = TranslitCandidate(
             "کیا", 1.0, false, provider, "kya", TranslitLang.UR, com.manjul.aikeyboard.core.translit.Source.RULES, latin,
         )
+        val results = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
         val handler = SaveMappingHandler({ repo }, kotlinx.coroutines.GlobalScope, Dispatchers.Unconfined)
 
         incognito = true // turned on after the card opened
-        handler(candidate())
+        handler(candidate()) { results += it }
         assertEquals(emptyList(), db.translitMappingDao().all("ur"))
 
         incognito = false
-        handler(candidate(latin = true))
+        handler(candidate(latin = true)) { results += it }
         assertEquals(emptyList(), db.translitMappingDao().all("ur"))
-        handler(candidate())
+        handler(candidate()) { results += it }
         assertEquals("کیا", db.translitMappingDao().all("ur").single().native)
 
-        db.close() // a failing write must not throw out of the handler
-        handler(candidate())
+        assertEquals(listOf(false, false, true), results)
+        val failing = object : com.manjul.aikeyboard.core.database.TranslitMappingDao by db.translitMappingDao() {
+            override suspend fun upsert(entity: com.manjul.aikeyboard.core.database.TranslitMappingEntity) =
+                error("disk") // a failing write must not throw out of the handler
+        }
+        val broken = SaveMappingHandler(
+            { CustomMappingsRepository(failing, { graph }, { true }, { 7L }) },
+            kotlinx.coroutines.GlobalScope, Dispatchers.Unconfined,
+        )
+        broken(candidate()) { results += it }
+        val deadline = System.currentTimeMillis() + 5000
+        while (results.size < 4 && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertEquals(listOf(false, false, true, false), results) // the failure is reported, not thrown
+    }
+
+    @Test fun `clearAll after a pending load leaves memory and Room empty`() = runBlocking {
+        repo.save(TranslitLang.UR, "kya", "کیا")
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val slowDao = object : com.manjul.aikeyboard.core.database.TranslitMappingDao by db.translitMappingDao() {
+            override suspend fun all(lang: String): List<com.manjul.aikeyboard.core.database.TranslitMappingEntity> {
+                val rows = db.translitMappingDao().all(lang) // read before the wipe
+                gate.await()
+                return rows
+            }
+        }
+        val slow = CustomMappingsRepository(slowDao, { graph }, { canLearn }, { 7L })
+        graph.mappings.getValue(TranslitLang.UR).replaceAll(emptyMap())
+        val load = kotlinx.coroutines.GlobalScope.launch(Dispatchers.Default) { slow.load(TranslitLang.UR) }
+        kotlinx.coroutines.delay(100)
+        val clear = kotlinx.coroutines.GlobalScope.launch(Dispatchers.Default) { slow.clearAll() }
+        kotlinx.coroutines.delay(100)
+        gate.complete(Unit)
+        load.join(); clear.join()
+        assertEquals(emptyList(), db.translitMappingDao().all("ur"))
+        assertNull(graph.mappings.getValue(TranslitLang.UR).get("kya"))
+    }
+
+    @Test fun `saveOrFalse reports a blocked or failing save as false`() = runBlocking {
+        canLearn = false
+        assertFalse(saveOrFalse(repo, TranslitLang.UR, "kya", "کیا", null))
+        canLearn = true
+        assertFalse(saveOrFalse(repo, TranslitLang.UR, "ky4", "کیا", null)) // invalid word
+        assertTrue(saveOrFalse(repo, TranslitLang.UR, "kya", "کیا", null))
     }
 }

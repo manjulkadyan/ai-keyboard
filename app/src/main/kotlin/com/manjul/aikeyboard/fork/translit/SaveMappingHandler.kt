@@ -19,19 +19,21 @@ class SaveMappingHandler(
     private val repository: () -> CustomMappingsRepository,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher,
-) : (TranslitCandidate) -> Unit {
-    override fun invoke(candidate: TranslitCandidate) {
-        if (candidate.latin) return
+) : (TranslitCandidate, (Boolean) -> Unit) -> Unit {
+    /** [onResult] gets true only when the mapping was written; every blocked or failed save gets false. */
+    override fun invoke(candidate: TranslitCandidate, onResult: (Boolean) -> Unit) {
         val provider = candidate.sourceProvider as? TranslitSuggestionProvider
-        if (provider?.canSaveMapping() != true) return
+        if (candidate.latin || provider?.canSaveMapping() != true) return onResult(false)
         scope.launch(io) {
+            var saved = false
             try {
-                repository().save(candidate.lang, candidate.typed, candidate.text.toString())
+                saved = repository().save(candidate.lang, candidate.typed, candidate.text.toString())
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
                 // Invalid word or a failed write: nothing saved, nothing logged.
             }
+            onResult(saved)
         }
     }
 }
