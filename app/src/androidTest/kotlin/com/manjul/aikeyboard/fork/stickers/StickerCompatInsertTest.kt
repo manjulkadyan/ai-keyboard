@@ -13,6 +13,7 @@ import com.manjul.aikeyboard.BuildConfig
 import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
 import com.manjul.aikeyboard.core.analytics.AnalyticsSink
 import com.manjul.aikeyboard.core.content.stickers.StickerUi
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -48,7 +49,9 @@ class StickerCompatInsertTest {
             },
             notify = {},
         )
-        val method = inserter.insert(StickerUi("starter/01", "starter", src, premium = false), editor, null)
+        // insert is suspend: it stages on Dispatchers.IO, then sends on this thread.
+        val sticker = StickerUi("starter/01", "starter", src, premium = false)
+        val method = runBlocking { inserter.insert(sticker, editor, null) }
 
         assertEquals(InsertMethod.SHARE, method)
         assertTrue(StickerShareReceiverActivity.latch.await(10, TimeUnit.SECONDS))
