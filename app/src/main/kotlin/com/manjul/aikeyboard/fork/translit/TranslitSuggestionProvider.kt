@@ -21,6 +21,8 @@ class TranslitSuggestionProvider(
     private val graph: () -> TranslitGraph,
     private val context: SuggestContext,
     private val isPrivateSession: () -> Boolean,
+    /** Fills the engine's user mappings for a language from storage; failures are swallowed here. */
+    private val loadMappings: suspend (TranslitLang) -> Unit = {},
 ) : SuggestionProvider {
     companion object {
         const val ProviderId = "com.manjul.aikeyboard.nlp.providers.translit"
@@ -50,6 +52,13 @@ class TranslitSuggestionProvider(
         } catch (_: IllegalStateException) {
             // No dictionary: suggestions stay off for this language rather than crash the keyboard.
         }
+        try {
+            loadMappings(lang)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // A database failure leaves the mappings empty; typing still works. Nothing is logged.
+        }
     }
 
     override suspend fun suggest(
@@ -64,6 +73,7 @@ class TranslitSuggestionProvider(
         val typed = content.composingText
         if (typed.isEmpty() || !hasLatinLetter(typed)) return emptyList()
         val g = graph()
+        if (isPrivateSession) g.clearBoosts() // Decision 11: incognito forgets what was boosted before it began.
         g.englishDictionary() // Warm up for the space gate, which only reads it if loaded (also for "ok", "hi").
         val engine = try {
             g.engine(lang)

@@ -26,6 +26,7 @@ import androidx.room.RoomDatabase
         StickerEntity::class,
         UserPhraseEntity::class,
         PhraseFavouriteEntity::class,
+        TranslitMappingEntity::class,
     ],
     version = AppDatabase.VERSION,
     exportSchema = true,
@@ -34,6 +35,8 @@ import androidx.room.RoomDatabase
         AutoMigration(from = 1, to = 2),
         // v3 (Sprint 5): adds dictionary_entry, sticker_pack, sticker, user_phrase and phrase_favourite.
         AutoMigration(from = 2, to = 3),
+        // v4 (Sprint 6): adds translit_mapping (Roman typing mappings).
+        AutoMigration(from = 3, to = 4),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -47,9 +50,11 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun phraseDao(): PhraseDao
 
+    abstract fun translitMappingDao(): TranslitMappingDao
+
     companion object {
         const val FILE_NAME = "app_database"
-        const val VERSION = 3
+        const val VERSION = 4
 
         fun new(context: Context): AppDatabase = Room
             .databaseBuilder(context.applicationContext, AppDatabase::class.java, FILE_NAME)

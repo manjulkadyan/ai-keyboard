@@ -230,7 +230,11 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/nlp/NlpManager.kt` | S6-translit | One more entry in the `providers` map: `TranslitSuggestionProvider` (id `com.manjul.aikeyboard.nlp.providers.translit`), used only by the opt-in Roman subtypes `ur-PK-roman` and `hi-IN-roman` |
 | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S6-translit | Lazy `translitGraph` (`TranslitGraph`: one engine per language on first use, in-memory boosts) and the `Context.translitGraph()` accessor |
 | `app/build.gradle.kts` | S6-translit | `implementation(projects.core.translit)` |
-| `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/localization/LocalizationScreen.kt` | S6-translit | The subtype list shows a "Beta" label after the name of a subtype whose suggestion provider is the translit provider (`translit__subtype_with_beta`, `subtype__beta_label`) |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/Routes.kt` | S6-translit | `Settings.RomanTyping` route (`settings/roman-typing`) rendering `fork/translit/RomanTypingScreen`. Opens from the Localization screen only |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisApplication.kt` | S6-translit | Lazy `translitMappings` (`CustomMappingsRepository` over Room `translit_mapping`, writes blocked in incognito) and the `Context.translitMappings()` accessor |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S6-translit | `onCreate` sets `DefinitionCards.saveMappingHandler` to `SaveMappingHandler` (re-checks learning at tap time); `onDestroy` clears it |
+| `app/src/main/kotlin/com/manjul/aikeyboard/ime/nlp/NlpManager.kt` | S6-translit | The translit provider gets `loadMappings`, which fills the engine's user mappings from Room on `preload` |
+| `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/localization/LocalizationScreen.kt` | S6-translit | The subtype list shows a "Beta" label after the name of a subtype whose suggestion provider is the translit provider (`translit__subtype_with_beta`, `subtype__beta_label`); a "Roman typing" entry above the subtypes opens `Settings.RomanTyping` |
 
 ## Decisions
 

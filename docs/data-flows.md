@@ -154,6 +154,12 @@ release builds without one send nothing.
 | Clipboard history (`clipboard_history` Room DB, upstream `ClipboardManager`) | Copied text, its time, pinned flag and MIME types; image and video clips as files | No | Room on the device; media in `no_backup/clipboard_files/` and the `clipboard_files` DB | Only while clipboard history is on (off by default) and the field decision allows it; sensitive clips and OTPs are never stored (S1) | Encrypted at rest: the text column is AES-256-GCM (`e1:` prefix) with a key in AndroidKeyStore (`aikb_clipboard_v1`, no user auth). Rows from before S5 are sealed once at start, then the DB is compacted (VACUUM) so no old plaintext stays in free pages. If the compaction fails, an empty mark file (`no_backup/clipboard_compaction.pending`, no content) keeps it owed, and it is retried at each start until it succeeds. The mark is then deleted. A lost key (a bad GCM tag from a present key, or a permanently invalidated or unrecoverable key) deletes all rows, the media files and the key, once per key generation, with one WARN without content. If the key store is only unavailable, sealed rows are hidden, new clips are not stored and nothing is deleted. Image and video files are not encrypted (plan decision 15). The `clipboard_files` DB metadata, including `DISPLAY_NAME`, is plaintext. Not in backups. Cleared by Delete my data. The in-app Backup export (upstream Backup screen) writes history text as plain JSON to a file the user chose. This is a user-initiated export |
 | Clipboard smart chips (`fork/clipboard/SmartChips`) | Emails, links and phone numbers found in a shown text item | No | — | At render time in the clipboard panel; none on a masked item | Never stored, logged or sent to analytics. A tap commits the value to the focused field |
 
+## Roman typing (Sprint 6)
+
+| Flow | Data | Leaves the device? | Where to | When | Notes |
+|---|---|---|---|---|---|
+| Roman typing mappings | Roman word and native word pairs that the user saves | No | Room translit_mapping on the device | When the user saves a mapping in settings or from the long-press card | Never in incognito or a no-learning field. Cleared by Clear data. Not backed up. |
+
 ## Delete my data (Sprint 4)
 
 Settings → Privacy → Clear data and Delete my data both open one screen (`fork/privacy/DeleteDataScreen`). It has

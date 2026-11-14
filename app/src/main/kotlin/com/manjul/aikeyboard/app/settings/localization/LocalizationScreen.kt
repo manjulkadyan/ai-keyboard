@@ -115,6 +115,12 @@ fun LocalizationScreen() = FlorisScreen {
                 navController.navigate(Routes.Settings.LanguagePackManager(LanguagePackManagerScreenAction.MANAGE))
             },
         )
+        // FORK(S6-translit): Roman typing (Beta) settings: the user's own Roman to native words
+        Preference(
+            title = stringRes(R.string.roman_typing__entry),
+            summary = stringRes(R.string.roman_typing__entry_summary),
+            onClick = { navController.navigate(Routes.Settings.RomanTyping) },
+        )
         PreferenceGroup(title = stringRes(R.string.settings__localization__group_subtypes__label)) {
             val subtypes by subtypeManager.subtypesFlow.collectAsState()
             if (subtypes.isEmpty()) {

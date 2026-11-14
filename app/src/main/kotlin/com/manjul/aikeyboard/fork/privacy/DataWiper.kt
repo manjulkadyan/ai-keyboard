@@ -34,6 +34,7 @@ import com.manjul.aikeyboard.ime.dictionary.FlorisUserDictionaryDatabase
 import com.manjul.aikeyboard.phrasebook
 import com.manjul.aikeyboard.translateModelStore
 import com.manjul.aikeyboard.translationHistory
+import com.manjul.aikeyboard.translitMappings
 import com.manjul.aikeyboard.userWordRepository
 import com.manjul.aikeyboard.whisperVoice
 import kotlinx.coroutines.CancellationException
@@ -45,6 +46,7 @@ import java.io.File
  * The on-device half of Delete my data and Clear data (S4 Task 12). [wipeLocal] clears:
  * - every Room table of `AppDatabase` (translation history, `user_word`, `user_bigram`, and from Sprint 5 the user
  *   phrases, phrase favourites, the online dictionary cache and the sticker tables) and the clipboard;
+ * - the Roman typing mappings (`translit_mapping`, their in-memory copy and the in-memory boosts);
  * - the downloaded content packs (`files/content`) and the cached content manifest;
  * - [FeatureSettings], back to the defaults except `onboardingDone` (decision 20), the analytics opt-out and the
  *   signed entitlement cache (`pro*`), so a Pro user stays Pro until the next kb-api answer;
@@ -67,6 +69,7 @@ class DataWiper(
     private val firebase: FirebaseResetter,
     private val clearUpstreamDictionary: suspend () -> Unit,
     private val clearContent: suspend () -> Unit,
+    private val clearTranslit: suspend () -> Unit,
 ) {
     /** Returns false when a step failed; the other steps still ran. */
     suspend fun wipeLocal(includeModels: Boolean): Boolean {
@@ -75,6 +78,7 @@ class DataWiper(
         ok = step { userWords.clearAll() } && ok
         ok = step(clearUpstreamDictionary) && ok
         ok = step(clearContent) && ok
+        ok = step(clearTranslit) && ok
         ok = step(clearClipboard) && ok
         ok = step { settings.update(::resetKeepingEntitlement) } && ok
         ok = step(clearAdState) && ok
@@ -119,6 +123,7 @@ class DataWiper(
                 deleteModels = { deleteModels(app) },
                 firebase = DefaultFirebaseResetter(FirebaseDataResetter(app, app.firebaseGraph().value.bootstrap)),
                 clearUpstreamDictionary = { clearFlorisUserDictionary(app) },
+                clearTranslit = { app.translitMappings().value.clearAll() },
                 clearContent = {
                     val manifest = app.contentManifest()
                     clearContent(

@@ -167,4 +167,23 @@ class TranslitSuggestionProviderTest {
         runBlocking { q.preload(urRoman) }
         assertTrue(runBlocking { q.suggest(urRoman, composing("kya"), 3, false, false) }.isEmpty())
     }
+
+    @Test fun `turning incognito on drops the boosts made before it`() {
+        allow()
+        graph.boost(TranslitLang.UR, "kya", "کیا")
+        assertEquals(1, graph.boostCount())
+        runBlocking { provider.suggest(urRoman, composing("kya"), 3, false, false) }
+        assertEquals(1, graph.boostCount())
+        runBlocking { provider.suggest(urRoman, composing("kya"), 3, false, true) }
+        assertEquals(0, graph.boostCount())
+    }
+
+    @Test fun `preload fills the user mappings and a failing load does not crash`() {
+        val loaded = mutableListOf<TranslitLang>()
+        val ok = TranslitSuggestionProvider({ graph }, context, { incognito }, { loaded += it })
+        runBlocking { ok.preload(urRoman) }
+        assertEquals(listOf(TranslitLang.UR), loaded)
+        val bad = TranslitSuggestionProvider({ graph }, context, { incognito }, { error("db") })
+        runBlocking { bad.preload(urRoman) }
+    }
 }

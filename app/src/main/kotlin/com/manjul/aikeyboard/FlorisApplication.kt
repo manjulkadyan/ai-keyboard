@@ -91,6 +91,7 @@ import com.manjul.aikeyboard.core.database.TranslationHistoryRepository
 import com.manjul.aikeyboard.core.database.UserWordRepository // FORK(S3-userdict)
 import com.manjul.aikeyboard.core.tts.TtsManager
 import com.manjul.aikeyboard.fork.suggest.SuggestContext // FORK(S3-suggest)
+import com.manjul.aikeyboard.fork.translit.CustomMappingsRepository // FORK(S6-translit)
 import com.manjul.aikeyboard.fork.translit.TranslitGraph // FORK(S6-translit)
 import com.manjul.aikeyboard.fork.ai.AiAppGraph // FORK(S3-ai)
 import com.manjul.aikeyboard.fork.rc.FirebaseGraph // FORK(S4-rc)
@@ -203,6 +204,16 @@ class FlorisApplication : Application(), Configuration.Provider { // FORK(S1-whi
     // FORK(S6-translit): Roman Urdu / Hinglish engines (one per language, loaded on first use) and in-memory boosts
     val translitGraph = lazy {
         TranslitGraph(openAsset = { path -> assets.open(path) }, io = Dispatchers.IO)
+    }
+    // FORK(S6-translit): user Roman mappings (Room translit_mapping + the engines' CustomMappings); writes only when
+    // the keyboard is not in incognito (the field decision is checked by the long-press handler)
+    val translitMappings = lazy {
+        CustomMappingsRepository(
+            dao = appDatabase.value.translitMappingDao(),
+            graph = { translitGraph.value },
+            canLearn = { !(keyboardManager.isInitialized() && keyboardManager.value.activeState.isIncognitoMode) },
+            clock = System::currentTimeMillis,
+        )
     }
     // FORK(S2-translator): the process's one TextToSpeech holder; the engine binds on the first acquire()
     val ttsManager = lazy { TtsManager(this) }
@@ -407,6 +418,8 @@ fun Context.suggestContext() = this.florisApplication().suggestContext
 
 // FORK(S6-translit): accessor for the transliteration engines
 fun Context.translitGraph() = this.florisApplication().translitGraph
+
+fun Context.translitMappings() = this.florisApplication().translitMappings // FORK(S6-translit)
 
 // FORK(S3-ai): accessor for the app-wide AI pieces
 fun Context.aiAppGraph() = this.florisApplication().aiAppGraph

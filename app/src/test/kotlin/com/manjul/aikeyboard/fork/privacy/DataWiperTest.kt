@@ -107,6 +107,7 @@ class DataWiperTest {
     }
 
     private var phraseCacheClears = 0
+    private var translitClears = 0
 
     private suspend fun clearContent() =
         DataWiper.clearContent(db, app, manifest, clearPhraseCache = { phraseCacheClears++ }) { workManager }
@@ -122,6 +123,7 @@ class DataWiperTest {
         firebase = resetter,
         clearUpstreamDictionary = { DataWiper.clearFlorisUserDictionary(app) },
         clearContent = { clearContent() },
+        clearTranslit = { translitClears++ },
     )
 
     @After
@@ -331,10 +333,25 @@ class DataWiperTest {
             firebase = resetter,
             clearUpstreamDictionary = {},
             clearContent = { clearContent() },
+            clearTranslit = { translitClears++ },
         )
         assertEquals(false, failing.wipeLocal(includeModels = false))
         assertEquals(0, db.translationHistoryDao().count())
         assertEquals(1, resets)
         assertEquals(1, adClears)
+    }
+
+    @Test
+    fun `wipeLocal clears the Roman mappings and an earlier failing step does not skip it`() = runBlocking {
+        wiper.wipeLocal(includeModels = false)
+        assertEquals(1, translitClears)
+        val failing = DataWiper(
+            settings = settings, history = history, userWords = userWords,
+            clearClipboard = { error("disk") }, clearAdState = {}, clearAiCache = {}, deleteModels = {},
+            firebase = resetter, clearUpstreamDictionary = { error("dict") }, clearContent = { error("content") },
+            clearTranslit = { translitClears++ },
+        )
+        assertEquals(false, failing.wipeLocal(includeModels = false))
+        assertEquals(2, translitClears)
     }
 }

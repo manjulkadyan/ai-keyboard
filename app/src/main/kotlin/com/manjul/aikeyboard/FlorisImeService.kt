@@ -136,6 +136,8 @@ import com.manjul.aikeyboard.fork.billing.proGate // FORK(S4-billing)
 import com.manjul.aikeyboard.core.datastore.isProAt // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.themes.PremiumThemeGuard // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.perf.ImeTrace // FORK(S4-perf)
+import com.manjul.aikeyboard.fork.translit.SaveMappingHandler // FORK(S6-translit)
+import kotlinx.coroutines.Dispatchers // FORK(S6-translit)
 import kotlinx.coroutines.flow.first // FORK(S4-themes)
 import kotlinx.coroutines.launch // FORK(S4-themes)
 import java.lang.ref.WeakReference
@@ -382,6 +384,12 @@ class FlorisImeService : LifecycleInputMethodService() {
         )
         // Settings can arrive after the field started: recompute the editor state from the new decision.
         policyController.addRestrictionListener { editorInstance.applyPolicyDecision(it) }
+        // FORK(S6-translit): the card's "Save mapping" writes the user's Roman mapping (re-checks learning at tap time)
+        DefinitionCards.saveMappingHandler = SaveMappingHandler(
+            repository = { translitMappings().value },
+            scope = lifecycleScope,
+            io = Dispatchers.IO,
+        )
         // FORK(S3-suggest): suggestions, autocorrect and learning follow every decision for the current field
         policyController.decision.collectIn(lifecycleScope) { suggestContext().onDecision(it) }
         // FORK(S1-policy): an open clipboard history panel closes when the field turns more restrictive
@@ -526,6 +534,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         voiceSession.destroy() // FORK(S1-voice)
         translateSession.destroy() // FORK(S2-bar)
         aiSession.onDestroy() // FORK(S3-ai)
+        DefinitionCards.saveMappingHandler = null // FORK(S6-translit): the handler belongs to this service
         stickersSession.close() // FORK(S5-stickers)
         inputFeedbackController.release() // FORK(S4-themes): the key sound pool
         FlorisImeServiceReference = WeakReference(null)

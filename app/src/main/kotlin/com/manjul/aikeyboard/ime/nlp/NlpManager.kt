@@ -34,6 +34,7 @@ import com.manjul.aikeyboard.ime.nlp.latin.LatinLanguageProvider
 import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider // FORK(S6-translit)
 import com.manjul.aikeyboard.suggestContext // FORK(S6-translit)
 import com.manjul.aikeyboard.translitGraph // FORK(S6-translit)
+import com.manjul.aikeyboard.translitMappings // FORK(S6-translit)
 import com.manjul.aikeyboard.keyboardManager
 import com.manjul.aikeyboard.lib.util.NetworkUtils
 import com.manjul.aikeyboard.subtypeManager
@@ -78,6 +79,7 @@ class NlpManager(context: Context) {
                     graph = { context.translitGraph().value },
                     context = context.suggestContext(),
                     isPrivateSession = { keyboardManager.activeState.isIncognitoMode },
+                    loadMappings = { context.translitMappings().value.load(it) },
                 ),
             ),
         )
