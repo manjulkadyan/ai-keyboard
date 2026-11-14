@@ -240,6 +240,7 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/nlp/NlpManager.kt` | S6-translit | The translit provider gets a `TranslitAnalytics` over the consent-aware relay, so each accepted chip sends the sampled `translit_commit{lang, source}` (no text, no length) |
 | `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S6-translit | `TranslateImeSession` gets `translitLang` (the active subtype's language when its suggestion provider is the translit provider), so letters, space and backspace in the open bar go through `fork/translit/BarTranslitController` |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/CandidatesRow.kt` | S6-translit | While the Translate bar is open in a Roman subtype (`fork/smartbar/barTranslitStripOrNull`), the row shows the bar's Roman typing candidates instead of host suggestions; a tap calls `BarTranslitController.onPick` and a long-press does nothing |
+| `settings.gradle.kts` | S6-translit | `include(":core:translit")` (pure-JVM Roman Urdu and Hinglish transliteration core: rule tables, beam decoder, lexicon seam, ranker and user mappings) |
 
 ## Decisions
 
