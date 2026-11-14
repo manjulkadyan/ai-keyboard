@@ -237,6 +237,9 @@ The files below are listed but cannot (or need not) carry an inline marker. Keep
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/editor/EditorInstance.kt` | S6-translit | `applyPolicyDecision` calls `IncognitoBoosts.onChange`, so the Roman in-memory boosts are cleared when incognito turns on |
 | `app/src/main/kotlin/com/manjul/aikeyboard/ime/keyboard/KeyboardManager.kt` | S6-translit | `handleToggleIncognitoMode` calls `IncognitoBoosts.onChange`, so the Roman in-memory boosts are cleared when incognito is toggled on |
 | `app/src/main/kotlin/com/manjul/aikeyboard/app/settings/localization/LocalizationScreen.kt` | S6-translit | The subtype list shows a "Beta" label after the name of a subtype whose suggestion provider is the translit provider (`translit__subtype_with_beta`, `subtype__beta_label`); a "Roman typing" entry above the subtypes opens `Settings.RomanTyping` |
+| `app/src/main/kotlin/com/manjul/aikeyboard/ime/nlp/NlpManager.kt` | S6-translit | The translit provider gets a `TranslitAnalytics` over the consent-aware relay, so each accepted chip sends the sampled `translit_commit{lang, source}` (no text, no length) |
+| `app/src/main/kotlin/com/manjul/aikeyboard/FlorisImeService.kt` | S6-translit | `TranslateImeSession` gets `translitLang` (the active subtype's language when its suggestion provider is the translit provider), so letters, space and backspace in the open bar go through `fork/translit/BarTranslitController` |
+| `app/src/main/kotlin/com/manjul/aikeyboard/ime/smartbar/CandidatesRow.kt` | S6-translit | While the Translate bar is open in a Roman subtype (`fork/smartbar/barTranslitStripOrNull`), the row shows the bar's Roman typing candidates instead of host suggestions; a tap calls `BarTranslitController.onPick` and a long-press does nothing |
 
 ## Decisions
 

@@ -63,6 +63,7 @@ class EventCatalogLimitsTest {
         EventCatalog.deleteData(),
         EventCatalog.dictionaryLookup(offline = false, found = true),
         EventCatalog.stickerSend(big, premium = true, StickerMethod.CLIPBOARD),
+        EventCatalog.translitCommit(big, TranslitCommitSource.CANDIDATE),
     )
 
     @Test fun everyRegistryKeyIsProducedByAFactoryCall() {
@@ -175,7 +176,7 @@ class EventCatalogLimitsTest {
             "consent_result", "consent_withdrawn",
             "purchase_start", "trial_start", "purchase_success", "purchase_fail", "subscription_state",
             "restore_purchases", "paywall_view", "paywall_close", "ad_paid_event", "update_prompt", "theme_apply",
-            "delete_data", "dictionary_lookup", "sticker_send",
+            "delete_data", "dictionary_lookup", "sticker_send", "translit_commit",
         )
         assertEquals(expected, EventCatalog.allNames.toSet())
         assertFalse("first_keystroke" in EventCatalog.allNames)
@@ -203,5 +204,13 @@ class EventCatalogLimitsTest {
         assertEquals("sticker_send", e.name)
         assertEquals(mapOf("pack_id" to "starter_plus", "premium" to true, "method" to "commit_content"), e.params)
         assertEquals("other", EventCatalog.stickerSend("com.example.chat", false, StickerMethod.SHARE).params["pack_id"])
+    }
+
+    @Test fun translitCommitCarriesLangAndSourceOnly() {
+        val e = EventCatalog.translitCommit("ur", TranslitCommitSource.CANDIDATE)
+        assertEquals("translit_commit", e.name)
+        assertEquals(mapOf("lang" to "ur", "source" to "candidate"), e.params)
+        assertEquals("latin", EventCatalog.translitCommit("hi", TranslitCommitSource.LATIN).params["source"])
+        assertEquals("other", EventCatalog.translitCommit("not a tag!", TranslitCommitSource.LATIN).params["lang"])
     }
 }

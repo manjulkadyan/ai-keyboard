@@ -159,6 +159,7 @@ release builds without one send nothing.
 | Flow | Data | Leaves the device? | Where to | When | Notes |
 |---|---|---|---|---|---|
 | Roman typing mappings | Roman word and native word pairs that the user saves | No | Room translit_mapping on the device | When the user saves a mapping in settings or from the long-press card | Never in incognito or a no-learning field. Cleared by Clear data. Not backed up. |
+| `translit_commit` event | `lang` (`ur` or `hi`) and `source` (`candidate` or `latin`) | Yes, when analytics is allowed | Analytics relay | Sampled at 1% for each Roman typing commit (a strip tap or a space commit) in the host field or the Translate bar | Never the Roman word, the committed text, a length or the host app |
 
 ## Delete my data (Sprint 4)
 

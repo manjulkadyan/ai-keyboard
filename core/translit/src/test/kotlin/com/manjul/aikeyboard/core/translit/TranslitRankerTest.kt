@@ -49,8 +49,8 @@ class TranslitRankerTest {
         val hyp = listOf(Hypothesis("rules", 1.0))
         val hiScore = ranker.rank(hyp, null) { 0 }.single().score
         val urScore = TranslitRanker(TranslitLang.UR, lexicon).rank(hyp, null) { 0 }.single().score
-        assertEquals(-1.0, hiScore, 1e-9)
-        assertEquals(-1.6, urScore, 1e-9)
+        assertEquals(-TranslitRanker.HI_RULE_WEIGHT, hiScore, 1e-9)
+        assertEquals(-TranslitRanker.UR_RULE_WEIGHT, urScore, 1e-9)
     }
 
     @Test fun equalScoreTieGoesToFewerSegmentsThenNative() {

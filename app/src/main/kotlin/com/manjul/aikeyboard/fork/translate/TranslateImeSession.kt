@@ -23,7 +23,11 @@ import com.manjul.aikeyboard.core.translate.TranslateRequest
 import com.manjul.aikeyboard.core.translate.TranslateResult
 import com.manjul.aikeyboard.core.translate.TranslationCache
 import com.manjul.aikeyboard.core.translate.bar.DebouncePolicy
+import com.manjul.aikeyboard.core.translit.TranslitLang
 import com.manjul.aikeyboard.fork.policy.ImePolicyController
+import com.manjul.aikeyboard.fork.translit.BarTranslitController
+import com.manjul.aikeyboard.fork.translit.TranslitAnalytics
+import com.manjul.aikeyboard.fork.translit.TranslitGraph
 import com.manjul.aikeyboard.fork.voice.ImeTextTarget
 import com.manjul.aikeyboard.ime.editing.TextTarget
 import com.manjul.aikeyboard.ime.translateui.BarBufferTarget
@@ -32,7 +36,10 @@ import com.manjul.aikeyboard.ime.translateui.CloseReason
 import com.manjul.aikeyboard.ime.translateui.TranslateBarController
 import com.manjul.aikeyboard.ime.translateui.TranslateCall
 import com.manjul.aikeyboard.translation
+import com.manjul.aikeyboard.translitGraph
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +61,8 @@ import kotlinx.coroutines.launch
  * @param engine the translate call; defaults to the app's router. Tests pass a fake.
  * @param beforeToggle runs before the bar opens or closes from a key; the service cancels voice typing there, so a
  *   dictation never spans the switch between the host field and the bar.
+ * @param translitLang the active Roman subtype's language, or null for any other subtype (S6): then [barTranslit]
+ *   leaves the keys to the S2 path.
  */
 class TranslateImeSession(
     private val context: Context,
@@ -75,6 +84,9 @@ class TranslateImeSession(
     private val cache: () -> TranslationCache? = { translation().cache },
     private val openOfflineLanguages: () -> Unit = { context.startActivity(offlineLanguagesIntent(context)) },
     private val beforeToggle: () -> Unit = {},
+    private val translitLang: () -> TranslitLang? = { null },
+    private val translitGraph: () -> TranslitGraph = { context.translitGraph().value },
+    private val translitCompute: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val target = ImeTextTarget(connection, isRawInputEditor, setOwnsComposing)
 
@@ -88,6 +100,10 @@ class TranslateImeSession(
         get() = _controller.value ?: createController().also { _controller.value = it }
 
     private var voiceTarget: BarBufferTarget? = null
+
+    /** Roman typing in the bar (S6); created with the controller, so null before the bar first opens. */
+    var barTranslit: BarTranslitController? = null
+        private set
 
     init {
         policy.addRestrictionListener { d ->
@@ -114,6 +130,7 @@ class TranslateImeSession(
         beforeToggle()
         val c = controller
         c.open()
+        barTranslit?.reset() // Kept bar text from a hide: no stale strip or undo.
         if (c.capturingInput) scope.launch { runCatching { models().refresh() } }
     }
 
@@ -122,11 +139,13 @@ class TranslateImeSession(
         val c = _controller.value ?: return
         if (!c.capturingInput) return
         beforeToggle()
+        barTranslit?.reset()
         c.close()
     }
 
     /** Enter or ✓. */
     fun insert() {
+        barTranslit?.reset()
         _controller.value?.insert()
     }
 
@@ -203,6 +222,17 @@ class TranslateImeSession(
             onFirstTranslate = ::markFirstTranslate,
         )
         voiceTarget = BarBufferTarget(c.buffer)
+        barTranslit = BarTranslitController(
+            buffer = c.buffer,
+            graph = translitGraph,
+            lang = translitLang,
+            decision = { policy.decision.value },
+            analytics = analytics,
+            sampler = RateSampler(TranslitAnalytics.SAMPLE_RATE),
+            scope = scope,
+            clock = clock,
+            compute = translitCompute,
+        )
         return c
     }
 

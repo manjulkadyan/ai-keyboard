@@ -10,9 +10,9 @@ package com.manjul.aikeyboard.core.translit
  * input offset (spec "BeamDecoder"). A partial whose native text is not a [lexicon] prefix is pruned, unless that
  * would empty the beam, so unknown words still decode.
  *
- * Hindi only: when two consonant matches meet, the decoder joins them with a virama (्), unless a row for the joined
- * Roman maps to something else (a digraph such as "kh" or "ng"). It also offers the plain pair, which keeps the
- * inherent vowel ("karna" needs र then न), at [SCHWA_COST]. Duplicate outputs keep the lowest cost.
+ * Hindi only: when two consonant matches meet, the decoder joins them with a virama (्) at [VIRAMA_COST], unless a
+ * row for the joined Roman maps to something else (a digraph such as "kh" or "ng"). It also offers the plain pair,
+ * which keeps the inherent vowel ("karna" needs र then न), at [SCHWA_COST]. Duplicate outputs keep the lowest cost.
  *
  * The Roman word and the outputs are user content: nothing here logs them, and [toString] holds no text.
  */
@@ -68,7 +68,8 @@ class BeamDecoder(private val table: RuleTable, private val lexicon: TranslitLex
         val prev = partial.consonant
         if (prev != null && next != null) {
             if (viramaAllowed(prev, next)) {
-                emit(Partial(partial.native + VIRAMA + rule.native, partial.cost + rule.cost, segments, next))
+                val joinedCost = partial.cost + rule.cost + VIRAMA_COST
+                emit(Partial(partial.native + VIRAMA + rule.native, joinedCost, segments, next))
             }
             emit(Partial(partial.native + rule.native, partial.cost + rule.cost + SCHWA_COST, segments, next))
             return
@@ -103,8 +104,11 @@ class BeamDecoder(private val table: RuleTable, private val lexicon: TranslitLex
         /** Longer inputs return no hypotheses (brief: more than 24 letters). */
         const val MAX_INPUT_LENGTH: Int = 24
 
-        /** Cost of keeping the inherent vowel between two Hindi consonants. A placeholder, tuned in Task 6. */
+        /** Cost of keeping the inherent vowel between two Hindi consonants. Tuned on the smoke set in Task 6. */
         const val SCHWA_COST: Double = 0.5
+
+        /** Cost of a generic virama join, so explicit conjunct rows (cost 0.1) win over it. Tuned in Task 6. */
+        const val VIRAMA_COST: Double = 0.2
 
         /** Cost, then fewer segments, then native text, then the pending consonant. Never hash order. */
         private val PARTIAL_ORDER: Comparator<Partial> = compareBy<Partial> { it.cost }

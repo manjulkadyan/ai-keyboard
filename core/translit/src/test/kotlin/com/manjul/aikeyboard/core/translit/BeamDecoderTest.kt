@@ -91,7 +91,7 @@ class BeamDecoderTest {
         val out = BeamDecoder(table, MapLexicon(emptyMap())).decode("kt")
         val conjunct = out.filter { it.native == "क्त" }
         assertEquals(1, conjunct.size)
-        assertEquals(0.0, conjunct.single().cost) // the cheaper path wins
+        assertEquals(BeamDecoder.VIRAMA_COST, conjunct.single().cost) // the cheaper path (generic virama) wins
     }
 
     @Test fun aVowelBetweenConsonantsBlocksTheVirama() {

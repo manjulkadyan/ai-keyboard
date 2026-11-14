@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2024-2025 The FlorisBoard Contributors
  * Modified by AI Keyboard contributors, 2026. FORK(S5-dict): long-press opens the definition card
+ * FORK(S6-translit): the open Translate bar's Roman typing candidates replace host suggestions
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,6 +43,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
 import com.manjul.aikeyboard.fork.dictionary.DefinitionCards // FORK(S5-dict)
+import com.manjul.aikeyboard.fork.smartbar.barTranslitStripOrNull // FORK(S6-translit)
+import com.manjul.aikeyboard.fork.translit.TranslitCandidate // FORK(S6-translit)
 import com.manjul.aikeyboard.ime.nlp.ClipboardSuggestionCandidate
 import com.manjul.aikeyboard.ime.nlp.SuggestionCandidate
 import com.manjul.aikeyboard.ime.theme.FlorisImeUi
@@ -70,7 +73,11 @@ fun CandidatesRow(modifier: Modifier = Modifier) {
     val subtypeManager by context.subtypeManager()
 
     val displayMode by prefs.suggestion.displayMode.observeAsState()
-    val candidates by nlpManager.activeCandidatesFlow.collectAsState()
+    val hostCandidates by nlpManager.activeCandidatesFlow.collectAsState()
+    // FORK(S6-translit): in the open bar with a Roman subtype, the strip follows the bar's Roman word instead
+    val barTranslit = barTranslitStripOrNull()
+    val barCandidates = barTranslit?.candidates?.collectAsState()?.value
+    val candidates = barCandidates ?: hostCandidates
 
     SnyggRow(
         elementName = FlorisImeUi.SmartbarCandidatesRow.elementName,
@@ -120,11 +127,19 @@ fun CandidatesRow(modifier: Modifier = Modifier) {
                     displayMode = displayMode,
                     onClick = {
                         // Can't use candidate directly
-                        keyboardManager.commitCandidate(candidates[n])
+                        val tapped = candidates[n]
+                        // FORK(S6-translit): a bar candidate replaces the bar's Roman word, never the editor
+                        if (barTranslit != null && tapped is TranslitCandidate) {
+                            barTranslit.onPick(tapped)
+                        } else {
+                            keyboardManager.commitCandidate(tapped)
+                        }
                     },
                     onLongPress = {
                         // Can't use candidate directly
                         val candidateItem = candidates[n]
+                        // FORK(S6-translit): no card or removal for a bar candidate (nothing is learned in the bar)
+                        if (barTranslit != null && candidateItem is TranslitCandidate) return@CandidateItem false
                         // FORK(S5-dict): the definition card (plan decision 21); Remove keeps the upstream action
                         DefinitionCards.onLongPress(context, candidateItem) {
                             nlpManager.removeSuggestion(subtypeManager.activeSubtype, candidateItem)

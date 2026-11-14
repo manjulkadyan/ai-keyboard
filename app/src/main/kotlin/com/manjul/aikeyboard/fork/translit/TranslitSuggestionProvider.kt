@@ -23,12 +23,18 @@ class TranslitSuggestionProvider(
     private val isPrivateSession: () -> Boolean,
     /** Fills the engine's user mappings for a language from storage; failures are swallowed here. */
     private val loadMappings: suspend (TranslitLang) -> Unit = {},
+    /** `translit_commit` for each accepted chip; null sends nothing (tests). */
+    private val analytics: TranslitAnalytics? = null,
 ) : SuggestionProvider {
     companion object {
         const val ProviderId = "com.manjul.aikeyboard.nlp.providers.translit"
 
         private fun langOf(subtype: Subtype): TranslitLang? =
             TranslitLang.entries.firstOrNull { it.tag == subtype.primaryLocale.base.language }
+
+        /** The language of a Roman subtype (one that uses this provider), or null for any other, e.g. plain ur-PK. */
+        fun romanLangOf(subtype: Subtype): TranslitLang? =
+            if (subtype.nlpProviders.suggestion == ProviderId) langOf(subtype) else null
 
         private fun hasLatinLetter(word: String) = word.any { it in 'a'..'z' || it in 'A'..'Z' }
     }
@@ -116,7 +122,9 @@ class TranslitSuggestionProvider(
     private fun learningAllowed() = context.allowLearning && !isPrivateSession()
 
     override suspend fun notifySuggestionAccepted(subtype: Subtype, candidate: SuggestionCandidate) {
-        if (candidate !is TranslitCandidate || candidate.latin) return
+        if (candidate !is TranslitCandidate) return
+        analytics?.onCommit(candidate.lang, candidate.latin) // Before the learning checks: no text is sent.
+        if (candidate.latin) return
         if (!learningAllowed()) return
         graph().boost(candidate.lang, candidate.typed, candidate.text.toString())
     }

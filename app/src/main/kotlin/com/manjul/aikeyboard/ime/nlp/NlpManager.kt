@@ -21,6 +21,7 @@ import android.os.SystemClock
 import android.util.LruCache
 import androidx.lifecycle.MutableLiveData
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.appContext // FORK(S6-translit)
 import com.manjul.aikeyboard.clipboardManager
 import com.manjul.aikeyboard.editorInstance
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
@@ -31,6 +32,7 @@ import com.manjul.aikeyboard.ime.editor.EditorRange
 import com.manjul.aikeyboard.ime.media.emoji.EmojiSuggestionProvider
 import com.manjul.aikeyboard.ime.nlp.han.HanShapeBasedLanguageProvider
 import com.manjul.aikeyboard.ime.nlp.latin.LatinLanguageProvider
+import com.manjul.aikeyboard.fork.translit.TranslitAnalytics // FORK(S6-translit)
 import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider // FORK(S6-translit)
 import com.manjul.aikeyboard.suggestContext // FORK(S6-translit)
 import com.manjul.aikeyboard.translitGraph // FORK(S6-translit)
@@ -80,6 +82,8 @@ class NlpManager(context: Context) {
                     context = context.suggestContext(),
                     isPrivateSession = { keyboardManager.activeState.isIncognitoMode },
                     loadMappings = { context.translitMappings().value.load(it) },
+                    // FORK(S6-translit): sampled translit_commit through the consent-aware relay
+                    analytics = TranslitAnalytics({ context.appContext().value.analytics.value.log(it) }),
                 ),
             ),
         )

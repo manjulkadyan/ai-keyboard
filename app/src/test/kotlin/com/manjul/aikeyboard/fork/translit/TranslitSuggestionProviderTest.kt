@@ -7,6 +7,8 @@ package com.manjul.aikeyboard.fork.translit
 
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
+import com.manjul.aikeyboard.core.analytics.AnalyticsEvent
+import com.manjul.aikeyboard.core.analytics.RateSampler
 import com.manjul.aikeyboard.core.translit.RuleTable
 import com.manjul.aikeyboard.core.translit.Source
 import com.manjul.aikeyboard.core.translit.TranslitEngine
@@ -131,6 +133,20 @@ class TranslitSuggestionProviderTest {
         runBlocking { provider.notifySuggestionAccepted(urRoman, c) }
         assertEquals(1, graph.boostCount())
         runBlocking { provider.notifySuggestionReverted(urRoman, c) }
+        assertEquals(0, graph.boostCount())
+    }
+
+    @Test fun `every accepted chip reports translit_commit, even the Latin chip and without learning`() {
+        val events = mutableListOf<AnalyticsEvent>()
+        val sampled = TranslitSuggestionProvider(
+            { graph }, context, { incognito },
+            analytics = TranslitAnalytics({ events += it }, RateSampler(1.0) { 0.0 }),
+        )
+        allow(PolicyDecision.Unrestricted.copy(allowLearning = false))
+        val out = runBlocking { sampled.suggest(urRoman, composing("kya"), 3, false, false) }
+        runBlocking { sampled.notifySuggestionAccepted(urRoman, out.first()) }
+        runBlocking { sampled.notifySuggestionAccepted(urRoman, out.last()) }
+        assertEquals(listOf("candidate", "latin"), events.map { it.params["source"] })
         assertEquals(0, graph.boostCount())
     }
 

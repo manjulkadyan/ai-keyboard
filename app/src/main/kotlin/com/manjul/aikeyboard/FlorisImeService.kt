@@ -137,6 +137,7 @@ import com.manjul.aikeyboard.core.datastore.isProAt // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.themes.PremiumThemeGuard // FORK(S4-themes)
 import com.manjul.aikeyboard.fork.perf.ImeTrace // FORK(S4-perf)
 import com.manjul.aikeyboard.fork.translit.SaveMappingHandler // FORK(S6-translit)
+import com.manjul.aikeyboard.fork.translit.TranslitSuggestionProvider // FORK(S6-translit)
 import kotlinx.coroutines.Dispatchers // FORK(S6-translit)
 import kotlinx.coroutines.flow.first // FORK(S4-themes)
 import kotlinx.coroutines.launch // FORK(S4-themes)
@@ -423,6 +424,8 @@ class FlorisImeService : LifecycleInputMethodService() {
             scope = lifecycleScope,
             subtypeLang = { subtypeManager.activeSubtype.primaryLocale.languageTag() },
             beforeToggle = { voiceSession.controller.cancel(EndReason.FIELD_CHANGE.value) },
+            // FORK(S6-translit): Roman typing in the bar follows the active Roman subtype
+            translitLang = { TranslitSuggestionProvider.romanLangOf(subtypeManager.activeSubtype) },
         )
         // FORK(S3-ai): see the aiSession declaration
         aiSession = AiImeSession(
