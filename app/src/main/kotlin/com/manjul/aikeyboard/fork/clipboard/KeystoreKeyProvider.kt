@@ -14,8 +14,9 @@ import javax.crypto.SecretKey
 /**
  * The clipboard key in AndroidKeyStore: AES-256-GCM, made on first use, no user authentication (TRD §11.6), so
  * the IME can read history on a locked screen as upstream does. Nothing touches the key store until [key].
- * [key] is null when the key store fails. [lookup] reports an invalidated or unrecoverable key as
- * [KeyLookup.Lost] and every other failure as [KeyLookup.Unavailable], which callers treat as transient.
+ * [key] is null when the key store fails. [lookup] classifies a failure with [classifyKeyFailure]: an
+ * invalidated key, or an unrecoverable key without a key store error behind it, is [KeyLookup.Lost]. Every other
+ * failure, a keystore2 error wrapped in `UnrecoverableKeyException` included, is [KeyLookup.Unavailable].
  */
 class KeystoreKeyProvider(private val alias: String = DEFAULT_ALIAS) : KeyProvider {
     @Volatile
@@ -29,7 +30,7 @@ class KeystoreKeyProvider(private val alias: String = DEFAULT_ALIAS) : KeyProvid
         return try {
             KeyLookup.Present(loadOrCreate().also { cached = it })
         } catch (e: Exception) {
-            if (isPermanentKeyLoss(e)) KeyLookup.Lost else KeyLookup.Unavailable
+            classifyKeyFailure(e)
         }
     }
 

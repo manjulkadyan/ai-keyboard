@@ -12,7 +12,7 @@ import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardItem
  * Deletes the whole clipboard history when its key is lost: every row, the media files, then the key alias, so
  * that the next write makes a new key. Logs one WARN without content.
  *
- * A wipe happens at most once per key generation. A caller passes the [currentGeneration] it saw before it read
+ * A wipe happens at most once per key generation. A caller passes the [currentGeneration] it saw before it queried
  * the rows. If a wipe ran since then, those rows were sealed with the old key, so the call does nothing. That keeps
  * a racing panel read and the migrator to one wipe, and the new key and new clips survive.
  */
@@ -49,7 +49,7 @@ class ClipboardWipe(
  * - Write: the text is sealed. With no key, the result is null and the caller stores nothing.
  * - Read: a row without the `e1:` prefix (written before S5, not yet migrated) passes through as plain text.
  * - Read with an unavailable key: sealed rows are hidden for this read and nothing is deleted.
- * - Read with a lost key (see [isPermanentKeyLoss]): [openAll] returns no items and starts [ClipboardWipe.wipe]
+ * - Read with a lost key (see [isPermanentKeyLoss]): [read] returns no items and starts [ClipboardWipe.wipe]
  *   through [launchWipe]. The manager runs it on its IO scope, because reads arrive on the main thread.
  */
 class ClipboardHistoryVault(
@@ -70,8 +70,16 @@ class ClipboardHistoryVault(
         }
     }
 
-    /** [generation] is [ClipboardWipe.currentGeneration] as it was when [rows] were read. */
-    fun openAll(rows: List<ClipboardItem>, generation: Int = wipe.currentGeneration): List<ClipboardItem> {
+    /**
+     * Runs [query] and opens its rows. The wipe generation is taken before [query] runs, so rows from a query that
+     * started before a wipe cannot wipe again.
+     */
+    fun read(query: () -> List<ClipboardItem>): List<ClipboardItem> {
+        val generation = wipe.currentGeneration
+        return openAll(query(), generation)
+    }
+
+    private fun openAll(rows: List<ClipboardItem>, generation: Int): List<ClipboardItem> {
         val opened = ArrayList<ClipboardItem>(rows.size)
         for (row in rows) {
             val text = row.text

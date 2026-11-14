@@ -37,19 +37,43 @@ sealed interface KeyLookup {
     data object Lost : KeyLookup
 }
 
-/** True for a real key loss: a bad GCM tag from a present key, or an invalidated or unrecoverable key. */
+/**
+ * True for a real key loss. Only these count:
+ * - a bad GCM tag from a present key ([AEADBadTagException])
+ * - a [KeyPermanentlyInvalidatedException] anywhere in the cause chain
+ * - an [UnrecoverableKeyException] with no key store error in its cause chain
+ *
+ * On API 31+, keystore2 wraps most `getKeyEntry` errors in an [UnrecoverableKeyException] with a key store error as
+ * the cause. A dead daemon (`SYSTEM_ERROR`) is one of them. These count as unavailable, never as lost. The
+ * `android.security.KeyStoreException` of API 33+ has no permanent-invalidation error code (checked with `javap`
+ * against the compile SDK), so no error code makes such a wrapped error count as lost.
+ */
 internal fun isPermanentKeyLoss(error: Throwable): Boolean {
-    var e: Throwable? = error
-    var depth = 0
-    while (e != null && depth++ < MAX_CAUSE_DEPTH) {
-        if (e is AEADBadTagException || e is KeyPermanentlyInvalidatedException || e is UnrecoverableKeyException) {
-            return true
-        }
-        e = e.cause
-    }
-    return false
+    val chain = causeChain(error)
+    if (chain.any { it is KeyPermanentlyInvalidatedException }) return true
+    if (chain.any(::isKeyStoreError)) return false
+    return chain.any { it is AEADBadTagException || it is UnrecoverableKeyException }
 }
 
+/** [KeyLookup.Lost] for a real loss (see [isPermanentKeyLoss]), else [KeyLookup.Unavailable]. */
+internal fun classifyKeyFailure(error: Throwable): KeyLookup =
+    if (isPermanentKeyLoss(error)) KeyLookup.Lost else KeyLookup.Unavailable
+
+private fun causeChain(error: Throwable): List<Throwable> {
+    val chain = ArrayList<Throwable>()
+    var e: Throwable? = error
+    while (e != null && chain.size < MAX_CAUSE_DEPTH && e !in chain) {
+        chain += e
+        e = e.cause
+    }
+    return chain
+}
+
+/** `java.security.KeyStoreException`, or the framework's `android.security.KeyStoreException` (API 31+). */
+private fun isKeyStoreError(e: Throwable): Boolean =
+    e is java.security.KeyStoreException || e.javaClass.name == ANDROID_KEY_STORE_EXCEPTION
+
+private const val ANDROID_KEY_STORE_EXCEPTION = "android.security.KeyStoreException"
 private const val MAX_CAUSE_DEPTH = 8
 
 /** The result of [ClipboardCipher.trySeal]. */
@@ -94,7 +118,7 @@ class ClipboardCipher(private val keys: KeyProvider) {
             val body = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
             Sealing.Done(PREFIX + Base64.getEncoder().encodeToString(iv + body))
         } catch (e: Exception) {
-            if (isPermanentKeyLoss(e)) Sealing.Lost else Sealing.Unavailable
+            if (classifyKeyFailure(e) == KeyLookup.Lost) Sealing.Lost else Sealing.Unavailable
         }
     }
 
@@ -116,7 +140,7 @@ class ClipboardCipher(private val keys: KeyProvider) {
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BYTES * 8, payload, 0, IV_BYTES))
             Opening.Opened(String(cipher.doFinal(payload, IV_BYTES, payload.size - IV_BYTES), Charsets.UTF_8))
         } catch (e: Exception) {
-            if (isPermanentKeyLoss(e)) Opening.Lost else Opening.Unavailable
+            if (classifyKeyFailure(e) == KeyLookup.Lost) Opening.Lost else Opening.Unavailable
         }
     }
 

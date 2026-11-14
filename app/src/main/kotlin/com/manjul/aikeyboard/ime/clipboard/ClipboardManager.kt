@@ -162,11 +162,14 @@ class ClipboardManager(
                     }.runOnce()
                 }
                 withContext(Dispatchers.Main) {
-                    clipHistoryDao?.getAllLive()?.observeForever { items ->
-                        // FORK(S5-clipboard): open sealed rows off the main thread, in arrival order. The wipe
-                        // generation is taken on arrival, so rows read before a wipe cannot wipe again.
-                        val generation = historyWipe.currentGeneration
-                        ioScope.launch(historyReadDispatcher) { updateHistory(historyVault.openAll(items, generation)) }
+                    clipHistoryDao?.getAllLive()?.observeForever { _ ->
+                        // FORK(S5-clipboard): each emission only triggers a re-query on the serial IO dispatcher.
+                        // The vault takes the wipe generation before that query, so rows from before a wipe
+                        // cannot wipe again. Sealed rows are opened off the main thread, in order.
+                        ioScope.launch(historyReadDispatcher) {
+                            val dao = clipHistoryDao ?: return@launch
+                            updateHistory(historyVault.read { dao.getAll() })
+                        }
                     }
                 }
             }

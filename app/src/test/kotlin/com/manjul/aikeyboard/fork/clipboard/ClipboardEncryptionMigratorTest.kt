@@ -145,7 +145,7 @@ class ClipboardEncryptionMigratorTest {
         // The migrator reads the rows, then the panel read wipes and a new clip arrives, then the migrator opens.
         val racingDao = object : ClipboardHistoryDao by dao {
             override fun getAll(): List<ClipboardItem> {
-                vault.openAll(staleRows)
+                vault.read { staleRows }
                 fresh = dao.insert(assertNotNull(vault.sealForWrite(ClipboardItem.text("after the wipe"))))
                 return staleRows
             }
@@ -155,17 +155,53 @@ class ClipboardEncryptionMigratorTest {
         assertEquals(1, keys.deletes)
         assertEquals(1, filesDeleted)
         assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
-        assertEquals(listOf("after the wipe"), vault.openAll(dao.getAll()).map { it.text })
+        assertEquals(listOf("after the wipe"), vault.read { dao.getAll() }.map { it.text })
         assertEquals(fresh, dao.getAll().single().id)
     }
 
-    @Test fun `only a bad tag, an invalidated key or an unrecoverable key count as a lost key`() {
+    @Test fun `only a bad tag, an invalidated key or a bare unrecoverable key count as a lost key`() {
         assertTrue(isPermanentKeyLoss(AEADBadTagException()))
         assertTrue(isPermanentKeyLoss(KeyPermanentlyInvalidatedException()))
         assertTrue(isPermanentKeyLoss(UnrecoverableKeyException()))
         assertTrue(isPermanentKeyLoss(IllegalStateException(UnrecoverableKeyException())))
+        val invalidated = UnrecoverableKeyException().apply { initCause(KeyPermanentlyInvalidatedException()) }
+        assertTrue(isPermanentKeyLoss(invalidated))
+        assertFalse(isPermanentKeyLoss(TestKeys.wrappedKeyStoreError()))
+        assertFalse(isPermanentKeyLoss(UnrecoverableKeyException().apply { initCause(androidKeyStoreException()) }))
         assertFalse(isPermanentKeyLoss(KeyStoreException()))
         assertFalse(isPermanentKeyLoss(ProviderException()))
         assertFalse(isPermanentKeyLoss(IllegalStateException()))
+    }
+
+    @Test fun `a wrapped key store error leaves every row and wipes nothing`() = runBlocking {
+        migrator.migrate()
+        keys.failure = TestKeys.wrappedKeyStoreError()
+        assertEquals(ClipboardEncryptionMigrator.Result.NoKey, migrator.migrate())
+        assertEquals(3, dao.getAll().size)
+        assertEquals(0, keys.deletes)
+        assertEquals(0, filesDeleted)
+        keys.failure = null
+        assertEquals(texts.toSet(), dao.getAll().map { cipher.open(it.text!!) }.toSet())
+    }
+
+    @Test fun `a bare unrecoverable key wipes the history once`() = runBlocking {
+        migrator.migrate()
+        keys.failure = UnrecoverableKeyException()
+        assertEquals(ClipboardEncryptionMigrator.Result.Lost, migrator.migrate())
+        assertEquals(emptyList(), dao.getAll())
+        assertEquals(1, keys.deletes)
+        assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
+    }
+
+    /** The framework's `android.security.KeyStoreException` (its constructor is hidden), as keystore2 throws it. */
+    private fun androidKeyStoreException(): Exception {
+        val type = Class.forName("android.security.KeyStoreException")
+        val ctor = type.getDeclaredConstructor(Int::class.javaPrimitiveType, String::class.java)
+        ctor.isAccessible = true
+        return ctor.newInstance(SYSTEM_ERROR, "system error") as Exception
+    }
+
+    private companion object {
+        const val SYSTEM_ERROR = 4 // keystore2 ResponseCode.SYSTEM_ERROR
     }
 }

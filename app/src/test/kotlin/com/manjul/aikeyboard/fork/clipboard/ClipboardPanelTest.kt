@@ -26,6 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
+import java.security.UnrecoverableKeyException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -34,7 +35,7 @@ import kotlin.test.assertTrue
 
 /**
  * The clipboard panel's history as `ClipboardManager` keeps it: every DAO write goes through
- * [ClipboardHistoryVault.sealForWrite] and every DAO read through [ClipboardHistoryVault.openAll], exactly as the
+ * [ClipboardHistoryVault.sealForWrite] and every DAO read through [ClipboardHistoryVault.read], exactly as the
  * manager calls them. `ClipboardManager` itself needs `FlorisApplication` (native library), which Robolectric
  * cannot load, so the upstream behaviours are asserted on the same DAO queries, prefs and helpers it uses.
  */
@@ -69,7 +70,7 @@ class ClipboardPanelTest {
 
     /** What the manager's `getAllLive` observer hands to `updateHistory`. */
     private fun history(): ClipboardHistory =
-        ClipboardHistory(vault.openAll(dao.getAll()).sortedByDescending { it.creationTimestampMs })
+        ClipboardHistory(vault.read { dao.getAll() }.sortedByDescending { it.creationTimestampMs })
 
     private fun textAt(text: String, ageMs: Long, pinned: Boolean = false) =
         ClipboardItem.text(text).copy(creationTimestampMs = System.currentTimeMillis() - ageMs, isPinned = pinned)
@@ -208,18 +209,56 @@ class ClipboardPanelTest {
         assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
     }
 
-    @Test fun `a late read of rows from before a wipe does not wipe again`() {
+    @Test fun `a stale emission after a wipe does not wipe again`() {
         write(ClipboardItem.text("private note"))
         val staleRows = dao.getAll()
-        val generation = wipe.currentGeneration
-        keys.current = TestKeys.newKey()
-        assertEquals(emptyList(), vault.openAll(staleRows, generation).map { it.text })
-        write(ClipboardItem.text("after the wipe"))
-        val keyAfterWipe = keys.current
-        vault.openAll(staleRows, generation) // the same rows, delivered late
+        keys.current = TestKeys.newKey() // the old key is gone
+        var keyAfterWipe: Any? = null
+        // A second emission's query starts, then the first emission wipes and a new clip arrives, and only then
+        // does the second query return the old rows.
+        val raced = vault.read {
+            assertEquals(emptyList(), history().all) // the first emission: one wipe
+            write(ClipboardItem.text("after the wipe"))
+            keyAfterWipe = keys.current
+            staleRows
+        }
+        assertEquals(emptyList(), raced)
         assertEquals(1, keys.deletes)
         assertEquals(keyAfterWipe, keys.current)
         assertEquals(listOf("after the wipe"), history().all.map { it.text })
+        assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
+    }
+
+    @Test fun `a wrapped key store error hides rows, stores nothing and wipes nothing`() {
+        write(ClipboardItem.text("pinned note").copy(isPinned = true))
+        dao.insert(ClipboardItem.text("pre-S5 plaintext"))
+        keys.failure = TestKeys.wrappedKeyStoreError()
+        assertEquals(listOf("pre-S5 plaintext"), history().all.map { it.text })
+        assertNull(vault.sealForWrite(ClipboardItem.text("copied during the fault")))
+        assertEquals(2, dao.getAll().size)
+        assertEquals(0, keys.deletes)
+        assertEquals(0, filesDeleted)
+        assertTrue(ShadowLog.getLogsForTag(ClipboardWipe.TAG).isEmpty())
+        keys.failure = null
+        assertEquals(setOf("pinned note", "pre-S5 plaintext"), history().all.map { it.text }.toSet())
+    }
+
+    @Test fun `a bare unrecoverable key wipes once on write`() {
+        write(ClipboardItem.text("private note"))
+        keys.failure = UnrecoverableKeyException()
+        assertNull(vault.sealForWrite(ClipboardItem.text("copied")))
+        assertEquals(emptyList(), dao.getAll())
+        assertEquals(1, keys.deletes)
+        assertEquals(1, filesDeleted)
+        assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
+    }
+
+    @Test fun `a bare unrecoverable key wipes once on read`() {
+        write(ClipboardItem.text("private note"))
+        keys.failure = UnrecoverableKeyException()
+        assertEquals(emptyList(), history().all)
+        assertEquals(emptyList(), dao.getAll())
+        assertEquals(1, keys.deletes)
         assertEquals(listOf(Log.WARN), ShadowLog.getLogsForTag(ClipboardWipe.TAG).map { it.type })
     }
 }
