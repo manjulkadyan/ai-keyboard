@@ -106,7 +106,10 @@ class DataWiperTest {
         }
     }
 
-    private suspend fun clearContent() = DataWiper.clearContent(db, app, manifest) { workManager }
+    private var phraseCacheClears = 0
+
+    private suspend fun clearContent() =
+        DataWiper.clearContent(db, app, manifest, clearPhraseCache = { phraseCacheClears++ }) { workManager }
 
     private val wiper = DataWiper(
         settings = settings,
@@ -226,6 +229,13 @@ class DataWiperTest {
         contentSource.offline = true
         assertEquals(null, manifest.current())
         assertFalse(ContentDirs.manifest(app).exists())
+    }
+
+    @Test
+    fun `wipe clears the in-memory phrase translations`() = runBlocking {
+        // Review M2: the phrasebook's translation cache holds phrase text, so Delete my data drops it.
+        assertTrue(wiper.wipeLocal(includeModels = false))
+        assertEquals(1, phraseCacheClears)
     }
 
     @Test

@@ -490,6 +490,7 @@
     <string name="phrasebook__empty_own" tools:ignore="MissingTranslation">Add your own phrases with the + button.</string>
     <string name="phrasebook__unavailable" tools:ignore="MissingTranslation">The phrasebook could not be opened.</string>
     <string name="phrasebook__no_voice" tools:ignore="MissingTranslation">No voice for this language on this phone.</string>
+    <string name="phrasebook__not_saved" tools:ignore="MissingTranslation">Phrase not saved</string>
     <string name="phrasebook__category_favourites" tools:ignore="MissingTranslation">Favourites</string>
     <string name="phrasebook__category_my_phrases" tools:ignore="MissingTranslation">My phrases</string>
     <string name="phrasebook__category_greetings" tools:ignore="MissingTranslation">Greetings</string>

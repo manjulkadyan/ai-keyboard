@@ -54,6 +54,9 @@ class PhrasebookRepository(
             size > CACHE_SIZE
     }
 
+    /** Drops the cached translations, which hold phrase text. Delete my data calls it. */
+    fun clearCache() = synchronized(cache) { cache.clear() }
+
     /** The virtual "favourites" and "my_phrases" first, then the catalogue categories in `sort` order. */
     fun categories(): List<PhraseCategory> =
         listOf(PhraseCategory(FAVOURITES, -2, virtual = true), PhraseCategory(MY_PHRASES, -1, virtual = true)) +

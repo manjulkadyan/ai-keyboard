@@ -11,6 +11,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -57,22 +58,27 @@ import com.manjul.aikeyboard.core.content.phrasebook.PhraseCategory
 import com.manjul.aikeyboard.core.content.phrasebook.PhrasebookRepository
 import com.manjul.aikeyboard.core.translate.Lang
 import com.manjul.aikeyboard.core.tts.TtsAvailability
-import com.manjul.aikeyboard.core.tts.TtsManager
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.fork.translator.displayName
+import com.manjul.aikeyboard.fork.tts.ScreenSpeaker
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.phrasebook
 import com.manjul.aikeyboard.ttsManager
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import org.florisboard.lib.compose.stringRes
 
-internal class PhrasebookHolder(context: Context, saved: SavedStateHandle) : ViewModel() {
+internal class PhrasebookHolder(
+    context: Context,
+    saved: SavedStateHandle,
+    private val notSaved: () -> Unit,
+) : ViewModel() {
     private val graph = context.phrasebook().value
-    val speaker = PhraseSpeaker(context.ttsManager().value)
+    val speaker = ScreenSpeaker(context.ttsManager().value)
     var repository: PhrasebookRepository? = null
         private set
     var unavailable by mutableStateOf(false)
@@ -99,8 +105,12 @@ internal class PhrasebookHolder(context: Context, saved: SavedStateHandle) : Vie
 
     fun download() = graph.download(vm.state.value.target)
 
+    /** Runs a write (add, edit, delete, star). A failure shows "Phrase not saved" and logs nothing (review I1). */
     fun edit(block: suspend PhrasebookRepository.() -> Unit) {
-        viewModelScope.launch { graph.repository()?.let { runCatching { it.block() } } }
+        viewModelScope.launch {
+            val saved = phraseWrite { checkNotNull(graph.repository()) { "phrasebook unavailable" }.block() }
+            if (!saved) notSaved()
+        }
     }
 
     override fun onCleared() = speaker.release()
@@ -119,7 +129,11 @@ fun PhrasebookScreen() = FlorisScreen {
 
     val context = LocalContext.current.applicationContext
     val holder = viewModel<PhrasebookHolder>(
-        factory = viewModelFactory { initializer { PhrasebookHolder(context, createSavedStateHandle()) } },
+        factory = viewModelFactory {
+            initializer {
+                PhrasebookHolder(context, createSavedStateHandle()) { toast(context, R.string.phrasebook__not_saved) }
+            }
+        },
     )
     val vm = holder.vm
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { holder.speaker.stop() }
@@ -177,7 +191,8 @@ fun PhrasebookScreen() = FlorisScreen {
                     onSpeak = { phrase ->
                         holder.viewModelScope.launch {
                             val tag = if (phrase.translation != null) state.target else PhrasebookRepository.SOURCE
-                            when (holder.speaker.speak(PhrasebookViewModel.shownText(phrase), tag)) {
+                            val text = PhrasebookViewModel.shownText(phrase)
+                            when (holder.speaker.speak(text, Locale.forLanguageTag(tag))) {
                                 TtsAvailability.MISSING_DATA -> start(context, holder.speaker.installVoiceIntent())
                                 TtsAvailability.AVAILABLE -> Unit
                                 else -> toast(context, R.string.phrasebook__no_voice)
@@ -268,33 +283,17 @@ private fun copy(context: Context, text: String) {
     toast(context, R.string.phrasebook__copied)
 }
 
-private fun toast(context: Context, text: Int) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+private fun toast(context: Context, @StringRes text: Int) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
 
-/** Holds the shared `TtsManager` from the first speak until the screen goes away. Speaks in the shown language. */
-internal class PhraseSpeaker(private val tts: TtsManager) {
-    private var acquired = false
-
-    suspend fun speak(text: String, tag: String): TtsAvailability {
-        if (!acquired) {
-            acquired = true
-            tts.acquire()
-        }
-        val locale = Locale.forLanguageTag(tag)
-        val availability = runCatching { tts.availability(locale) }.getOrDefault(TtsAvailability.NOT_SUPPORTED)
-        if (availability == TtsAvailability.AVAILABLE) tts.speak(text, locale)
-        return availability
-    }
-
-    fun installVoiceIntent(): Intent = tts.installVoiceIntent()
-
-    fun stop() {
-        if (acquired) tts.stop()
-    }
-
-    fun release() {
-        if (acquired) {
-            acquired = false
-            tts.release()
-        }
-    }
+/**
+ * Runs one phrasebook write and reports whether it worked. A missing phrase, a bad ref or a Room error gives false;
+ * the error is dropped without a log, because its message can name the phrase. Cancellation still propagates.
+ */
+internal suspend fun phraseWrite(block: suspend () -> Unit): Boolean = try {
+    block()
+    true
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
+    false
 }

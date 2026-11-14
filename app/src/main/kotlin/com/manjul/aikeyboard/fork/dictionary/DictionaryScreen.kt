@@ -60,10 +60,10 @@ import com.manjul.aikeyboard.core.content.dictionary.Definition
 import com.manjul.aikeyboard.core.content.dictionary.LookupResult
 import com.manjul.aikeyboard.core.datastore.FeatureSettingsStore
 import com.manjul.aikeyboard.core.tts.TtsAvailability
-import com.manjul.aikeyboard.core.tts.TtsManager
 import com.manjul.aikeyboard.dictionary
 import com.manjul.aikeyboard.featureSettingsStore
 import com.manjul.aikeyboard.fork.routes.DictionaryHandoff
+import com.manjul.aikeyboard.fork.tts.ScreenSpeaker
 import com.manjul.aikeyboard.lib.compose.FlorisScreen
 import com.manjul.aikeyboard.ttsManager
 import java.util.Locale
@@ -73,7 +73,7 @@ import org.florisboard.lib.compose.stringRes
 internal class DictionaryHolder(context: Context, saved: androidx.lifecycle.SavedStateHandle) : ViewModel() {
     private val graph = context.dictionary().value
     val store: FeatureSettingsStore = context.featureSettingsStore().value
-    val speaker = DictionarySpeaker(context.ttsManager().value)
+    val speaker = ScreenSpeaker(context.ttsManager().value)
     val vm = DictionaryViewModel(
         saved = saved,
         lookup = { word, online -> graph.repository.lookup(word, allowNetwork = online) },
@@ -134,7 +134,7 @@ fun DictionaryLookupScreen() = FlorisScreen {
             onSubmit = vm::submit,
             onSpeak = { text ->
                 scope.launch {
-                    if (holder.speaker.speak(text) == TtsAvailability.MISSING_DATA) {
+                    if (holder.speaker.speak(text, Locale.ENGLISH) == TtsAvailability.MISSING_DATA) {
                         start(context, holder.speaker.installVoiceIntent())
                     }
                 }
@@ -261,34 +261,6 @@ internal fun Footer(attribution: Attribution?, onOpenLicence: (String) -> Unit) 
                 text = stringRes(R.string.dictionary__licence, "licence" to attribution.licenceName),
                 fontWeight = FontWeight.Medium,
             )
-        }
-    }
-}
-
-/** Holds the shared `TtsManager` from the first speak until the screen or sheet goes away. */
-internal class DictionarySpeaker(private val tts: TtsManager) {
-    private var acquired = false
-
-    suspend fun speak(text: String): TtsAvailability {
-        if (!acquired) {
-            acquired = true
-            tts.acquire()
-        }
-        val availability = runCatching { tts.availability(Locale.ENGLISH) }.getOrDefault(TtsAvailability.NOT_SUPPORTED)
-        if (availability == TtsAvailability.AVAILABLE) tts.speak(text, Locale.ENGLISH)
-        return availability
-    }
-
-    fun installVoiceIntent(): Intent = tts.installVoiceIntent()
-
-    fun stop() {
-        if (acquired) tts.stop()
-    }
-
-    fun release() {
-        if (acquired) {
-            acquired = false
-            tts.release()
         }
     }
 }

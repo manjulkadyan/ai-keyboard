@@ -56,8 +56,10 @@ import com.manjul.aikeyboard.core.tts.TtsAvailability
 import com.manjul.aikeyboard.dictionary
 import com.manjul.aikeyboard.fork.processtext.ProcessTextInput
 import com.manjul.aikeyboard.fork.routes.AppIntents
+import com.manjul.aikeyboard.fork.tts.ScreenSpeaker
 import com.manjul.aikeyboard.fork.voice.isOnline
 import com.manjul.aikeyboard.ttsManager
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -168,10 +170,10 @@ class DefineTextActivity : ComponentActivity() {
 
         private fun defaultDeps(context: Context): Deps {
             val app = context.applicationContext
-            val speaker = DictionarySpeaker(app.ttsManager().value)
+            val speaker = ScreenSpeaker(app.ttsManager().value)
             return Deps(
                 lookup = { word -> app.dictionary().value.repository.lookup(word, allowNetwork = isOnline(app)) },
-                speak = speaker::speak,
+                speak = { text -> speaker.speak(text, Locale.ENGLISH) },
                 stopSpeaking = speaker::release,
                 installVoiceIntent = speaker::installVoiceIntent,
             )

@@ -137,6 +137,18 @@ class PhrasebookRepositoryTest {
     }
 
     @Test
+    fun clearCacheDropsTheCachedTranslations() = runBlocking {
+        // Delete my data (review M2): the cache holds phrase text, so after clearCache it must translate again.
+        val repo = repository()
+        repo.phrases("greetings", "es").first()
+        repo.phrases("greetings", "es").first()
+        assertEquals(3, calls.size, "the second read comes from the cache")
+        repo.clearCache()
+        repo.phrases("greetings", "es").first()
+        assertEquals(6, calls.size)
+    }
+
+    @Test
     fun englishNeedsNoTranslation() = runBlocking {
         val greetings = repository().phrases("greetings", "en").first()
         assertTrue(greetings.all { it.translation == null && !it.machine })

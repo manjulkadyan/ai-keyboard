@@ -30,6 +30,7 @@ import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardFilesDatabase
 import com.manjul.aikeyboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import com.manjul.aikeyboard.ime.dictionary.DictionaryManager
 import com.manjul.aikeyboard.ime.dictionary.FlorisUserDictionaryDatabase
+import com.manjul.aikeyboard.phrasebook
 import com.manjul.aikeyboard.translateModelStore
 import com.manjul.aikeyboard.translationHistory
 import com.manjul.aikeyboard.userWordRepository
@@ -123,6 +124,7 @@ class DataWiper(
                         app = app,
                         manifest = if (manifest.isInitialized()) manifest.value else null,
                         workManager = { WorkManager.getInstance(app) },
+                        clearPhraseCache = { app.phrasebook().let { if (it.isInitialized()) it.value.clearCache() } },
                     )
                 },
             )
@@ -131,13 +133,15 @@ class DataWiper(
         /**
          * Cancels the pack downloads (tag [PackDownloadWorker.TAG]) first, so none of them writes a pack again after
          * the wipe. Then it empties the Sprint 5 tables (user phrases and favourites, the online dictionary cache,
-         * sticker packs and stickers), clears the in-memory [manifest] when it exists, and deletes the downloaded packs
-         * and the cached manifest. Every part runs; the first error is rethrown at the end.
+         * sticker packs and stickers), clears the in-memory [manifest] and the phrase translations ([clearPhraseCache])
+         * when they exist, and deletes the downloaded packs and the cached manifest. Every part runs; the first error is
+         * rethrown at the end.
          */
         internal suspend fun clearContent(
             db: AppDatabase,
             app: Context,
             manifest: ManifestCache?,
+            clearPhraseCache: () -> Unit = {},
             workManager: () -> WorkManager,
         ) {
             var error: Exception? = null
@@ -152,6 +156,7 @@ class DataWiper(
             }
             part { PackDownloadWorker.cancelAll(workManager()) }
             part { db.phraseDao().clearAll() }
+            part { clearPhraseCache() }
             part { db.dictionaryDao().clearAll() }
             part { db.stickerDao().clearAll() }
             part { manifest?.clear() }

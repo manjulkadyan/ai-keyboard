@@ -37,6 +37,7 @@ import kotlinx.coroutines.withContext
 class PhrasebookAppGraph(context: Context) {
     private val app = context.applicationContext
     private val lock = Mutex()
+    @Volatile
     private var repository: PhrasebookRepository? = null
 
     /** The repository over the `no_backup` copy of the bundled DB, or null when it cannot be opened. */
@@ -46,6 +47,11 @@ class PhrasebookAppGraph(context: Context) {
         }?.let { reader ->
             PhrasebookRepository(reader, app.appDatabase().value.phraseDao(), translator).also { repository = it }
         }
+    }
+
+    /** Drops the cached translations of the repository when it is open (Delete my data). It opens nothing. */
+    fun clearCache() {
+        repository?.clearCache()
     }
 
     private val translator: PhraseTranslator by lazy {
