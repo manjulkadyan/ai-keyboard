@@ -90,6 +90,8 @@ include(":core:database")
 include(":core:tts")
 // FORK(S3-suggest): on-device suggestion engine (dictionary format, DL matcher, ranking, autocorrect), pure JVM
 include(":core:suggest")
+// FORK(S6-translit): pure JVM transliteration core (rule tables, later the beam decoder)
+include(":core:translit")
 // FORK(S3-suggest): JVM tool that builds assets/dict/<lang>.sdict from third_party/wordlists
 include(":tools:dictbuild")
 // FORK(S3-net): defaults-only remote config, AI client (SSE, errors, LRU), OkHttp auth headers, lazy Firebase
