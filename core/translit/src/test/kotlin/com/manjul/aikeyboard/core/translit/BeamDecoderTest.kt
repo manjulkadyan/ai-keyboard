@@ -107,6 +107,49 @@ class BeamDecoderTest {
         assertFalse(natives.any { '्' in it })
     }
 
+    // Equal-cost ties: whole-word row "nahi" (1 segment) against n+a+h+i (4 segments), both cost 0.0.
+    private val tieRows = listOf(
+        "a\t\t0.0\tany",
+        "h\t\u06C1\t0.0\tany",
+        "i\t\u06CC\t0.0\tany",
+        "n\t\u0646\t0.0\tany",
+        "nahi\t\u0646\u06C1\u06CC\u06BA\t0.0\tany",
+    )
+    private val whole = "\u0646\u06C1\u06CC\u06BA" // نہیں
+    private val split = "\u0646\u06C1\u06CC" // نہی
+
+    @Test fun equalCostTieGoesToFewerSegments() {
+        val lexicon = MapLexicon(mapOf(split to 16, whole to 16))
+        val out = BeamDecoder(inline(TranslitLang.UR, *tieRows.toTypedArray()), lexicon).decode("nahi")
+        assertEquals(listOf(whole, split), out.map { it.native })
+        assertEquals(listOf(1, 4), out.map { it.segments })
+        // A beam of one keeps the fewer-segment spelling, not whichever the hash order gives.
+        val narrow = BeamDecoder(inline(TranslitLang.UR, *tieRows.toTypedArray()), lexicon, beamWidth = 1)
+        assertEquals(listOf(whole), narrow.decode("nahi").map { it.native })
+    }
+
+    @Test fun tieOrderDoesNotDependOnInsertionOrder() {
+        val forward = MapLexicon(linkedMapOf(split to 16, whole to 16))
+        val backward = MapLexicon(linkedMapOf(whole to 16, split to 16))
+        val expected = BeamDecoder(inline(TranslitLang.UR, *tieRows.toTypedArray()), forward).decode("nahi")
+            .map { it.native }
+        for (rows in listOf(tieRows, tieRows.reversed(), tieRows.shuffled(java.util.Random(7)))) {
+            for (lexicon in listOf(forward, backward)) {
+                for (width in listOf(1, 2, 16)) {
+                    val got = BeamDecoder(inline(TranslitLang.UR, *rows.toTypedArray()), lexicon, width)
+                        .decode("nahi").map { it.native }
+                    assertEquals(expected.take(width), got)
+                }
+            }
+        }
+        // Equal cost and equal segments: the native string decides, whatever the row order.
+        val sameSegments = listOf("x\t\u0628\t0.0\tany", "x\t\u067E\t0.0\tany")
+        for (rows in listOf(sameSegments, sameSegments.reversed())) {
+            val got = BeamDecoder(inline(TranslitLang.UR, *rows.toTypedArray()), MapLexicon(emptyMap())).decode("x")
+            assertEquals(listOf("\u0628", "\u067E"), got.map { it.native })
+        }
+    }
+
     @Test fun toStringHoldsNoText() {
         val h = hi.decode("khana").first()
         assertFalse(h.toString().contains(h.native))

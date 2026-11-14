@@ -53,6 +53,19 @@ class TranslitRankerTest {
         assertEquals(-1.6, urScore, 1e-9)
     }
 
+    @Test fun equalScoreTieGoesToFewerSegmentsThenNative() {
+        val hyps = listOf(Hypothesis("other", 0.0, segments = 4), Hypothesis("known", 0.0, segments = 1))
+        for (order in listOf(hyps, hyps.reversed())) {
+            assertEquals(listOf("known", "other"), ranker.rank(order, null) { 0 }.map { it.native })
+        }
+        // Equal score and segments: the native string decides, not the hash order of the merge map.
+        val natives = listOf("zeta", "q", "mu", "alpha", "kappa", "b", "yy", "epsilon", "c9", "nu")
+        val same = natives.map { Hypothesis(it, 0.0, 2) }
+        for (order in listOf(same, same.reversed(), same.shuffled(java.util.Random(3)))) {
+            assertEquals(natives.sorted(), ranker.rank(order, null) { 0 }.map { it.native })
+        }
+    }
+
     @Test fun candidateToStringHoldsNoText() {
         val c = ranker.rank(listOf(Hypothesis("known", 0.0)), null) { 0 }.single()
         assertEquals("Candidate(source=LEXICON)", c.toString())

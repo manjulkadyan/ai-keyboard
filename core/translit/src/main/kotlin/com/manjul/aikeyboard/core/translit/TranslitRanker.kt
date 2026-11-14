@@ -18,22 +18,30 @@ class TranslitRanker(private val lang: TranslitLang, private val lexicon: Transl
     }
 
     fun rank(hypotheses: List<Hypothesis>, mapping: String?, boost: (String) -> Int): List<Candidate> {
-        val bestCost = HashMap<String, Double>(hypotheses.size * 2)
+        val best = HashMap<String, Hypothesis>(hypotheses.size * 2)
         for (h in hypotheses) {
-            val old = bestCost[h.native]
-            if (old == null || h.cost < old) bestCost[h.native] = h.cost
+            val old = best[h.native]
+            if (old == null || Hypothesis.ORDER.compare(h, old) < 0) best[h.native] = h
         }
-        val out = ArrayList<Candidate>(bestCost.size + 1)
+        val segments = HashMap<String, Int>(best.size * 2)
+        val out = ArrayList<Candidate>(best.size + 1)
         if (mapping != null) {
-            val ruleScore = bestCost.remove(mapping)?.let { -(ruleWeight * it) } ?: 0.0
+            val ruleScore = best.remove(mapping)?.let { -(ruleWeight * it.cost) } ?: 0.0
             val score = ruleScore + lexiconScore(mapping) + MAPPING_BONUS + boost(mapping)
             out += Candidate(mapping, score, Source.MAPPING)
         }
-        for ((native, cost) in bestCost) {
+        for ((native, h) in best) {
             val source = if (lexicon.frequency(native) != null) Source.LEXICON else Source.RULES
-            out += Candidate(native, -(ruleWeight * cost) + lexiconScore(native) + boost(native), source)
+            out += Candidate(native, -(ruleWeight * h.cost) + lexiconScore(native) + boost(native), source)
+            segments[native] = h.segments
         }
-        out.sortWith(compareBy<Candidate> { it.source != Source.MAPPING }.thenByDescending { it.score })
+        // Ties: fewer segments (whole-word rows), then the native string. Never hash order.
+        out.sortWith(
+            compareBy<Candidate> { it.source != Source.MAPPING }
+                .thenByDescending { it.score }
+                .thenBy { segments[it.native] ?: 0 }
+                .thenBy { it.native },
+        )
         return out
     }
 
