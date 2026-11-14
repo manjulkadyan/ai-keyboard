@@ -12,7 +12,6 @@ import com.manjul.aikeyboard.core.translit.Source
 import com.manjul.aikeyboard.core.translit.TranslitEngine
 import com.manjul.aikeyboard.core.translit.TranslitLang
 import com.manjul.aikeyboard.core.translit.TranslitLexicon
-import com.manjul.aikeyboard.fork.suggest.LatinSuggester
 import com.manjul.aikeyboard.fork.suggest.SuggestContext
 import com.manjul.aikeyboard.ime.core.Subtype
 import com.manjul.aikeyboard.ime.editor.EditorContent
@@ -22,6 +21,7 @@ import com.manjul.aikeyboard.lib.FlorisLocale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import java.io.ByteArrayInputStream
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -39,7 +39,8 @@ class TranslitSuggestionProviderTest {
     }
 
     /** A graph over a tiny lexicon (or none), with no assets. */
-    private class FakeGraph(private val words: Set<String>) : TranslitGraph({ error("no assets") }, Dispatchers.Unconfined) {
+    private class FakeGraph(private val words: Set<String>) :
+        TranslitGraph({ error("no assets") }, Dispatchers.Unconfined) {
         override suspend fun engine(lang: TranslitLang) =
             TranslitEngine(lang, RuleTable.load(lang), WordLexicon(words), mappings.getValue(lang))
     }
@@ -65,7 +66,7 @@ class TranslitSuggestionProviderTest {
     @Test fun `kya gives native candidates then the Latin chip, at most 3`() {
         allow()
         val out = suggest("kya")
-        assertTrue(out.size in 2..3)
+        assertEquals(2, out.size) // one lexicon word plus the Latin chip
         val last = out.last() as TranslitCandidate
         assertTrue(last.latin)
         assertEquals("kya", last.text.toString())
@@ -155,22 +156,15 @@ class TranslitSuggestionProviderTest {
         }
     }
 
-    @Test fun `the Roman subtype never calls LatinSuggester`() {
+    @Test fun `a corrupt dictionary degrades to no candidates`() {
         allow()
-        var calls = 0
-        @Suppress("UNUSED_VARIABLE")
-        val latin = LatinSuggester(
-            openAsset = { calls++; error("not expected") },
-            learned = { calls++; error("not expected") },
-            settings = { calls++; error("not expected") },
-            context = context,
-            isPrivateSession = { calls++; false },
-        )
-        runBlocking {
-            provider.preload(urRoman)
-            val out = suggest("kya")
-            provider.notifySuggestionAccepted(urRoman, out.first())
-        }
-        assertEquals(0, calls)
+        val corrupt = TranslitGraph({ ByteArrayInputStream(ByteArray(64) { 7 }) }, Dispatchers.Unconfined)
+        val p = TranslitSuggestionProvider({ corrupt }, context, { incognito })
+        runBlocking { p.preload(urRoman) }
+        assertTrue(runBlocking { p.suggest(urRoman, composing("kya"), 3, false, false) }.isEmpty())
+        val missing = TranslitGraph({ throw java.io.FileNotFoundException() }, Dispatchers.Unconfined)
+        val q = TranslitSuggestionProvider({ missing }, context, { incognito })
+        runBlocking { q.preload(urRoman) }
+        assertTrue(runBlocking { q.suggest(urRoman, composing("kya"), 3, false, false) }.isEmpty())
     }
 }

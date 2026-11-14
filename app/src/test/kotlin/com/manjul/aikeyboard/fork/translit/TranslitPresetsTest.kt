@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import org.junit.Test
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.fail
 
@@ -34,7 +35,11 @@ class TranslitPresetsTest {
             val preset = assertNotNull(presets.find { it.locale == FlorisLocale.fromTag(tag) }, tag)
             assertEquals("org.florisboard.layouts:qwerty", preset.preferred.characters.toString())
             assertEquals(TranslitSuggestionProvider.ProviderId, preset.nlpProviders.suggestion)
-            assertEquals("org.florisboard.nlp.providers.latin", preset.nlpProviders.spelling)
+            // The latin provider would load ur.sdict into LatinSuggester on preload, so no slot may name it.
+            assertEquals("org.florisboard.nlp.providers.fallback", preset.nlpProviders.spelling)
+            preset.nlpProviders.forEach { _, id ->
+                assertNotEquals("org.florisboard.nlp.providers.latin", id, tag)
+            }
         }
     }
 

@@ -33,7 +33,7 @@
       "languageTag": "ur-PK-roman",
       "composer": "org.florisboard.composers:appender",
       "nlpProviders": {
-        "spelling": "org.florisboard.nlp.providers.latin",
+        "spelling": "org.florisboard.nlp.providers.fallback",
         "suggestion": "com.manjul.aikeyboard.nlp.providers.translit"
       },
       "currencySet": "org.florisboard.currencysets:pakistani_rupee",
@@ -44,7 +44,7 @@
       "languageTag": "hi-IN-roman",
       "composer": "org.florisboard.composers:appender",
       "nlpProviders": {
-        "spelling": "org.florisboard.nlp.providers.latin",
+        "spelling": "org.florisboard.nlp.providers.fallback",
         "suggestion": "com.manjul.aikeyboard.nlp.providers.translit"
       },
       "currencySet": "org.florisboard.currencysets:indian_rupee",

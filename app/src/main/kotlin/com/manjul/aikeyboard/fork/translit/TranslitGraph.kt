@@ -45,8 +45,10 @@ open class TranslitGraph(
     private fun load(lang: TranslitLang): TranslitEngine {
         val lexicon = try {
             openAsset("dict/${lang.tag}.sdict").buffered().use { SdictLexicon.read(it) }
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             throw IllegalStateException("Dictionary missing for ${lang.tag}") // No typed text in the message.
+        } catch (_: IllegalArgumentException) {
+            throw IllegalStateException("Dictionary unreadable for ${lang.tag}") // Corrupt or newer file.
         }
         return TranslitEngine(lang, RuleTable.load(lang), lexicon, mappings.getValue(lang))
     }

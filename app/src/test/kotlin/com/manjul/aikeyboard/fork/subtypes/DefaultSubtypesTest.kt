@@ -101,8 +101,10 @@ class DefaultSubtypesTest {
 
     @Test
     fun `exact ur-PK and hi-IN get the native presets`() {
-        assertEquals("org.florisboard.layouts:urdu_phonetic", findPreset(presets, FlorisLocale.fromTag("ur-PK"))!!.preferred.characters.toString())
-        assertEquals("org.florisboard.layouts:hindi_in", findPreset(presets, FlorisLocale.fromTag("hi-IN"))!!.preferred.characters.toString())
+        val ur = findPreset(presets, FlorisLocale.fromTag("ur-PK"))!!
+        val hi = findPreset(presets, FlorisLocale.fromTag("hi-IN"))!!
+        assertEquals("org.florisboard.layouts:urdu_phonetic", ur.preferred.characters.toString())
+        assertEquals("org.florisboard.layouts:hindi_in", hi.preferred.characters.toString())
     }
 
     @Test
