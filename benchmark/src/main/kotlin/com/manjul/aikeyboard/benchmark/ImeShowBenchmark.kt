@@ -28,7 +28,7 @@ import org.junit.runner.RunWith
  *
  * Macrobenchmark reports min, median and max over the iterations. For the p90 values, open the saved Perfetto
  * traces, or raise `iterations`. Run on a physical mid-tier phone (Pixel 6a class), see
- * `docs/sprint-4-device-checklist.md` G.1:
+ * `docs/device-test-plan.md` T.9:
  *
  * ```
  * ./gradlew :benchmark:connectedBenchmarkAndroidTest \

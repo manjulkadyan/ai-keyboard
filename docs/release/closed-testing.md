@@ -43,8 +43,8 @@ The app reads the trial length from the pricing phases, not from the offer id. Y
 3. Set the licence response to `RESPOND_NORMALLY`.
 4. Add the same accounts to the closed testing tester list (step 7).
 
-Licence testers get test cards and short renewal periods (for example, 5 minutes for 1 month). Device rows B.1
-to B.6 in `docs/sprint-4-device-checklist.md` need a licence tester.
+Licence testers get test cards and short renewal periods (for example, 5 minutes for 1 month). Cases Z.10
+to Z.16 in `docs/device-test-plan.md` need a licence tester.
 
 ## 4. RTDN topic and push subscription
 
@@ -61,7 +61,7 @@ The full commands are in `backend/deploy/README.md`, section 9, "RTDN". In short
 8. Click "Send test notification". Make sure that the kb-api log shows a 204 for `/internal/rtdn`.
 
 If `RTDN_AUDIENCE` or `RTDN_SERVICE_ACCOUNT` is not set, kb-api answers 401 to every push. Then refunds and
-revocations do not remove Pro (device row B.5).
+revocations do not remove Pro (`docs/device-test-plan.md` Z.16).
 
 ## 5. App content declarations
 
@@ -174,7 +174,7 @@ Make sure that the id in the resource file is not `00000000000000000000000000000
 
 After the release is live, do these steps:
 
-1. Open Testing → Pre-launch report for the version code. Make sure that it shows no crash and no ANR (row G.2).
-2. Run the device rows in `docs/sprint-4-device-checklist.md`.
+1. Open Testing → Pre-launch report for the version code. Make sure that it shows no crash and no ANR (`docs/device-test-plan.md` Z.29).
+2. Run the RELEASE cases (section Z) in `docs/device-test-plan.md`.
 3. Copy the app signing key SHA-256 from Setup → App signing into the Firebase app settings.
-4. Turn on App Check enforcement only after D.1 and B.1 pass on this build (deploy README, section 7).
+4. Turn on App Check enforcement only after Z.8 and Z.10 in `docs/device-test-plan.md` pass on this build (deploy README, section 7).

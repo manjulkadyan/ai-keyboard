@@ -12,8 +12,7 @@ FlorisBoard project.
 
 - [`UPSTREAM.md`](UPSTREAM.md): which upstream tag and commit we forked, and how upstream releases are merged.
 - [`docs/FORK_PATCHES.md`](docs/FORK_PATCHES.md): every upstream file we changed, and why.
-- [`docs/sprint-1-device-checklist.md`](docs/sprint-1-device-checklist.md): manual on-device checks, open product decisions and the Sprint 1 exit-criteria map.
-- [`docs/sprint-2-device-checklist.md`](docs/sprint-2-device-checklist.md): Sprint 2 (translation) on-device checks and the Sprint 2 exit check.
+- [`docs/device-test-plan.md`](docs/device-test-plan.md): every manual check for the app and the local kb-api, in one session order.
 - [`NOTICE`](NOTICE): attribution and the statement of changes required by Apache-2.0 §4.
 
 Our own code lives in separate Gradle modules so that most upstream files stay unedited. Edits to

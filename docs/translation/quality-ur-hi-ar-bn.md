@@ -46,7 +46,7 @@ if the tone matters to the message). Script errors (Urdu output in Devanagari, H
 ## How to run (device)
 
 Needs a phone (any API 26+) with network for the first model download. The sandbox that built this has no
-device; this is row Q.1 in `docs/sprint-2-device-checklist.md`.
+device; this is owner work and has no case in `docs/device-test-plan.md`.
 
 ```sh
 ./gradlew :core:translate-mlkit:installDebugAndroidTest

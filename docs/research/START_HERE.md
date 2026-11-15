@@ -55,7 +55,7 @@ Workdir: `voicetyping_work/` (run log `voicetyping_run.log`)
 - `app-android/` (git, branch `sprint-3`): the keyboard, a FlorisBoard fork. Sprint 3 added on-device suggestions
   and opt-in autocorrect for en, es, fr, pt, id, ar, ur and hi, a per-language user dictionary, the in-keyboard
   ✦ AI rewrite sheet and ✦ Polish after dictation. Plan: `app-android/docs/plans/2026-10-26-sprint-3.md`.
-  Device and owner checks still open: `app-android/docs/sprint-3-device-checklist.md`. Gemini Nano decision:
+  Device checks: `app-android/docs/device-test-plan.md`. Gemini Nano decision:
   `app-android/docs/decisions/od-20-gemini-nano.md` (cloud only for MVP). Data flows: `app-android/docs/data-flows.md`.
 - `backend/` (separate git repo, branch `main`): **kb-api**, Kotlin + Ktor 3. Auth (App Check + Firebase ID token,
   or dev auth), quota, rate limits, spend breaker, `/v1/rewrite`, `/v1/polish`, `/v1/ai/report`, the OpenAPI
@@ -85,4 +85,4 @@ In the sandbox, prefix every Gradle call with the truststore `JAVA_TOOL_OPTIONS`
    screen (nothing is sent before that), then pick a tone, preview, and Replace or Insert. For Polish, dictate
    with the mic, then tap "Clean up" on the chip within 30 s.
 4. Release builds need the Firebase options (`aikb.firebase.projectId`, `appId`, `apiKey`, `projectNumber`) and a
-   deployed backend with `AUTH_MODE=firebase`: device checklist rows A.1 and A.2.
+   deployed backend with `AUTH_MODE=firebase`: cases API.38 and Z.8 in `docs/device-test-plan.md`.

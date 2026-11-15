@@ -44,7 +44,7 @@ route, status, latency, `prompt_id@version`, model and token counts. Quota and s
 and day in Firestore. Reports are stored for 90 days, and their text only when the user ticked it. The model provider
 receives the text to produce the output. A dictionary lookup word goes to the dictionary source only, is never
 logged, and stays in a 24 h in-memory cache. The backend is not deployed in Sprint 3, so none of these flows runs in a
-shipped build yet (`docs/sprint-3-device-checklist.md` A.1).
+shipped build yet (`docs/device-test-plan.md` API.38).
 
 ## Remote Config, Analytics and Crashlytics (Sprint 4)
 

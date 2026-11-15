@@ -5,7 +5,7 @@ debounce, live composing off by default) stays "low tier only" (plan decision 5)
 
 Status: **not measured yet.** The sandbox has no device; the instrumented test is built in CI
 (`:core:translate-mlkit:assembleDebugAndroidTest`) and run by hand on the devices below
-(`docs/sprint-2-device-checklist.md`, section "Translation latency").
+(`docs/device-test-plan.md`, case T.7).
 
 ## What is measured
 
