@@ -9,6 +9,58 @@ section "Dropped from old plans" lists the old cases that are gone and why.
 Write **Pass**, **Fail** (with what you saw) or **Blocked** in the Result column. Add the device, the Android version,
 the build and the date.
 
+If more than one device is connected (for example a phone over wireless adb), always set `ANDROID_SERIAL` first,
+for example `export ANDROID_SERIAL=emulator-5554`. Otherwise `./gradlew :app:installDebug` installs on every device.
+
+## Run status
+
+Last run: 2026-11-15, on `emulator-5554` and the local kb-api, build `52f01daa`.
+
+| Scope | Pass | Fail | Blocked |
+|---|---|---|---|
+| API (curl, local kb-api) | 37 | 0 | 4 (need production) |
+| EMU and EMU+API, sections A to P | 124 | 14 | 17 |
+
+Four of the 14 fails are plan fixes (E.5, G.5, K.9, P.5). Rerun them with the new text.
+
+### Open app bugs
+
+| ID | Bug |
+|---|---|
+| A.10 | The `paywall` deep link skips the onboarding gate and opens the paywall before onboarding. |
+| A.11 | `ui://florisboard/devtools` opens Devtools from outside the app. The manifest has no `app://` scheme, so `app://` links do not resolve. |
+| F.2 | A new typed word is never learned. Learning happens only when a strip candidate is picked. Product gap or bug. |
+| G.2 | Backspace after an autocorrect deletes only the space and does not undo the correction. |
+| G.5 | The fork suggester does not read the upstream user dictionary, so user words never show as suggestions. |
+| I.3 | Each copy is stored twice in clipboard history (2 rows about 20 ms apart). Probable race in the clipboard listener. |
+| K.12 | A field switch during a Live preview commits the preview into the old field. |
+| K.13 | Ctrl+A and Ctrl+X reach the host text while the translate bar is open. |
+| N.4, N.5 | After a voice uninstall, Google TTS reports LANG_NOT_SUPPORTED, so the app never offers Install voice. |
+| O.9 | The Roman suggestion strip shows in email fields. |
+| N.1 | One ANR (app not responding) in the settings app. The process used 101% CPU, mostly kernel time. No stack. Cause unknown. |
+
+### Continue here
+
+A new session continues at section Q. Run these in order:
+
+1. The cases that were not run: B.1 to B.9, C.3 to C.8, L.15 and L.16.
+2. Sections Q, R, S, T, U, W and X. Run "Delete my data" in section R last.
+3. The four plan-fixed cases: E.5, G.5, K.9 and P.5.
+
+Restore this state first:
+
+```sh
+export ANDROID_SERIAL=emulator-5554
+cd backend && AUTH_MODE=dev GATEWAY=fake ./gradlew run          # in its own shell
+curl -s -H 'X-Dev-Uid: dev-local' localhost:8080/v1/quota      # expect 200 and ai_left_today
+./gradlew :app:installDebug -Paikb.ai.devAuth=true -Paikb.ai.baseUrl=http://10.0.2.2:8080
+adb shell ime set com.manjul.aikeyboard.debug/com.manjul.aikeyboard.FlorisImeService   # again after any force-stop
+```
+
+- Give AI consent again in the app. Case O.13 cleared the app data.
+- Emulator state after the run: English (US) is active, and the Roman Hindi and Roman Urdu presets are added. The id, hi and bn translate packs are downloaded. Airplane mode is off.
+- The emulator cannot run voice or dictation cases. It has no English on-device speech pack. There is no Whisper model file on the host.
+
 ## Setup
 
 ### Where tags
@@ -102,20 +154,20 @@ Run `adb shell pm clear $PKG` before A.1.
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| A.1 | EMU | Open the app from the launcher. | Onboarding opens on the Welcome step. The splash goes in about 1 s. `onboarding_start` and `onboarding_step_view` are logged. | |
-| A.2 | EMU | Step through Welcome, Enable, Select, Languages, Try it, the O6 paywall and Done. | Each step shows once, in this order. `onboarding_step_view` is logged for each step. | |
-| A.3 | EMU | Languages step: pick English and Urdu. Leave "Download for offline" off. Continue. | The offer reads "Download for offline (about N MB)". Nothing downloads. `languages_set` is logged. | |
-| A.4 | EMU | Clear data. Repeat A.3 with "Download for offline" on. | A download starts and onboarding moves on. `pack_download_start` is logged. | |
-| A.5 | EMU | Clear data. Skip the Languages step. | Onboarding still completes. | |
-| A.6 | EMU | Try it step: tap the field. | Our keyboard shows and types. | |
-| A.7 | EMU | Clear data. Go to a middle step. Press Home. Run `adb shell am kill $PKG`. Reopen the app. | Onboarding resumes at the same step. | |
-| A.8 | EMU | Reach the O6 paywall. Close it. Finish onboarding. | The O6 paywall shows once, after Try it. No ad shows during onboarding or in this first session. | |
-| A.9 | EMU | Close and reopen the app. | Home opens with no onboarding flash. `onboarding_complete` was logged once. No new funnel events. | |
-| A.10 | EMU | Clear data. Before onboarding, run `adb shell am start -a android.intent.action.VIEW -d "ui://florisboard/settings/privacy"`. Repeat with `settings/subscription`, `paywall?trigger=ai_quota` and `pro`. | The two settings links open their screens. The paywall link and the `pro` alias open Home. No crash. | |
-| A.11 | EMU | Run `adb shell am start -a android.intent.action.VIEW -d "ui://florisboard/settings/offline-languages"`. Repeat with `-d "app://settings/voice"`, `-d "ui://florisboard/devtools"` and `-d "ui://florisboard/settings"`. | The first two open their screens. `devtools` and bare `settings` open Home and log `deeplink_unknown` with no value. No crash. | |
-| A.12 | EMU | Run `adb shell am start -n $PKG/com.manjul.aikeyboard.app.FlorisAppActivity --es open_screen settings/voice`. Repeat with `--es open_screen devtools`. | The first opens Voice settings. The second opens Home and logs `deeplink_unknown`. | |
-| A.13 | EMU | Run `adb shell am start -n $PKG/com.manjul.aikeyboard.fork.processtext.TranslateTextActivity -a android.intent.action.VIEW`. Repeat with `-a android.intent.action.SEND -t image/png`. | Nothing shows. No crash. | |
-| A.14 | EMU | Install the app. Look for a notification permission prompt during onboarding and the first session. | No notification prompt shows. | |
+| A.1 | EMU | Open the app from the launcher. | Onboarding opens on the Welcome step. The splash goes in about 1 s. `onboarding_start` and `onboarding_step_view` are logged. | Pass (EMU 2026-11-15) |
+| A.2 | EMU | Step through Welcome, Enable, Select, Languages, Try it, the O6 paywall and Done. | Each step shows once, in this order. `onboarding_step_view` is logged for each step. | Pass (EMU 2026-11-15) |
+| A.3 | EMU | Languages step: pick English and Urdu. Leave "Download for offline" off. Continue. | The offer reads "Download for offline (about N MB)". Nothing downloads. `languages_set` is logged. | Pass (EMU 2026-11-15) |
+| A.4 | EMU | Clear data. Repeat A.3 with "Download for offline" on. | A download starts and onboarding moves on. `pack_download_start` is logged. | Pass (EMU 2026-11-15) |
+| A.5 | EMU | Clear data. Skip the Languages step. | Onboarding still completes. | Pass (EMU 2026-11-15) |
+| A.6 | EMU | Try it step: tap the field. | Our keyboard shows and types. | Pass (EMU 2026-11-15) |
+| A.7 | EMU | Clear data. Go to a middle step. Press Home. Run `adb shell am kill $PKG`. Reopen the app. | Onboarding resumes at the same step. | Pass (EMU 2026-11-15) |
+| A.8 | EMU | Reach the O6 paywall. Close it. Finish onboarding. | The O6 paywall shows once, after Try it. No ad shows during onboarding or in this first session. | Pass (EMU 2026-11-15) |
+| A.9 | EMU | Close and reopen the app. | Home opens with no onboarding flash. `onboarding_complete` was logged once. No new funnel events. | Pass (EMU 2026-11-15) |
+| A.10 | EMU | Clear data. Before onboarding, run `adb shell am start -a android.intent.action.VIEW -d "ui://florisboard/settings/privacy"`. Repeat with `settings/subscription`, `paywall?trigger=ai_quota` and `pro`. | The two settings links open their screens. The paywall link and the `pro` alias open Home. No crash. | Fail: app bug. `paywall?trigger=ai_quota` opens the paywall before onboarding, cold and warm. The raw deep link skips the onboarding gate. (EMU 2026-11-15) |
+| A.11 | EMU | Run `adb shell am start -a android.intent.action.VIEW -d "ui://florisboard/settings/offline-languages"`. Repeat with `-d "app://settings/voice"`, `-d "ui://florisboard/devtools"` and `-d "ui://florisboard/settings"`. | The first two open their screens. `devtools` and bare `settings` open Home and log `deeplink_unknown` with no value. No crash. | Fail: app bug. `ui://florisboard/devtools` opens Devtools. `app://settings/voice` does not resolve, because the manifest declares only the `ui` scheme. (EMU 2026-11-15) |
+| A.12 | EMU | Run `adb shell am start -n $PKG/com.manjul.aikeyboard.app.FlorisAppActivity --es open_screen settings/voice`. Repeat with `--es open_screen devtools`. | The first opens Voice settings. The second opens Home and logs `deeplink_unknown`. | Pass (EMU 2026-11-15) |
+| A.13 | EMU | Run `adb shell am start -n $PKG/com.manjul.aikeyboard.fork.processtext.TranslateTextActivity -a android.intent.action.VIEW`. Repeat with `-a android.intent.action.SEND -t image/png`. | Nothing shows. No crash. | Pass (EMU 2026-11-15) |
+| A.14 | EMU | Install the app. Look for a notification permission prompt during onboarding and the first session. | No notification prompt shows. | Pass (EMU 2026-11-15) |
 
 ## B. Consent
 
@@ -133,14 +185,14 @@ and note `ai_left_today`.
 | B.7 | EMU+API | Agree to AI. Withdraw it from AI settings. Agree again. Withdraw it from Private apps, "Data and consent". | Each place withdraws the consent and logs `consent_withdrawn` AI. | |
 | B.8 | EMU | Agree to Online translation and the Voice typing notice. Withdraw each in Your consents. | Each row reads "Not agreed". No `consent_withdrawn` event is logged for either. | |
 | B.9 | EMU | In Your consents, tap Withdraw and then Cancel in the dialog. | The consent stays. No event is logged. | |
-| B.10 | EMU | Clear data. In Try it, tap the mic. | The voice notice names the speech engine in use before the system permission prompt. | |
+| B.10 | EMU | Clear data. In Try it, tap the mic. | The voice notice names the speech engine in use before the system permission prompt. | Pass (EMU 2026-11-15) |
 
 ## C. Enable IME
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| C.1 | EMU | Onboarding, Enable step: tap Enable keyboard. Turn it on in system settings. Press Back. | The step moves on by itself. `ime_enabled` is logged. | |
-| C.2 | EMU | Select step: tap Select keyboard and pick it. | The step moves on by itself. `ime_selected` is logged. | |
+| C.1 | EMU | Onboarding, Enable step: tap Enable keyboard. Turn it on in system settings. Press Back. | The step moves on by itself. `ime_enabled` is logged. | Pass (EMU 2026-11-15) |
+| C.2 | EMU | Select step: tap Select keyboard and pick it. | The step moves on by itself. `ime_selected` is logged. | Pass (EMU 2026-11-15) |
 | C.3 | EMU | Run `adb shell am force-stop $PKG`. Do not open the app. Tap a text field in Chrome. | The keyboard shows and types. No crash. | |
 | C.4 | EMU | After C.3, run `adb shell run-as $PKG sh -c 'grep -c aikb_whisper /proc/$(pidof '$PKG')/maps'`. | `0`. The Whisper library is not loaded by the keyboard alone. | |
 | C.5 | EMU | Force-stop. Show and hide the keyboard several times. Do not open the Translate bar. Grep the process maps for `libtranslate_jni`. Open the bar, type one word and grep again. | No line before first use. `libtranslate_jni` is mapped after first use. | |
@@ -152,45 +204,45 @@ and note `ai_left_today`.
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| D.1 | EMU | Open the smartbar overflow and the actions editor. Pin three actions. Try to pin a fourth. | The header reads "Pinned (3/3)". The fourth pin is refused with "Up to 3 pinned". | |
-| D.2 | EMU | In the editor, try to move the mic and the Translate tile. | They do not move and do not count as pins. "Make this app private" does not count and stays last. | |
-| D.3 | EMU | Reorder the pins. Close the editor. Hide and reopen the keyboard. | The new order stays. | |
-| D.4 | EMU | Open the voice panel. Use the system Back gesture. | The panel closes. The keyboard stays. | |
-| D.5 | EMU | Type a few paragraphs of neutral text in Chrome and Messages. Switch layouts in between. | Typing works with no regression. | |
+| D.1 | EMU | Open the smartbar overflow and the actions editor. Pin three actions. Try to pin a fourth. | The header reads "Pinned (3/3)". The fourth pin is refused with "Up to 3 pinned". | Pass (EMU 2026-11-15) |
+| D.2 | EMU | In the editor, try to move the mic and the Translate tile. | They do not move and do not count as pins. "Make this app private" does not count and stays last. | Pass (EMU 2026-11-15) |
+| D.3 | EMU | Reorder the pins. Close the editor. Hide and reopen the keyboard. | The new order stays. | Pass (EMU 2026-11-15) |
+| D.4 | EMU | Open the voice panel. Use the system Back gesture. | The panel closes. The keyboard stays. | Blocked: the emulator has no English on-device speech pack. (EMU 2026-11-15) |
+| D.5 | EMU | Type a few paragraphs of neutral text in Chrome and Messages. Switch layouts in between. | Typing works with no regression. | Pass (EMU 2026-11-15) |
 
 ## E. Layouts and languages
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| E.1 | EMU | Settings, Languages: add a subtype and open the layout picker. | Urdu standard and Hindi phonetic layouts are listed. Each added subtype shows in the system switcher. | |
-| E.2 | EMU | Switch to Urdu, Arabic and Hindi. Use Shift and long-press keys. | Key order is right to left for Urdu and Arabic. Shift draws correctly. Urdu aspirate and heh forms are reachable. | |
-| E.3 | EMU | In Urdu, press the digits row and long-press a digit. | Urdu digits show by default. Western digits show on long-press. | |
-| E.4 | EMU | In Urdu, long-press the **h** key. | The long-press popup has U+06C1. Record the base key. | |
-| E.5 | EMU | Clear data. Open Settings, Languages, Add subtype. | "Urdu (Roman)" and "Hindi (Roman)" both show and can be added. A fresh install has no Roman subtype before you add one. | |
+| E.1 | EMU | Settings, Languages: add a subtype and open the layout picker. | Urdu standard and Hindi phonetic layouts are listed. Each added subtype shows in the system switcher. | Pass (EMU 2026-11-15) |
+| E.2 | EMU | Switch to Urdu, Arabic and Hindi. Use Shift and long-press keys. | Key order is right to left for Urdu and Arabic. Shift draws correctly. Urdu aspirate and heh forms are reachable. | Pass (EMU 2026-11-15) |
+| E.3 | EMU | In Urdu, press the digits row and long-press a digit. | Urdu digits show by default. Western digits show on long-press. | Pass (EMU 2026-11-15) |
+| E.4 | EMU | In Urdu, long-press the **h** key. | The long-press popup has U+06C1. Record the base key. | Pass (EMU 2026-11-15) |
+| E.5 | EMU | Clear data. Open Settings, Languages, Add subtype. | "Urdu (Pakistan) [ROMAN]" and "Hindi (India) [ROMAN]" both show and can be added. A fresh install has no Roman subtype before you add one. | Fail (plan fixed). The presets are named "Urdu (Pakistan) [ROMAN]" and "Hindi (India) [ROMAN]". Both add. (EMU 2026-11-15) |
 
 ## F. Suggestions
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| F.1 | EMU | Enable en, es, fr, pt, id, ar, ur and hi. In each, type 3 letters of a common word. | Up to 3 candidates in the script of the subtype. Record weak Hindi results. | |
-| F.2 | EMU | In English, accept a made-up word 3 times. Type its first letters. | The word shows as a candidate. | |
-| F.3 | EMU | Turn incognito on. Accept a made-up word 3 times. Turn incognito off. Type its first letters. | The word is not learned. | |
-| F.4 | EMU | Repeat F.3 in a private app. | The word is not learned. | |
-| F.5 | EMU | Settings, Typing (Suggestions and autocorrect), Clear learned words. Accept the dialog. Force-stop. Type the F.2 word. | The dialog reads "Delete every word the keyboard has learned on this phone?". The word is gone after the force-stop. | |
-| F.6 | EMU | Long-press a suggestion that has an entry in the offline dictionary (install the dictionary pack first, see L.12). | A definition card shows with More and "Remove suggestion". | |
-| F.7 | EMU | On the card from F.6, tap "Remove suggestion". Type the word again. | The word no longer shows as a suggestion. | |
-| F.8 | EMU | On the card from F.6, tap More. | The Dictionary screen opens with the word. | |
+| F.1 | EMU | Enable en, es, fr, pt, id, ar, ur and hi. In each, type 3 letters of a common word. | Up to 3 candidates in the script of the subtype. Record weak Hindi results. | Pass (EMU 2026-11-15) |
+| F.2 | EMU | In English, accept a made-up word 3 times. Type its first letters. | The word shows as a candidate. | Fail: product gap. Words are learned only when a strip candidate is picked. A new typed word is never offered, so it is never learned. (EMU 2026-11-15) |
+| F.3 | EMU | Turn incognito on. Accept a made-up word 3 times. Turn incognito off. Type its first letters. | The word is not learned. | Blocked: depends on F.2. (EMU 2026-11-15) |
+| F.4 | EMU | Repeat F.3 in a private app. | The word is not learned. | Blocked: depends on F.2. (EMU 2026-11-15) |
+| F.5 | EMU | Settings, Typing (Suggestions and autocorrect), Clear learned words. Accept the dialog. Force-stop. Type the F.2 word. | The dialog reads "Delete every word the keyboard has learned on this phone?". The word is gone after the force-stop. | Pass (EMU 2026-11-15) |
+| F.6 | EMU | Long-press a suggestion that has an entry in the offline dictionary (install the dictionary pack first, see L.12). | A definition card shows with More and "Remove suggestion". | Pass (EMU 2026-11-15) |
+| F.7 | EMU | On the card from F.6, tap "Remove suggestion". Type the word again. | The word no longer shows as a suggestion. | Pass (EMU 2026-11-15) |
+| F.8 | EMU | On the card from F.6, tap More. | The Dictionary screen opens with the word. | Pass (EMU 2026-11-15) |
 
 ## G. Autocorrect and user dictionary
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| G.1 | EMU | Turn autocorrect on for English. Type "teh " in the URL, Email and Password fields of the test page and in Chrome incognito. | The word is never replaced in these fields. | |
-| G.2 | EMU | Type "teh " in the Normal field. Press Backspace to revert. Type "teh " again. | "the " replaces it the first time. After the revert, no second replace. | |
-| G.3 | EMU | Type words with digits, ALL CAPS, `@` or `/`, each with a space after it. | None of them is replaced. | |
+| G.1 | EMU | Turn autocorrect on for English. Type "teh " in the URL, Email and Password fields of the test page and in Chrome incognito. | The word is never replaced in these fields. | Pass (EMU 2026-11-15) |
+| G.2 | EMU | Type "teh " in the Normal field. Press Backspace to revert. Type "teh " again. | "the " replaces it the first time. After the revert, no second replace. | Fail: app bug. Backspace deletes only the space and does not undo the autocorrect. The second try is corrected again. (EMU 2026-11-15) |
+| G.3 | EMU | Type words with digits, ALL CAPS, `@` or `/`, each with a space after it. | None of them is replaced. | Pass (EMU 2026-11-15) |
 | G.4 | DEVICE | Swap two letters in common words in en, es, fr, pt and id. Type first-letter typos such as "jello". | Record how often autocorrect picks the right word and the first-letter miss rate. | |
-| G.5 | EMU | Settings, Dictionary, User dictionary: add the word "zqxword". Type "zqx". | The word shows as a suggestion. | |
-| G.6 | EMU | Edit and delete the word from G.5. | Each change applies on the next word. | |
+| G.5 | EMU | Open Home, Typing, User dictionaries, Manage internal user dictionary. Add the word "zqxword". Type "zqx". | The word shows as a suggestion. | Fail: app bug. The word saves, but the fork suggester does not read the upstream user dictionary. Steps fixed to the real path. (EMU 2026-11-15) |
+| G.6 | EMU | Edit and delete the word from G.5. | Each change applies on the next word. | Blocked: depends on G.5. (EMU 2026-11-15) |
 
 ## H. Sensitive fields and privacy
 
@@ -198,28 +250,28 @@ Use the Chrome test page and an app login screen.
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| H.1 | EMU | Tap the Password field. Look at the smartbar. | Only emoji, settings and the lock show. No mic, clipboard, paste, undo, Translate, AI or Stickers, also for pinned actions. No suggestions. | |
-| H.2 | EMU | Tap the Email and URL fields and a phone field. | The Translate chip is hidden. | |
-| H.3 | EMU | Settings, Privacy, Private apps. Add Chrome from the picker. Open Chrome and type. | The lock is on. No mic and no learning. | |
-| H.4 | EMU | In a normal field, tap the lock action "Make this app private". | The app becomes private at once. | |
-| H.5 | EMU | In the Password field, long-press Enter and pick clipboard. Try a swipe bound to "switch to clipboard". | History never opens in a sensitive field. | |
-| H.6 | EMU | In a normal field, open clipboard history. Turn off "hide on next text field". Tap the Password field. Then tap another normal field. | The sensitive field closes the open panel. In the other normal field the panel stays open. | |
-| H.7 | EMU | Note the UID with `adb shell dumpsys package $PKG \| grep userId`. Note bytes with `adb shell dumpsys netstats detail \| grep -A3 "uid=<UID>"`. In the Password field, type, backspace, paste and tap around the smartbar for 1 minute. Read the bytes again. | The bytes for our UID do not change. | |
-| H.8 | EMU | Settings, Privacy: turn off "Share usage analytics". Type and open the Translate bar. | No `AiKbAnalytics` events are logged. | |
-| H.9 | EMU | Turn incognito on with the toggle key. Type and dictate. | Nothing is learned. The lock or incognito indicator shows. | |
+| H.1 | EMU | Tap the Password field. Look at the smartbar. | Only emoji, settings and the lock show. No mic, clipboard, paste, undo, Translate, AI or Stickers, also for pinned actions. No suggestions. | Pass (EMU 2026-11-15) |
+| H.2 | EMU | Tap the Email and URL fields and a phone field. | The Translate chip is hidden. | Pass (EMU 2026-11-15) |
+| H.3 | EMU | Settings, Privacy, Private apps. Add Chrome from the picker. Open Chrome and type. | The lock is on. No mic and no learning. | Pass (EMU 2026-11-15) |
+| H.4 | EMU | In a normal field, tap the lock action "Make this app private". | The app becomes private at once. | Pass (EMU 2026-11-15) |
+| H.5 | EMU | In the Password field, long-press Enter and pick clipboard. Try a swipe bound to "switch to clipboard". | History never opens in a sensitive field. | Pass (EMU 2026-11-15) |
+| H.6 | EMU | In a normal field, open clipboard history. Turn off "hide on next text field". Tap the Password field. Then tap another normal field. | The sensitive field closes the open panel. In the other normal field the panel stays open. | Pass (EMU 2026-11-15) |
+| H.7 | EMU | Note the UID with `adb shell dumpsys package $PKG \| grep userId`. Note bytes with `adb shell dumpsys netstats detail \| grep -A3 "uid=<UID>"`. In the Password field, type, backspace, paste and tap around the smartbar for 1 minute. Read the bytes again. | The bytes for our UID do not change. | Pass (EMU 2026-11-15) |
+| H.8 | EMU | Settings, Privacy: turn off "Share usage analytics". Type and open the Translate bar. | No `AiKbAnalytics` events are logged. | Pass (EMU 2026-11-15) |
+| H.9 | EMU | Turn incognito on with the toggle key. Type and dictate. | Nothing is learned. The lock or incognito indicator shows. | Pass (EMU 2026-11-15) |
 
 ## I. Clipboard
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| I.1 | EMU | Fresh install. Open the clipboard panel. | History is off. The prompt in the panel turns it on. | |
-| I.2 | EMU | Open clipboard settings. Move the history time slider. | The slider goes from 0 to 1440 min in steps of 5. | |
-| I.3 | EMU | Turn history on. Copy "clipzqx", a made-up OTP text "Your code is 482913", and a password copied from a password field. Open history. | Only "clipzqx" is stored. | |
-| I.4 | EMU | Pin one clip. Leave one unpinned. Move the clock 25 h ahead. Open history. Restore the clock. | The unpinned clip is gone. The pinned clip stays. | |
-| I.5 | EMU | Tap "Clear clipboard history". | Unpinned items are gone. | |
-| I.6 | EMU | Copy a text with a made-up email, a URL and a phone number. Use for example "mail a@example.com or see https://example.com or call 5550100". Open the panel. | Each smart chip pastes only its own part. | |
-| I.7 | EMU | Install a Sprint 4 build. Copy two neutral clips. Install this build over it. Open the panel. Run `adb shell run-as $PKG sqlite3 databases/clipboard_history 'select * from clipboard_history'` (adjust the table name). | The items are kept. The text column shows no plaintext. | |
-| I.8 | EMU | Run `adb shell run-as $PKG sh -c 'ls -la databases'` with the keyboard idle. | Expected result unclear: the code shows no test hook that makes the key store unavailable on demand. Record whether sealed items hide and come back. | |
+| I.1 | EMU | Fresh install. Open the clipboard panel. | History is off. The prompt in the panel turns it on. | Pass (EMU 2026-11-15) |
+| I.2 | EMU | Open clipboard settings. Move the history time slider. | The slider goes from 0 to 1440 min in steps of 5. | Pass (EMU 2026-11-15) |
+| I.3 | EMU | Turn history on. Copy "clipzqx", a made-up OTP text "Your code is 482913", and a password copied from a password field. Open history. | Only "clipzqx" is stored. | Fail: app bug. Each copy is stored twice (2 database rows about 20 ms apart). The OTP text was correctly not stored. (EMU 2026-11-15) |
+| I.4 | EMU | Pin one clip. Leave one unpinned. Move the clock 25 h ahead. Open history. Restore the clock. | The unpinned clip is gone. The pinned clip stays. | Pass (EMU 2026-11-15) |
+| I.5 | EMU | Tap "Clear clipboard history". | Unpinned items are gone. | Pass (EMU 2026-11-15) |
+| I.6 | EMU | Copy a text with a made-up email, a URL and a phone number. Use for example "mail a@example.com or see https://example.com or call 5550100". Open the panel. | Each smart chip pastes only its own part. | Pass (EMU 2026-11-15) |
+| I.7 | EMU | Install a Sprint 4 build. Copy two neutral clips. Install this build over it. Open the panel. Run `adb shell run-as $PKG sqlite3 databases/clipboard_history 'select * from clipboard_history'` (adjust the table name). | The items are kept. The text column shows no plaintext. | Blocked: needs a Sprint 4 build. (EMU 2026-11-15) |
+| I.8 | EMU | Run `adb shell run-as $PKG sh -c 'ls -la databases'` with the keyboard idle. | Expected result unclear: the code shows no test hook that makes the key store unavailable on demand. Record whether sealed items hide and come back. | Blocked: the file listing is correct, but no hook makes the key store unavailable. (EMU 2026-11-15) |
 
 ## J. Voice (platform and Whisper)
 
@@ -236,119 +288,119 @@ J.1 to J.12 use the Chrome test page. Timing and audio-focus numbers need a real
 | J.7 | DEVICE | Dictate in Chat. Tap the Normal field while a partial shows. | The partial leaves Chat. Nothing is committed. `end_reason=field_change`. | |
 | J.8 | DEVICE | Dictate in Normal. Tap the Password field while a partial shows. | Voice stops. No text reaches the Password field, also seconds later. No mic in its smartbar. | |
 | J.9 | DEVICE | Dictate at the end of existing Chat text. Tap the middle of the older text. Repeat, then tap inside the partial and type a letter. | Our gray text is dropped. Older text is unchanged. Your letter stays. | |
-| J.10 | EMU | Force-stop. Tap the mic and stop within 1 s, 5 times fast. Force-stop, tap the mic and press Back within 0.5 s. Wait 5 s. | No crash and no stuck "Starting". The mic indicator is off. | |
+| J.10 | EMU | Force-stop. Tap the mic and stop within 1 s, 5 times fast. Force-stop, tap the mic and press Back within 0.5 s. Wait 5 s. | No crash and no stuck "Starting". The mic indicator is off. | Pass (EMU 2026-11-15) |
 | J.11 | DEVICE | Play music. Dictate one sentence in Messages. | Music pauses or ducks and resumes after the session. | |
 | J.12 | DEVICE | In Messages, type "existing text". Dictate one sentence. Dictate again and hide with the down arrow while a partial shows. | "existing text" and the first sentence stay. The second partial goes. | |
 | J.13 | DEVICE | While Listening, run `adb shell am force-stop com.google.android.tts`. Repeat once it reconnects. | The first drop gives one reconnect. The second drop shows "Voice typing needs a connection. Check your network and try again." | |
 | J.14 | DEVICE | Airplane mode on. Dictate in en (model installed). Then in ur (no model). | en works offline. ur shows a clear message with a download offer, never the network message or silence. | |
 | J.15 | DEVICE | Enable en, hi, ur and ar. Dictate once in each. Download a missing model and dictate in it without a restart. Remove the hi model and dictate in hi. | A new model works at once. A removed model gives "language unavailable" with no crash. | |
-| J.16 | EMU | Settings, Voice, Speech engine, On-device only. Pick a language with no on-device model. Tap the mic. | "Unavailable" with an offer. The cloud recognizer is never used. | |
-| J.17 | EMU | Deny the mic permission in system settings. Tap the mic. Allow from the chip. | The chip text shows in full. The grant works and logs `voice_permission_result` with `granted=true`. | |
-| J.18 | EMU | Deny again. Tap the mic and press Home on the rationale. | Home closes the trampoline. No crash. | |
+| J.16 | EMU | Settings, Voice, Speech engine, On-device only. Pick a language with no on-device model. Tap the mic. | "Unavailable" with an offer. The cloud recognizer is never used. | Pass (EMU 2026-11-15) |
+| J.17 | EMU | Deny the mic permission in system settings. Tap the mic. Allow from the chip. | The chip text shows in full. The grant works and logs `voice_permission_result` with `granted=true`. | Pass (EMU 2026-11-15) |
+| J.18 | EMU | Deny again. Tap the mic and press Home on the rationale. | Home closes the trampoline. No crash. | Pass (EMU 2026-11-15) |
 | J.19 | DEVICE | Reboot. Tap the mic as soon as the keyboard shows. | The session starts. If error 11 comes, the reconnect recovers it. | |
-| J.20 | EMU | Settings, Voice, Offline models. Tap Download on Base and on Small. | The download fails and leaves no file (OD-01 placeholder host). No percentage shows. | |
-| J.21 | EMU | Push the Base model (setup). Open Offline models. | Base shows as downloaded, about 57 MB. | |
-| J.22 | EMU | Speech engine, Offline (Whisper). Dictate a 10 s English sentence from the host microphone. | A waveform shows, silence stops it, "Transcribing…" shows, then one final text. | |
+| J.20 | EMU | Settings, Voice, Offline models. Tap Download on Base and on Small. | The download fails and leaves no file (OD-01 placeholder host). No percentage shows. | Pass (EMU 2026-11-15) |
+| J.21 | EMU | Push the Base model (setup). Open Offline models. | Base shows as downloaded, about 57 MB. | Blocked: no Whisper model file to push. (EMU 2026-11-15) |
+| J.22 | EMU | Speech engine, Offline (Whisper). Dictate a 10 s English sentence from the host microphone. | A waveform shows, silence stops it, "Transcribing…" shows, then one final text. | Blocked: no Whisper model file to push. (EMU 2026-11-15) |
 | J.23 | DEVICE | With Whisper, dictate a 10 s English sentence. Then dictate in Hindi. | Record stop-to-text time. Devanagari is correct, with no garbled text. | |
-| J.24 | EMU | With Whisper, start a long dictation, stop, and hide the keyboard while "Transcribing…" shows. | It returns at once. No crash and no late text. | |
-| J.25 | EMU | With Whisper, tap the mic, stop and tap again fast, several times. | No audio error. | |
-| J.26 | EMU | Dictate with Whisper. Run `adb shell am send-trim-memory $PKG RUNNING_LOW`. Dictate again. | `RUNNING_LOW` frees the model. The next dictation loads it again. | |
-| J.27 | EMU | Dictate with Whisper. Wait more than 60 s. Dictate again. | The model is freed after 60 s idle and loads again on the next dictation. | |
-| J.28 | EMU | Delete the Base model with Whisper still selected. Tap the mic in Urdu. | A "Get offline model" chip shows and opens Settings, Voice. Push the model again after. | |
-| J.29 | EMU | Settings, Voice: scroll down and tap "Offline languages". | Offline languages opens. Back returns to Voice. | |
+| J.24 | EMU | With Whisper, start a long dictation, stop, and hide the keyboard while "Transcribing…" shows. | It returns at once. No crash and no late text. | Blocked: no Whisper model file to push. (EMU 2026-11-15) |
+| J.25 | EMU | With Whisper, tap the mic, stop and tap again fast, several times. | No audio error. | Blocked: no Whisper model file to push. (EMU 2026-11-15) |
+| J.26 | EMU | Dictate with Whisper. Run `adb shell am send-trim-memory $PKG RUNNING_LOW`. Dictate again. | `RUNNING_LOW` frees the model. The next dictation loads it again. | Blocked: no Whisper model file to push. (EMU 2026-11-15) |
+| J.27 | EMU | Dictate with Whisper. Wait more than 60 s. Dictate again. | The model is freed after 60 s idle and loads again on the next dictation. | Blocked: no Whisper model file to push. (EMU 2026-11-15) |
+| J.28 | EMU | Delete the Base model with Whisper still selected. Tap the mic in Urdu. | A "Get offline model" chip shows and opens Settings, Voice. Push the model again after. | Blocked: no Whisper model file to push. (EMU 2026-11-15) |
+| J.29 | EMU | Settings, Voice: scroll down and tap "Offline languages". | Offline languages opens. Back returns to Voice. | Pass (EMU 2026-11-15) |
 
 ## K. Translate bar
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| K.1 | EMU | In Messages and Chrome, type host text. Open the bar, type "the quick brown fox" and press Enter. | Keys go to the bar only. Enter inserts the translation once. | |
-| K.2 | EMU | Repeat K.1. Tap Undo within 5 s. | Undo removes only the insert. | |
-| K.3 | EMU | Repeat K.1. Edit the host text, then tap Undo. Repeat and wait more than 5 s. | After a host edit, Undo changes nothing. After 5 s, no Undo shows. Host text is never lost. | |
-| K.4 | EMU | Open the bar in the Normal field and type. Tap the Password field while a request runs. | The bar closes. The chip goes. No text reaches the Password field, also later. | |
-| K.5 | EMU | Type in the bar. Hide the keyboard. Show it within 60 s and reopen the bar. Hide for more than 60 s and reopen. | The text stays the first time and is empty after 60 s. Pair and mode stay. The bar is closed after each hide. | |
-| K.6 | EMU | Open the bar. Use predictive Back. | The bar closes and the keyboard stays. A second Back hides the keyboard. | |
+| K.1 | EMU | In Messages and Chrome, type host text. Open the bar, type "the quick brown fox" and press Enter. | Keys go to the bar only. Enter inserts the translation once. | Pass (EMU 2026-11-15) |
+| K.2 | EMU | Repeat K.1. Tap Undo within 5 s. | Undo removes only the insert. | Pass (EMU 2026-11-15) |
+| K.3 | EMU | Repeat K.1. Edit the host text, then tap Undo. Repeat and wait more than 5 s. | After a host edit, Undo changes nothing. After 5 s, no Undo shows. Host text is never lost. | Pass (EMU 2026-11-15) |
+| K.4 | EMU | Open the bar in the Normal field and type. Tap the Password field while a request runs. | The bar closes. The chip goes. No text reaches the Password field, also later. | Pass (EMU 2026-11-15) |
+| K.5 | EMU | Type in the bar. Hide the keyboard. Show it within 60 s and reopen the bar. Hide for more than 60 s and reopen. | The text stays the first time and is empty after 60 s. Pair and mode stay. The bar is closed after each hide. | Pass (EMU 2026-11-15) |
+| K.6 | EMU | Open the bar. Use predictive Back. | The bar closes and the keyboard stays. A second Back hides the keyboard. | Pass (EMU 2026-11-15) |
 | K.7 | DEVICE | Open the bar and dictate. Close the bar while dictating. Open the bar while dictating in the host field. | Voice text goes into the bar. Opening or closing stops dictation. No host text is deleted. | |
-| K.8 | EMU | Pick a pair with no packs. Make sure that nothing downloads before a tap. Tap Download. Hide the keyboard for a minute. | The download starts only on tap and keeps going while hidden. | |
-| K.9 | EMU | Offline, with a pair that has no packs, tap the Offline chip. | Offline languages opens. | |
-| K.10 | EMU | Airplane mode with both packs installed. Type in the bar. | The translation works offline. | |
-| K.11 | EMU | With a pair that has no packs, type and toggle the network while a preview shows. | An inline chip shows. The last preview stays. Nothing is committed. No empty text is written. | |
-| K.12 | EMU | Settings, Translate. Read the bar mode. Switch it to Live. Type fast in the bar. Close it during a preview and switch fields during a preview. | The default is Preview. In Live the composing preview is replaced in place, never doubled, and removed on close. No host character is deleted. | |
-| K.13 | EMU | Hardware keyboard (emulator host keyboard): open the bar, type, Backspace, Enter, Ctrl+A and forward delete. | Printable keys go to the bar. Ctrl shortcuts and forward delete do not change host text. | |
-| K.14 | EMU | Settings, Translate: change the default pair. Open the bar. | The bar uses the new pair. | |
-| K.15 | EMU | Open the bar in a field that sets `TYPE_TEXT_FLAG_NO_SUGGESTIONS`. Type a word. | Expected result unclear: the code leaves this open (Sprint 6 product question 7). Record whether suggestions show and whether Space commits. | |
+| K.8 | EMU | Pick a pair with no packs. Make sure that nothing downloads before a tap. Tap Download. Hide the keyboard for a minute. | The download starts only on tap and keeps going while hidden. | Pass (EMU 2026-11-15) |
+| K.9 | EMU | Offline, with a pair that has no packs, look at the bar. Tap the offer. | The bar offers the pack download with its size, for example "Download English to French (about 31 MB)". The tap queues the download. | Fail (plan fixed). The bar offers the pack download, as the code intends. (EMU 2026-11-15) |
+| K.10 | EMU | Airplane mode with both packs installed. Type in the bar. | The translation works offline. | Pass (EMU 2026-11-15) |
+| K.11 | EMU | With a pair that has no packs, type and toggle the network while a preview shows. | An inline chip shows. The last preview stays. Nothing is committed. No empty text is written. | Pass (EMU 2026-11-15) |
+| K.12 | EMU | Settings, Translate. Read the bar mode. Switch it to Live. Type fast in the bar. Close it during a preview and switch fields during a preview. | The default is Preview. In Live the composing preview is replaced in place, never doubled, and removed on close. No host character is deleted. | Fail: app bug. A field switch during a Live preview commits the preview into the old field. (EMU 2026-11-15) |
+| K.13 | EMU | Hardware keyboard (emulator host keyboard): open the bar, type, Backspace, Enter, Ctrl+A and forward delete. | Printable keys go to the bar. Ctrl shortcuts and forward delete do not change host text. | Fail: app bug. Ctrl+A and Ctrl+X reach the host while the bar is open. Ctrl+X cut host text. Forward delete does nothing. (EMU 2026-11-15) |
+| K.14 | EMU | Settings, Translate: change the default pair. Open the bar. | The bar uses the new pair. | Pass (EMU 2026-11-15) |
+| K.15 | EMU | Open the bar in a field that sets `TYPE_TEXT_FLAG_NO_SUGGESTIONS`. Type a word. | Expected result unclear: the code leaves this open (Sprint 6 product question 7). Record whether suggestions show and whether Space commits. | Pass (EMU 2026-11-15) |
 
 ## L. Translator screen
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| L.1 | EMU | Home, Translate. Type "the quick brown fox", en to ur. | The Urdu result shows right-aligned, with copy, share, speak and star. | |
-| L.2 | EMU | Tap share on a result. | The share sheet opens with plain text. | |
-| L.3 | EMU | Set the source to "Detect language". Paste Urdu text. Tap swap. | "Detected: Urdu" shows. Swap makes Urdu the target. | |
-| L.4 | EMU | Airplane mode. Tap the mic. Agree to the notice and allow the mic. | The notice shows before the permission prompt. Dictated text fills the input and translates offline. | |
-| L.5 | EMU | Offline, open a pair with no model. | "Download this language pair to translate offline" shows. The previous result stays. | |
-| L.6 | EMU | Translate a few texts. Star one. Open History. Search, swipe one away, then Clear with "Keep favourites". | Search filters. Swipe deletes. Clear keeps the starred row. | |
-| L.7 | EMU | Turn "Save history" off in Settings, Translate. Translate a text. | Nothing new is saved in History. | |
-| L.8 | EMU | Settings, Offline languages. On Wi-Fi, download Urdu. Translate en to ur offline. | An indeterminate indicator with Stop shows, then "Downloaded". English Delete is disabled with the pivot note. Offline translation works. | |
-| L.9 | EMU | Start a download and Stop at once. Start another and Stop during the fetch. Reopen later, also after a force-stop. | The row goes back to "Not downloaded" both times. | |
+| L.1 | EMU | Home, Translate. Type "the quick brown fox", en to ur. | The Urdu result shows right-aligned, with copy, share, speak and star. | Pass (EMU 2026-11-15) |
+| L.2 | EMU | Tap share on a result. | The share sheet opens with plain text. | Pass (EMU 2026-11-15) |
+| L.3 | EMU | Set the source to "Detect language". Paste Urdu text. Tap swap. | "Detected: Urdu" shows. Swap makes Urdu the target. | Pass (EMU 2026-11-15) |
+| L.4 | EMU | Airplane mode. Tap the mic. Agree to the notice and allow the mic. | The notice shows before the permission prompt. Dictated text fills the input and translates offline. | Blocked: no offline recognizer on the emulator, and the voice notice was already accepted. (EMU 2026-11-15) |
+| L.5 | EMU | Offline, open a pair with no model. | "Download this language pair to translate offline" shows. The previous result stays. | Pass (EMU 2026-11-15) |
+| L.6 | EMU | Translate a few texts. Star one. Open History. Search, swipe one away, then Clear with "Keep favourites". | Search filters. Swipe deletes. Clear keeps the starred row. | Pass (EMU 2026-11-15) |
+| L.7 | EMU | Turn "Save history" off in Settings, Translate. Translate a text. | Nothing new is saved in History. | Pass (EMU 2026-11-15) |
+| L.8 | EMU | Settings, Offline languages. On Wi-Fi, download Urdu. Translate en to ur offline. | An indeterminate indicator with Stop shows, then "Downloaded". English Delete is disabled with the pivot note. Offline translation works. | Pass (EMU 2026-11-15) |
+| L.9 | EMU | Start a download and Stop at once. Start another and Stop during the fetch. Reopen later, also after a force-stop. | The row goes back to "Not downloaded" both times. | Pass (EMU 2026-11-15) |
 | L.10 | DEVICE | On mobile data with "Download on Wi-Fi only" on, download Hindi. Turn the switch off. | The download waits for Wi-Fi while on. New downloads run on mobile data after off. | |
-| L.11 | EMU | Look at the voice typing section of Offline languages. Tap Settings on the recognizer row. | The row matches the device. Settings opens system voice input. Whisper rows show in debug. | |
-| L.12 | EMU | Offline languages: install the English dictionary pack. Turn on airplane mode. Look up "coffee" on the Dictionary screen. | The definition shows with no network. | |
-| L.13 | EMU | Type a query on the Dictionary screen. Toggle airplane mode. | The query and the result stay. | |
-| L.14 | EMU | Open an entry. Then open Settings, About, Open-source licences. | The attribution and the licence link show on the entry and on the licences screen. | |
+| L.11 | EMU | Look at the voice typing section of Offline languages. Tap Settings on the recognizer row. | The row matches the device. Settings opens system voice input. Whisper rows show in debug. | Pass (EMU 2026-11-15) |
+| L.12 | EMU | Offline languages: install the English dictionary pack. Turn on airplane mode. Look up "coffee" on the Dictionary screen. | The definition shows with no network. | Pass (EMU 2026-11-15) |
+| L.13 | EMU | Type a query on the Dictionary screen. Toggle airplane mode. | The query and the result stay. | Pass (EMU 2026-11-15) |
+| L.14 | EMU | Open an entry. Then open Settings, About, Open-source licences. | The attribution and the licence link show on the entry and on the licences screen. | Pass (EMU 2026-11-15) |
 | L.15 | EMU+API | Agree to AI. With "Online dictionary" on, look up "run", which is not in the offline pack. | The fake source answers with the verb "To move quickly on foot." and the example "Run home." `dictionary_lookup` is logged. | |
 | L.16 | EMU+API | Turn "Online dictionary" off. Look up "run" again. Then turn it on and withdraw AI consent. Look up "run". | No online lookup in either case. | |
-| L.17 | EMU | Home, Phrasebook. Browse the categories. | 12 categories show phrases. | |
-| L.18 | EMU | Add, edit and delete an own phrase. Force-stop and reopen. | Each change stays. | |
-| L.19 | EMU | Tap a phrase to speak it. Tap "Send via keyboard" and pick Messages. | The phrase is spoken. The share sheet opens and Messages gets the text. | |
-| L.20 | EMU | Install the language pack. Turn on airplane mode. Open a category. | Translations show. | |
+| L.17 | EMU | Home, Phrasebook. Browse the categories. | 12 categories show phrases. | Pass (EMU 2026-11-15) |
+| L.18 | EMU | Add, edit and delete an own phrase. Force-stop and reopen. | Each change stays. | Pass (EMU 2026-11-15) |
+| L.19 | EMU | Tap a phrase to speak it. Tap "Send via keyboard" and pick Messages. | The phrase is spoken. The share sheet opens and Messages gets the text. | Pass (EMU 2026-11-15) |
+| L.20 | EMU | Install the language pack. Turn on airplane mode. Open a category. | Translations show. | Pass (EMU 2026-11-15) |
 
 ## M. PROCESS_TEXT and share sheet
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| M.1 | EMU | Select text in Chrome and Messages. Pick "Translate". | A sheet shows the translation, a target picker, Copy, Speak, Open in app and Close. No ad. It is not in Recents after. `process_text_open` is logged. | |
-| M.2 | EMU | Select text in an editable field. Translate. Tap Replace. | Replace swaps the selection. `process_text_replace` is logged. | |
-| M.3 | EMU | Select read-only text. Translate. Close. | No Replace. The page is unchanged. | |
-| M.4 | EMU | Share plain text to "Translate" from Chrome and from a notes app. Share an image. | Text opens the sheet without Replace. No "Translate" target shows for an image. | |
-| M.5 | EMU | Select more than 5,000 characters. Translate. | "Only the first 5,000 characters are translated" shows. | |
-| M.6 | EMU | Disable our keyboard. Open the sheet twice in a day. Move the clock 7 days ahead and open it again. | The "Enable keyboard" card shows the first time, not the second, and again after 7 days. | |
-| M.7 | EMU | Tap Copy. Tap Open in app. | Copy works. Open in app shows the Translator with the text translated. | |
-| M.8 | EMU | Rotate with the sheet open. | The translation stays, with no second request. | |
-| M.9 | EMU | Open the sheet on a pair with no pack. Tap Download. | "Download this language pair to translate offline (about N MB)" shows. After the download the result shows. | |
-| M.10 | EMU | In Chrome, select one word and tap "Define". | The Dictionary entry for the word opens. | |
-| M.11 | EMU | Select two words and tap "Define". Then select a word longer than 64 characters. | "Select one word" shows in both cases. | |
+| M.1 | EMU | Select text in Chrome and Messages. Pick "Translate". | A sheet shows the translation, a target picker, Copy, Speak, Open in app and Close. No ad. It is not in Recents after. `process_text_open` is logged. | Pass (EMU 2026-11-15) |
+| M.2 | EMU | Select text in an editable field. Translate. Tap Replace. | Replace swaps the selection. `process_text_replace` is logged. | Pass (EMU 2026-11-15) |
+| M.3 | EMU | Select read-only text. Translate. Close. | No Replace. The page is unchanged. | Pass (EMU 2026-11-15) |
+| M.4 | EMU | Share plain text to "Translate" from Chrome and from a notes app. Share an image. | Text opens the sheet without Replace. No "Translate" target shows for an image. | Pass (EMU 2026-11-15) |
+| M.5 | EMU | Select more than 5,000 characters. Translate. | "Only the first 5,000 characters are translated" shows. | Pass (EMU 2026-11-15) |
+| M.6 | EMU | Disable our keyboard. Open the sheet twice in a day. Move the clock 7 days ahead and open it again. | The "Enable keyboard" card shows the first time, not the second, and again after 7 days. | Pass (EMU 2026-11-15) |
+| M.7 | EMU | Tap Copy. Tap Open in app. | Copy works. Open in app shows the Translator with the text translated. | Pass (EMU 2026-11-15) |
+| M.8 | EMU | Rotate with the sheet open. | The translation stays, with no second request. | Pass (EMU 2026-11-15) |
+| M.9 | EMU | Open the sheet on a pair with no pack. Tap Download. | "Download this language pair to translate offline (about N MB)" shows. After the download the result shows. | Pass (EMU 2026-11-15) |
+| M.10 | EMU | In Chrome, select one word and tap "Define". | The Dictionary entry for the word opens. | Pass (EMU 2026-11-15) |
+| M.11 | EMU | Select two words and tap "Define". Then select a word longer than 64 characters. | "Select one word" shows in both cases. | Pass (EMU 2026-11-15) |
 
 ## N. TTS
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| N.1 | EMU | In the Translator, speak a translation of more than 4,000 characters. | The whole text plays, with no cut at the chunk joins. | |
-| N.2 | EMU | Speak Urdu and Hindi results. | Both play. | |
-| N.3 | EMU | Start speech. Leave the screen. | The speech stops. The shared TTS engine shuts down after the last screen that uses it closes. | |
-| N.4 | EMU | Remove the Bengali voice data. Speak a Bengali result. | "Install voice" shows and opens the TTS installer. | |
-| N.5 | EMU | In the PROCESS_TEXT sheet, tap Speak with and without voice data. | Speech plays, or the installer opens. | |
+| N.1 | EMU | In the Translator, speak a translation of more than 4,000 characters. | The whole text plays, with no cut at the chunk joins. | Pass (EMU 2026-11-15) |
+| N.2 | EMU | Speak Urdu and Hindi results. | Both play. | Pass (EMU 2026-11-15) |
+| N.3 | EMU | Start speech. Leave the screen. | The speech stops. The shared TTS engine shuts down after the last screen that uses it closes. | Pass (EMU 2026-11-15) |
+| N.4 | EMU | Remove the Bengali voice data. Speak a Bengali result. | "Install voice" shows and opens the TTS installer. | Fail: app gap. Google TTS returns LANG_NOT_SUPPORTED after a voice uninstall, so the app shows "not available" and no Install voice. (EMU 2026-11-15) |
+| N.5 | EMU | In the PROCESS_TEXT sheet, tap Speak with and without voice data. | Speech plays, or the installer opens. | Fail: same cause as N.4. Speak plays with voice data. Without it, Speak is disabled and the installer does not open. (EMU 2026-11-15) |
 
 ## O. Transliteration
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| O.1 | EMU | Add "Urdu (Roman)" in Settings, Languages. Look at the list row. | The name shows with "(Beta)". | |
-| O.2 | EMU | Switch to "Urdu (Roman)". In Messages, type "kya haal hai" with a space after each word. | The strip shows native candidates and the Latin chip. Space commits the top native candidate. `translit_commit` is logged. | |
-| O.3 | EMU | Type "kya" and tap the Latin chip. Then type a word that only the rules can spell and press Space. | The chip keeps "kya" in Latin. The rule-only word stays Roman on Space. | |
-| O.4 | EMU | Type "meeting", "phone" and "ok", each with a space. | Each stays Latin. | |
-| O.5 | EMU | In a host field, type a Roman word and a space so that it commits as native. Press Backspace once. Press Backspace again. | The first Backspace restores the Roman word without the space. The second deletes one character. | |
-| O.6 | EMU | Commit a native word. Type another key. Press Backspace. | Backspace deletes as normal. Nothing is restored. | |
-| O.7 | EMU | Add "Hindi (Roman)". Repeat O.2 to O.6. | Same results, with Devanagari candidates. | |
-| O.8 | EMU | Turn the global suggestions setting off. Type in "Urdu (Roman)". | The Roman strip still shows. | |
-| O.9 | EMU | Type in the Password, URL and Email fields. | No strip and no native commit. | |
-| O.10 | EMU | Turn incognito on. Long-press a candidate. Open Settings, Languages, "Roman typing" and try to add a mapping. | The card has no "Save mapping". The add in settings is blocked. | |
-| O.11 | EMU | Save a mapping from the long-press card. In "Roman typing (Beta)", add, edit and delete one. | Each change applies on the next word. | |
-| O.12 | EMU | In "Roman typing", enter "kya1". Then enter a word of 41 letters. | "Use the letters a to z only." and "Enter a word of up to 40 characters." show. | |
-| O.13 | EMU | Add two mappings. Run Clear data in Settings, Privacy (Clear on device only). Reopen "Roman typing". | The list is empty. | |
-| O.14 | EMU | Open the Translate bar in "Urdu (Roman)". Type a word. Press Space. | The strip follows the bar word. Space commits it. The translation uses Urdu as the source. | |
-| O.15 | EMU | Type and accept suggestions in the native `ur-PK` and `hi-IN` subtypes. | They type and suggest as before Sprint 6. | |
-| O.16 | EMU | In "Urdu (Roman)", accept a word twice so that it gets a boost. Turn incognito on and type the word. Repeat with a field that sets `IME_FLAG_NO_PERSONALIZED_LEARNING`. | After incognito turns on, the boost is gone and the word ranks as a fresh word, in both cases. | |
-| O.17 | EMU | Turn on airplane mode. Repeat O.2 to O.14. | Every check still works. | |
+| O.1 | EMU | Add "Urdu (Roman)" in Settings, Languages. Look at the list row. | The name shows with "(Beta)". | Pass (EMU 2026-11-15) |
+| O.2 | EMU | Switch to "Urdu (Roman)". In Messages, type "kya haal hai" with a space after each word. | The strip shows native candidates and the Latin chip. Space commits the top native candidate. `translit_commit` is logged. | Pass (EMU 2026-11-15) |
+| O.3 | EMU | Type "kya" and tap the Latin chip. Then type a word that only the rules can spell and press Space. | The chip keeps "kya" in Latin. The rule-only word stays Roman on Space. | Pass (EMU 2026-11-15) |
+| O.4 | EMU | Type "meeting", "phone" and "ok", each with a space. | Each stays Latin. | Pass (EMU 2026-11-15) |
+| O.5 | EMU | In a host field, type a Roman word and a space so that it commits as native. Press Backspace once. Press Backspace again. | The first Backspace restores the Roman word without the space. The second deletes one character. | Pass (EMU 2026-11-15) |
+| O.6 | EMU | Commit a native word. Type another key. Press Backspace. | Backspace deletes as normal. Nothing is restored. | Pass (EMU 2026-11-15) |
+| O.7 | EMU | Add "Hindi (Roman)". Repeat O.2 to O.6. | Same results, with Devanagari candidates. | Pass (EMU 2026-11-15) |
+| O.8 | EMU | Turn the global suggestions setting off. Type in "Urdu (Roman)". | The Roman strip still shows. | Pass (EMU 2026-11-15) |
+| O.9 | EMU | Type in the Password, URL and Email fields. | No strip and no native commit. | Fail: app bug. Password and URL fields are correct, but an email field shows the Roman strip. Space does not commit there. (EMU 2026-11-15) |
+| O.10 | EMU | Turn incognito on. Long-press a candidate. Open Settings, Languages, "Roman typing" and try to add a mapping. | The card has no "Save mapping". The add in settings is blocked. | Pass (EMU 2026-11-15) |
+| O.11 | EMU | Save a mapping from the long-press card. In "Roman typing (Beta)", add, edit and delete one. | Each change applies on the next word. | Pass (EMU 2026-11-15) |
+| O.12 | EMU | In "Roman typing", enter "kya1". Then enter a word of 41 letters. | "Use the letters a to z only." and "Enter a word of up to 40 characters." show. | Pass (EMU 2026-11-15) |
+| O.13 | EMU | Add two mappings. Run Clear data in Settings, Privacy (Clear on device only). Reopen "Roman typing". | The list is empty. | Pass (EMU 2026-11-15) |
+| O.14 | EMU | Open the Translate bar in "Urdu (Roman)". Type a word. Press Space. | The strip follows the bar word. Space commits it. The translation uses Urdu as the source. | Pass (EMU 2026-11-15) |
+| O.15 | EMU | Type and accept suggestions in the native `ur-PK` and `hi-IN` subtypes. | They type and suggest as before Sprint 6. | Pass (EMU 2026-11-15) |
+| O.16 | EMU | In "Urdu (Roman)", accept a word twice so that it gets a boost. Turn incognito on and type the word. Repeat with a field that sets `IME_FLAG_NO_PERSONALIZED_LEARNING`. | After incognito turns on, the boost is gone and the word ranks as a fresh word, in both cases. | Pass (EMU 2026-11-15) |
+| O.17 | EMU | Turn on airplane mode. Repeat O.2 to O.14. | Every check still works. | Pass (EMU 2026-11-15) |
 | O.18 | DEVICE | On a low-end phone, take a trace over 200 keystrokes in a Roman subtype. | The p90 per keystroke is below 30 ms. | |
 
 ## P. AI rewrite and polish
@@ -357,27 +409,27 @@ Use the AI build and the local backend. Agree to AI consent first (B.3).
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| P.1 | EMU+API | In a chat field, type "helo wrld". Tap ✦. Pick a tone. Tap Replace. | "This is a fake rewrite." streams in and replaces only the captured text. `ai_request` and `ai_rewrite_done` are logged. | |
-| P.2 | EMU+API | After P.1, tap Undo within 5 s. | The original text comes back. | |
-| P.3 | EMU+API | Start a rewrite. Edit the field while it streams. Tap Replace. | "Your text changed, so it was not replaced. You can insert the result instead." shows with Insert. | |
-| P.4 | EMU+API | Open the sheet. Press Back. | The sheet closes. The host text is unchanged. | |
-| P.5 | EMU+API | Open the tone variants for the selection. | The variants read "Fake formal.", "Fake friendly." and so on, one per mode. | |
-| P.6 | EMU+API | Settings, AI: look at the quota row. Run `curl -s -H 'X-Dev-Uid: dev-local' localhost:8080/v1/quota`. | The row reads "N left today", where N is `ai_left_today`. | |
-| P.7 | EMU+API | Settings, AI: change the default tone. Open the ✦ sheet. | The first tone is the new default. | |
-| P.8 | EMU+API | Select more than 2,000 characters. Tap ✦ and a tone. | "Text is too long" shows. No request reaches kb-api (quota unchanged). | |
-| P.9 | EMU+API | Restart the backend with `FREE_DAILY=1`. Rewrite once. Rewrite again. | The second try shows "Daily AI limit reached · resets in N h" with "See Pro". `ai_quota_hit` is logged once. | |
-| P.10 | EMU+API | After P.9, tap "See Pro". | The paywall opens with the header "You used today's free AI actions". `paywall_view` is logged with `trigger=ai_quota`. | |
-| P.11 | EMU+API | Restart the backend with `UID_PER_MINUTE=1`. Rewrite twice within a minute. | "Too many requests, try again in N s" shows. Nothing is written to the host. | |
-| P.12 | EMU+API | Restart the backend with `AI_ENABLED=false`. Tap a tone. Open other fields. | "AI is unavailable right now" shows. The ✦ chip hides for 1 h. | |
-| P.13 | EMU+API | After P.12, restart the backend with no extra variable. Force-stop the app. Open a chat field. | The ✦ chip is back, because the pause lives in memory only. | |
-| P.14 | EMU+API | Stop the backend. Tap a tone. | "AI needs internet" shows. | |
-| P.15 | EMU+API | After a rewrite, open the overflow and tap Report. Pick Wrong or misleading. Leave "Include the text" off and send. | The report is sent. `ai_output_reported` is logged. | |
-| P.16 | EMU+API | In a chat field, type a word, then dictate. Tap "✦ Clean up" within 30 s. Tap Replace. Tap Undo within 5 s. | Only the dictated span changes to "Fake polished text.". Undo restores the raw text. `ai_polish_done` is logged. | |
-| P.17 | EMU+API | Dictate, then tap "✦ Clean up + translate to X". | The polished text and the translation show. | |
-| P.18 | EMU+API | Dictate, then type a letter. Dictate again and move the cursor out. | The Clean up chip goes in both cases. | |
-| P.19 | EMU+API | Withdraw AI consent. Open a chat field. Run the quota curl before and after you tap the chip. | The consent screen shows. Quota is unchanged. | |
-| P.20 | EMU+API | Open the Password field and a private app. | No ✦ chip and no Clean up chip. | |
-| P.21 | EMU | Install the plain debug build (no AI properties). Open a chat field. | No ✦ chip, because the backend URL is empty. | |
+| P.1 | EMU+API | In a chat field, type "helo wrld". Tap ✦. Pick a tone. Tap Replace. | "This is a fake rewrite." streams in and replaces only the captured text. `ai_request` and `ai_rewrite_done` are logged. | Pass (EMU 2026-11-15) |
+| P.2 | EMU+API | After P.1, tap Undo within 5 s. | The original text comes back. | Pass (EMU 2026-11-15) |
+| P.3 | EMU+API | Start a rewrite. Edit the field while it streams. Tap Replace. | "Your text changed, so it was not replaced. You can insert the result instead." shows with Insert. | Pass (EMU 2026-11-15) |
+| P.4 | EMU+API | Open the sheet. Press Back. | The sheet closes. The host text is unchanged. | Pass (EMU 2026-11-15) |
+| P.5 | EMU+API | Open the AI sheet for the selection. | The sheet shows the tone chips Fix grammar, Formal, Friendly, Shorter, Longer and Emojify. There is no variants view. Multi-tone variants exist only in kb-api (API.11). | Fail (plan fixed). The sheet has tone chips only. The client never sends `modes`. (EMU 2026-11-15) |
+| P.6 | EMU+API | Settings, AI: look at the quota row. Run `curl -s -H 'X-Dev-Uid: dev-local' localhost:8080/v1/quota`. | The row reads "N left today", where N is `ai_left_today`. | Pass (EMU 2026-11-15) |
+| P.7 | EMU+API | Settings, AI: change the default tone. Open the ✦ sheet. | The first tone is the new default. | Pass (EMU 2026-11-15) |
+| P.8 | EMU+API | Select more than 2,000 characters. Tap ✦ and a tone. | "Text is too long" shows. No request reaches kb-api (quota unchanged). | Pass (EMU 2026-11-15) |
+| P.9 | EMU+API | Restart the backend with `FREE_DAILY=1`. Rewrite once. Rewrite again. | The second try shows "Daily AI limit reached · resets in N h" with "See Pro". `ai_quota_hit` is logged once. | Pass (EMU 2026-11-15) |
+| P.10 | EMU+API | After P.9, tap "See Pro". | The paywall opens with the header "You used today's free AI actions". `paywall_view` is logged with `trigger=ai_quota`. | Pass (EMU 2026-11-15) |
+| P.11 | EMU+API | Restart the backend with `UID_PER_MINUTE=1`. Rewrite twice within a minute. | "Too many requests, try again in N s" shows. Nothing is written to the host. | Pass (EMU 2026-11-15) |
+| P.12 | EMU+API | Restart the backend with `AI_ENABLED=false`. Tap a tone. Open other fields. | "AI is unavailable right now" shows. The ✦ chip hides for 1 h. | Pass (EMU 2026-11-15) |
+| P.13 | EMU+API | After P.12, restart the backend with no extra variable. Force-stop the app. Open a chat field. | The ✦ chip is back, because the pause lives in memory only. | Pass (EMU 2026-11-15) |
+| P.14 | EMU+API | Stop the backend. Tap a tone. | "AI needs internet" shows. | Pass (EMU 2026-11-15) |
+| P.15 | EMU+API | After a rewrite, open the overflow and tap Report. Pick Wrong or misleading. Leave "Include the text" off and send. | The report is sent. `ai_output_reported` is logged. | Pass (EMU 2026-11-15) |
+| P.16 | EMU+API | In a chat field, type a word, then dictate. Tap "✦ Clean up" within 30 s. Tap Replace. Tap Undo within 5 s. | Only the dictated span changes to "Fake polished text.". Undo restores the raw text. `ai_polish_done` is logged. | Blocked: needs dictation, which this emulator cannot do. (EMU 2026-11-15) |
+| P.17 | EMU+API | Dictate, then tap "✦ Clean up + translate to X". | The polished text and the translation show. | Blocked: needs dictation (see P.16). (EMU 2026-11-15) |
+| P.18 | EMU+API | Dictate, then type a letter. Dictate again and move the cursor out. | The Clean up chip goes in both cases. | Blocked: needs dictation (see P.16). (EMU 2026-11-15) |
+| P.19 | EMU+API | Withdraw AI consent. Open a chat field. Run the quota curl before and after you tap the chip. | The consent screen shows. Quota is unchanged. | Pass (EMU 2026-11-15) |
+| P.20 | EMU+API | Open the Password field and a private app. | No ✦ chip and no Clean up chip. | Pass (EMU 2026-11-15) |
+| P.21 | EMU | Install the plain debug build (no AI properties). Open a chat field. | No ✦ chip, because the backend URL is empty. | Pass (EMU 2026-11-15) |
 | P.22 | DEVICE | ar and ur: rewrite a sentence with a name, a number and a link against a real model. Replace. | Reads right to left with correct bidi. Name, number and link are unchanged. Needs BACKEND-PROD for real output. | |
 | P.23 | BACKEND-PROD | AI settings, Output script: Same, Roman, Native. Dictate in hi and ur and Polish with each. | Native gives Devanagari or Urdu script. Roman gives Latin. Same keeps the dictated script. | |
 | P.24 | BACKEND-PROD | As a Pro user, turn on auto-polish, agree and dictate. Use up the quota. Dictate in a sensitive field. | Each dictation is polished and can be undone. A quota error pauses auto-polish until the next UTC day. Never in a sensitive field. | |
@@ -528,47 +580,47 @@ Every response carries an `X-Request-Id` header. Use `curl -s -i` to see headers
 
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
-| API.1 | EMU+API | `curl -s -i $B/healthz` | 200 `{"status":"ok"}` with no auth header. `X-Request-Id` is present. | |
-| API.2 | EMU+API | `curl -s -H "$U" $B/v1/quota` | 200 with `ai_left_today` 10, `resets_at` and `tier` "FREE". No `ai_daily_limit` field. | |
-| API.3 | EMU+API | Run API.2 three times. | `ai_left_today` stays the same. Reading the quota spends nothing. | |
-| API.4 | EMU+API | `curl -s -i $B/v1/quota` (no header). | 401 `{"error":"auth"}`. | |
-| API.5 | EMU+API | `curl -s -i -H 'X-Dev-Uid: bad uid!' $B/v1/quota` | 401 `{"error":"auth"}`. | |
-| API.6 | EMU+API | `curl -s -i $B/v1/nope`, then `curl -s -i -H "$U" $B/v1/nope`. | Without the header, 401. With it, 404 `not_found`. | |
-| API.7 | EMU+API | `curl -s -i -H "$U" $B/v1/rewrite` (GET). | 405 `method_not_allowed`. | |
-| API.8 | EMU+API | `curl -s -i -H "$U" -H "$J" -d '{bad' $B/v1/rewrite` | 400 `bad_request`. | |
-| API.9 | EMU+API | `curl -sN -i -H "$U" -H "$J" -d '{"mode":"fix","locale":"en","text":"helo wrld","client_req_id":"r1"}' $B/v1/rewrite` | 200 `text/event-stream` with `Cache-Control: no-cache` and `X-Accel-Buffering: no`. Three `event: delta` frames ("This is ", "a fake ", "rewrite."), then `event: done` with `quota_left` 9, `trimmed` false and `prompt` "rewrite@1". | |
-| API.10 | EMU+API | Send the API.9 request again twice with `client_req_id` "r1". Then a fourth time. | The second and third calls show the same `quota_left` as the first. The fourth call counts as a new action, so `quota_left` drops by one. | |
-| API.11 | EMU+API | `curl -s -H "$U" -H "$J" -d '{"mode":"fix","modes":["formal","friendly"],"locale":"en","text":"helo wrld","client_req_id":"m1"}' $B/v1/rewrite` | 200 JSON with `variants` [{"mode":"formal","text":"Fake formal."},{"mode":"friendly","text":"Fake friendly."}], `quota_left` and `prompt` "multi_tone@1". | |
-| API.12 | EMU+API | Send API.9 with `"mode":"poem"`, then with `"locale":"e"`, then with `"text":""`, then with a `client_req_id` of 65 characters. | 400 `bad_request` each time. No quota is spent. | |
-| API.13 | EMU+API | Send API.11 with `"modes":["formal"]`, then with `"modes":["formal","formal"]`. | 400 `bad_request` both times. | |
-| API.14 | EMU+API | Send API.9 with `"mode":"translate"` and no `target_lang`. Then add `"target_lang":"ur"`. | The first gives 400 `bad_request`. The second streams the fake rewrite. | |
-| API.15 | EMU+API | `T=$(python3 -I -c "print('a'*4001)")`, then send API.9 with `"text":"'$T'"`. | 400 `too_long`. | |
-| API.16 | EMU+API | `curl -sN -H "$U" -H "$J" -d '{"transcript":"the quick brown fox","target_lang":"en","client_req_id":"p1"}' $B/v1/polish` | SSE stream that ends with `event: done` holding `polished` "Fake polished text.", `translation` "Fake translation.", `source_lang_detected` "en", `quota_left` and `prompt` "polish_translate@1". | |
-| API.17 | EMU+API | Send API.16 with `"script":"LATIN"`, then with `"transcript":""`, then with `"source_lang":"e"`. | 400 `bad_request` each time. `"script":"ROMAN"` and `"NATIVE"` stream normally. | |
-| API.18 | EMU+API | Restart with `FREE_DAILY=1`. Send API.9 with id "q1". Send it with id "q2". | The first streams. The second gives 402 `{"error":"quota","resets_at":...}`. | |
-| API.19 | EMU+API | Restart with `UID_PER_MINUTE=1`. Send API.9 with id "u1", then at once with id "u2". | The second gives 429 `rate_limited` with `retry_after` in the body and a `Retry-After` header. | |
-| API.20 | EMU+API | Restart with `HOURLY_SPEND_LIMIT_USD=0`. Send API.9 with id "s1", then with id "s2". | The first streams. The second gives 503 `ai_paused`. | |
-| API.21 | EMU+API | Restart with `AI_ENABLED=false`. Send API.9. Then send API.12 with `"mode":"poem"`. | The first gives 503 `ai_paused`. The bad body gives 400 `bad_request`, because validation runs first. | |
-| API.22 | EMU+API | `curl -s -i -H "$U" -H "$J" -d '{"client_req_id":"r1","prompt_id":"rewrite@1","reason":"wrong","include_text":false}' $B/v1/ai/report` | 200 `{"ok":true}`. API.2 shows no quota change. | |
-| API.23 | EMU+API | Send API.22 with `"reason":"spam"`, then with `"prompt_id":"Rewrite-1"`, then with an empty `client_req_id`. | 400 `bad_request` each time. | |
-| API.24 | EMU+API | Restart with `UID_PER_MINUTE=1`. Send API.22 twice at once. | The second gives 429. | |
-| API.25 | EMU+API | `curl -s -H "$U" -H "$J" -d '{"word":" Run ","lang":"en"}' $B/v1/dictionary` | 200 with one entry: `headword` "run", `pos` verb, `definition` "To move quickly on foot.", `example` "Run home.", `synonyms` ["sprint"]. `source` "fake" and `licence_url` "https://example.com/fake-dictionary-licence". | |
-| API.26 | EMU+API | Send API.25 with `"word":"zzzz"`. | 404 `not_found`. | |
-| API.27 | EMU+API | Send API.25 with `"word":"run fast"`, then `"word":""`, then a word of 65 letters, then `"lang":"fr"`. | 400 `bad_request` each time. | |
-| API.28 | EMU+API | Restart with `DICTIONARY_PER_MINUTE=1`. Send API.25 twice at once. | The second gives 429. | |
-| API.29 | EMU+API | Restart with `AUTH_MODE=dev` only (no `GATEWAY=fake`). Send API.25. | 503 `dictionary_unavailable`, because no `DICTIONARY_SOURCE_URL` is set. | |
-| API.30 | EMU+API | `curl -s -i -H "$U" -H "$J" -d '{"purchase_token":"","product_id":"pro_monthly"}' $B/v1/entitlement/verify` | 400 `bad_request`. | |
-| API.31 | EMU+API | Send API.30 with `"purchase_token":"tok1"`. Then `curl -s -i -H "$U" $B/v1/entitlement`. | Both give 503 `unavailable`, because Play billing is off outside GCP. | |
-| API.32 | EMU+API | Run API.9 once. Then `curl -s -i -H "$U" -H "$J" -d '{"client_req_id":"d1"}' $B/v1/account/delete`. Then API.2. | 200 `{"deleted":true}`. The backend log shows `account_delete` with `firebase_user=skipped`. API.2 shows the full quota again. | |
-| API.33 | EMU+API | Send API.32 again. Then send it with `"client_req_id":""` and with 65 characters. | The repeat gives `{"deleted":true}` again. The bad ids give 400. | |
-| API.34 | EMU+API | `curl -s -i -X POST $B/internal/rtdn` | 401 with an empty body. | |
-| API.35 | EMU+API | `curl -s -i $B/delete-account` | 200 HTML with `Content-Security-Policy` starting `default-src 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: public, max-age=3600`. | |
-| API.36 | EMU+API | Run API.9 and API.16. Search the backend console for "helo" and "quick brown". | No match. User text is never logged. | |
-| API.37 | EMU+API | Run `K_SERVICE=x AUTH_MODE=dev ./gradlew run`. Then run `GATEWAY=fake ./gradlew run` with no `AUTH_MODE`. | Both refuse to start: "AUTH_MODE=dev is refused on Cloud Run (K_SERVICE is set)" and "GATEWAY=fake needs AUTH_MODE=dev". | |
-| API.38 | BACKEND-PROD | On the deployed kb-api, call `/v1/quota` with no App Check token. Then with `X-Dev-Uid`. | 401 `app_check` both times. Dev auth is refused. | |
-| API.39 | BACKEND-PROD | Send a report with `include_text` true and one with false. Read `ai_reports` in Firestore. | Both exist. Only the first has text. Both expire in 90 days. | |
-| API.40 | BACKEND-PROD | Delete everything from the app on a Firebase build. Read Firestore and Firebase Auth for the old uid. | No rows remain for the uid. The Firebase Auth user is gone. The next AI request uses a new anonymous uid. | |
-| API.41 | BACKEND-PROD | Run the eval baselines in `backend/evals/README.md`. | Reports are saved. Cache-read tokens are above 0. | |
+| API.1 | EMU+API | `curl -s -i $B/healthz` | 200 `{"status":"ok"}` with no auth header. `X-Request-Id` is present. | Pass (local kb-api 2026-11-15) |
+| API.2 | EMU+API | `curl -s -H "$U" $B/v1/quota` | 200 with `ai_left_today` 10, `resets_at` and `tier` "FREE". No `ai_daily_limit` field. | Pass (local kb-api 2026-11-15) |
+| API.3 | EMU+API | Run API.2 three times. | `ai_left_today` stays the same. Reading the quota spends nothing. | Pass (local kb-api 2026-11-15) |
+| API.4 | EMU+API | `curl -s -i $B/v1/quota` (no header). | 401 `{"error":"auth"}`. | Pass (local kb-api 2026-11-15) |
+| API.5 | EMU+API | `curl -s -i -H 'X-Dev-Uid: bad uid!' $B/v1/quota` | 401 `{"error":"auth"}`. | Pass (local kb-api 2026-11-15) |
+| API.6 | EMU+API | `curl -s -i $B/v1/nope`, then `curl -s -i -H "$U" $B/v1/nope`. | Without the header, 401. With it, 404 `not_found`. | Pass (local kb-api 2026-11-15) |
+| API.7 | EMU+API | `curl -s -i -H "$U" $B/v1/rewrite` (GET). | 405 `method_not_allowed`. | Pass (local kb-api 2026-11-15) |
+| API.8 | EMU+API | `curl -s -i -H "$U" -H "$J" -d '{bad' $B/v1/rewrite` | 400 `bad_request`. | Pass (local kb-api 2026-11-15) |
+| API.9 | EMU+API | `curl -sN -i -H "$U" -H "$J" -d '{"mode":"fix","locale":"en","text":"helo wrld","client_req_id":"r1"}' $B/v1/rewrite` | 200 `text/event-stream` with `Cache-Control: no-cache` and `X-Accel-Buffering: no`. Three `event: delta` frames ("This is ", "a fake ", "rewrite."), then `event: done` with `quota_left` 9, `trimmed` false and `prompt` "rewrite@1". | Pass (local kb-api 2026-11-15) |
+| API.10 | EMU+API | Send the API.9 request again twice with `client_req_id` "r1". Then a fourth time. | The second and third calls show the same `quota_left` as the first. The fourth call counts as a new action, so `quota_left` drops by one. | Pass (local kb-api 2026-11-15) |
+| API.11 | EMU+API | `curl -s -H "$U" -H "$J" -d '{"mode":"fix","modes":["formal","friendly"],"locale":"en","text":"helo wrld","client_req_id":"m1"}' $B/v1/rewrite` | 200 JSON with `variants` [{"mode":"formal","text":"Fake formal."},{"mode":"friendly","text":"Fake friendly."}], `quota_left` and `prompt` "multi_tone@1". | Pass (local kb-api 2026-11-15) |
+| API.12 | EMU+API | Send API.9 with `"mode":"poem"`, then with `"locale":"e"`, then with `"text":""`, then with a `client_req_id` of 65 characters. | 400 `bad_request` each time. No quota is spent. | Pass (local kb-api 2026-11-15) |
+| API.13 | EMU+API | Send API.11 with `"modes":["formal"]`, then with `"modes":["formal","formal"]`. | 400 `bad_request` both times. | Pass (local kb-api 2026-11-15) |
+| API.14 | EMU+API | Send API.9 with `"mode":"translate"` and no `target_lang`. Then add `"target_lang":"ur"`. | The first gives 400 `bad_request`. The second streams the fake rewrite. | Pass (local kb-api 2026-11-15) |
+| API.15 | EMU+API | `T=$(python3 -I -c "print('a'*4001)")`, then send API.9 with `"text":"'$T'"`. | 400 `too_long`. | Pass (local kb-api 2026-11-15) |
+| API.16 | EMU+API | `curl -sN -H "$U" -H "$J" -d '{"transcript":"the quick brown fox","target_lang":"en","client_req_id":"p1"}' $B/v1/polish` | SSE stream that ends with `event: done` holding `polished` "Fake polished text.", `translation` "Fake translation.", `source_lang_detected` "en", `quota_left` and `prompt` "polish_translate@1". | Pass (local kb-api 2026-11-15) |
+| API.17 | EMU+API | Send API.16 with `"script":"LATIN"`, then with `"transcript":""`, then with `"source_lang":"e"`. | 400 `bad_request` each time. `"script":"ROMAN"` and `"NATIVE"` stream normally. | Pass (local kb-api 2026-11-15) |
+| API.18 | EMU+API | Restart with `FREE_DAILY=1`. Send API.9 with id "q1". Send it with id "q2". | The first streams. The second gives 402 `{"error":"quota","resets_at":...}`. | Pass (local kb-api 2026-11-15) |
+| API.19 | EMU+API | Restart with `UID_PER_MINUTE=1`. Send API.9 with id "u1", then at once with id "u2". | The second gives 429 `rate_limited` with `retry_after` in the body and a `Retry-After` header. | Pass (local kb-api 2026-11-15) |
+| API.20 | EMU+API | Restart with `HOURLY_SPEND_LIMIT_USD=0`. Send API.9 with id "s1", then with id "s2". | The first streams. The second gives 503 `ai_paused`. | Pass (local kb-api 2026-11-15) |
+| API.21 | EMU+API | Restart with `AI_ENABLED=false`. Send API.9. Then send API.12 with `"mode":"poem"`. | The first gives 503 `ai_paused`. The bad body gives 400 `bad_request`, because validation runs first. | Pass (local kb-api 2026-11-15) |
+| API.22 | EMU+API | `curl -s -i -H "$U" -H "$J" -d '{"client_req_id":"r1","prompt_id":"rewrite@1","reason":"wrong","include_text":false}' $B/v1/ai/report` | 200 `{"ok":true}`. API.2 shows no quota change. | Pass (local kb-api 2026-11-15) |
+| API.23 | EMU+API | Send API.22 with `"reason":"spam"`, then with `"prompt_id":"Rewrite-1"`, then with an empty `client_req_id`. | 400 `bad_request` each time. | Pass (local kb-api 2026-11-15) |
+| API.24 | EMU+API | Restart with `UID_PER_MINUTE=1`. Send API.22 twice at once. | The second gives 429. | Pass (local kb-api 2026-11-15) |
+| API.25 | EMU+API | `curl -s -H "$U" -H "$J" -d '{"word":" Run ","lang":"en"}' $B/v1/dictionary` | 200 with one entry: `headword` "run", `pos` verb, `definition` "To move quickly on foot.", `example` "Run home.", `synonyms` ["sprint"]. `source` "fake" and `licence_url` "https://example.com/fake-dictionary-licence". | Pass (local kb-api 2026-11-15) |
+| API.26 | EMU+API | Send API.25 with `"word":"zzzz"`. | 404 `not_found`. | Pass (local kb-api 2026-11-15) |
+| API.27 | EMU+API | Send API.25 with `"word":"run fast"`, then `"word":""`, then a word of 65 letters, then `"lang":"fr"`. | 400 `bad_request` each time. | Pass (local kb-api 2026-11-15) |
+| API.28 | EMU+API | Restart with `DICTIONARY_PER_MINUTE=1`. Send API.25 twice at once. | The second gives 429. | Pass (local kb-api 2026-11-15) |
+| API.29 | EMU+API | Restart with `AUTH_MODE=dev` only (no `GATEWAY=fake`). Send API.25. | 503 `dictionary_unavailable`, because no `DICTIONARY_SOURCE_URL` is set. | Pass (local kb-api 2026-11-15) |
+| API.30 | EMU+API | `curl -s -i -H "$U" -H "$J" -d '{"purchase_token":"","product_id":"pro_monthly"}' $B/v1/entitlement/verify` | 400 `bad_request`. | Pass (local kb-api 2026-11-15) |
+| API.31 | EMU+API | Send API.30 with `"purchase_token":"tok1"`. Then `curl -s -i -H "$U" $B/v1/entitlement`. | Both give 503 `unavailable`, because Play billing is off outside GCP. | Pass (local kb-api 2026-11-15) |
+| API.32 | EMU+API | Run API.9 once. Then `curl -s -i -H "$U" -H "$J" -d '{"client_req_id":"d1"}' $B/v1/account/delete`. Then API.2. | 200 `{"deleted":true}`. The backend log shows `account_delete` with `firebase_user=skipped`. API.2 shows the full quota again. | Pass (local kb-api 2026-11-15) |
+| API.33 | EMU+API | Send API.32 again. Then send it with `"client_req_id":""` and with 65 characters. | The repeat gives `{"deleted":true}` again. The bad ids give 400. | Pass (local kb-api 2026-11-15) |
+| API.34 | EMU+API | `curl -s -i -X POST $B/internal/rtdn` | 401 with an empty body. | Pass (local kb-api 2026-11-15) |
+| API.35 | EMU+API | `curl -s -i $B/delete-account` | 200 HTML with `Content-Security-Policy` starting `default-src 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: public, max-age=3600`. | Pass (local kb-api 2026-11-15) |
+| API.36 | EMU+API | Run API.9 and API.16. Search the backend console for "helo" and "quick brown". | No match. User text is never logged. | Pass (local kb-api 2026-11-15) |
+| API.37 | EMU+API | Run `K_SERVICE=x AUTH_MODE=dev ./gradlew run`. Then run `GATEWAY=fake ./gradlew run` with no `AUTH_MODE`. | Both refuse to start: "AUTH_MODE=dev is refused on Cloud Run (K_SERVICE is set)" and "GATEWAY=fake needs AUTH_MODE=dev". | Pass (local kb-api 2026-11-15) |
+| API.38 | BACKEND-PROD | On the deployed kb-api, call `/v1/quota` with no App Check token. Then with `X-Dev-Uid`. | 401 `app_check` both times. Dev auth is refused. | Blocked: needs the production backend (2026-11-15) |
+| API.39 | BACKEND-PROD | Send a report with `include_text` true and one with false. Read `ai_reports` in Firestore. | Both exist. Only the first has text. Both expire in 90 days. | Blocked: needs the production backend (2026-11-15) |
+| API.40 | BACKEND-PROD | Delete everything from the app on a Firebase build. Read Firestore and Firebase Auth for the old uid. | No rows remain for the uid. The Firebase Auth user is gone. The next AI request uses a new anonymous uid. | Blocked: needs the production backend (2026-11-15) |
+| API.41 | BACKEND-PROD | Run the eval baselines in `backend/evals/README.md`. | Reports are saved. Cache-read tokens are above 0. | Blocked: needs the production backend (2026-11-15) |
 
 ## Z. Release, licence and Play
 
