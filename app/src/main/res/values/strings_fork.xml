@@ -564,4 +564,7 @@
     <string name="roman_typing__cancel" tools:ignore="MissingTranslation">Cancel</string>
     <string name="roman_typing__delete" tools:ignore="MissingTranslation">Delete</string>
     <string name="roman_typing__delete_confirm" tools:ignore="MissingTranslation">Delete this saved word?</string>
+    <string name="smartbar__shared_actions_toggle__cd" tools:ignore="MissingTranslation">Show or hide quick actions</string>
+    <string name="smartbar__shared_actions_toggle__expanded" tools:ignore="MissingTranslation">Expanded</string>
+    <string name="smartbar__shared_actions_toggle__collapsed" tools:ignore="MissingTranslation">Collapsed</string>
 </resources>

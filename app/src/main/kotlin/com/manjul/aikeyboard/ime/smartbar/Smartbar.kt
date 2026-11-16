@@ -47,7 +47,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.contentDescription // FORK(DT-W.3)
+import androidx.compose.ui.semantics.semantics // FORK(DT-W.3)
+import androidx.compose.ui.semantics.stateDescription // FORK(DT-W.3)
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource // FORK(DT-W.3)
 import androidx.compose.ui.graphics.isUnspecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -171,6 +175,12 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
 
     @Composable
     fun SharedActionsToggle() {
+        // FORK(DT-W.3)
+        val toggleDescription = stringResource(R.string.smartbar__shared_actions_toggle__cd)
+        val toggleState = stringResource(
+            if (sharedActionsExpanded) R.string.smartbar__shared_actions_toggle__expanded
+            else R.string.smartbar__shared_actions_toggle__collapsed,
+        )
         SnyggIconButton(
             elementName = FlorisImeUi.SmartbarSharedActionsToggle.elementName,
             onClick = {
@@ -182,6 +192,11 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
                 }
             },
             modifier = Modifier.sizeIn(maxHeight = FlorisImeSizing.smartbarHeight).aspectRatio(1f)
+                // FORK(DT-W.3): TalkBack name for the expand toggle
+                .semantics {
+                    contentDescription = toggleDescription
+                    stateDescription = toggleState
+                },
         ) {
             val transition = updateTransition(sharedActionsExpanded, label = "sharedActionsExpandedToggleBtn")
             val rotation by transition.animateFloat(
