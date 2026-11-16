@@ -126,6 +126,14 @@ class ClipboardManagerSealingTest {
         await("the history after the unpin") { historyTexts() == setOf(FIRST, SECOND) }
     }
 
+    @Test fun `the same text copied twice in a row is stored once`() {
+        manager.addNewPlaintext(FIRST)
+        manager.addNewPlaintext(FIRST)
+        await("the clip in the DB") { rawRows().isNotEmpty() }
+        Thread.sleep(500)
+        assertEquals(1, rawRows().size, "one copy must make one row")
+    }
+
     private companion object {
         const val FIRST = "first copied text"
         const val SECOND = "second copied text"
