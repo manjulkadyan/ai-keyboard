@@ -143,6 +143,23 @@ class CustomThemeViewModelTest {
         assertFalse(vm.state.value.lowContrast)
     }
 
+    @Test fun `a pick made while the save runs is stored too`() = runBlocking {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val vm = vm { spec ->
+            installed.add(spec)
+            if (installed.size == 1) gate.await()
+        }
+        vm.select(Element.ACCENT)
+        vm.pick(0xFF3366CCL)
+        vm.save()
+        val late = 0xFF80CC33L
+        vm.pick(late)
+        assertEquals(SaveStatus.SAVING, vm.state.value.saveStatus)
+        gate.complete(Unit)
+        awaitUntil { vm.state.value.saveStatus == SaveStatus.SAVED && installed.size == 2 }
+        assertEquals(late, CustomTheme.fromStored(store.current.customThemeColors, base)[Element.ACCENT])
+    }
+
     @Test fun `save stores the colours and cancels a pending premium theme`() = runBlocking {
         store.update { it.copy(pendingPremiumThemeId = "sunset") }
         val vm = vm()

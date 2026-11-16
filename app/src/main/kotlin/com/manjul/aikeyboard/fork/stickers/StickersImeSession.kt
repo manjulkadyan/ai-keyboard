@@ -39,7 +39,10 @@ class StickersImeSession(
 ) {
     val controller = StickerPanelController(graph.repository, isPro, decision, scope)
 
-    private val inserter = StickerInserter(context, graph.shareCache, isPro, graph.analytics)
+    /** The in-panel message for "Sticker copied" and "does not accept stickers" (DT-Q.3: toasts are suppressed). */
+    val notice = StickerNotice(scope)
+
+    private val inserter = StickerInserter(context, graph.shareCache, isPro, graph.analytics, notify = notice::show)
 
     fun bindTo(policy: ImePolicyController) {
         policy.addRestrictionListener { onDecisionChanged() }
@@ -84,6 +87,7 @@ class StickersImeSession(
     fun close() {
         if (!controller.state.value.open) return
         controller.close()
+        notice.clear()
         showPanel(false)
     }
 

@@ -40,6 +40,7 @@ import com.manjul.aikeyboard.ime.keyboard.ComputingEvaluator
 import com.manjul.aikeyboard.ime.keyboard.computeImageVector
 import com.manjul.aikeyboard.ime.keyboard.computeLabel
 import com.manjul.aikeyboard.ime.text.keyboard.TextKeyData
+import com.manjul.aikeyboard.fork.smartbar.chipSemantics // FORK(DT-W.3): TalkBack name and click action
 import com.manjul.aikeyboard.ime.theme.FlorisImeUi
 import org.florisboard.lib.snygg.SnyggSelector
 import org.florisboard.lib.snygg.ui.SnyggBox
@@ -87,7 +88,10 @@ fun QuickActionButton(
         }
     }
 
-    PlainTooltip(action.computeTooltip(evaluator), enabled = type == QuickActionBarType.INTERACTIVE_BUTTON) {
+    // FORK(DT-W.3): tooltip text reused as the chip content description
+    val chipDescription = action.computeTooltip(evaluator)
+    // FORK(DT-W.3): pass the shared chip description
+    PlainTooltip(chipDescription, enabled = type == QuickActionBarType.INTERACTIVE_BUTTON) {
         SnyggBox(
             elementName = elementName,
             attributes = attributes,
@@ -95,6 +99,19 @@ fun QuickActionButton(
             modifier = modifier,
             clickAndSemanticsModifier = Modifier
                 .aspectRatio(1f)
+                // FORK(DT-W.3): the pointer handler below is invisible to TalkBack, so expose name, role and click
+                .chipSemantics(
+                    description = chipDescription,
+                    enabled = isEnabled,
+                    onClick = if (type == QuickActionBarType.EDITOR_TILE) {
+                        null
+                    } else {
+                        {
+                            action.onPointerDown(context)
+                            action.onPointerUp(context)
+                        }
+                    },
+                )
                 .indication(interactionSource, LocalIndication.current)
                 .pointerInput(action, isEnabled) {
                     awaitEachGesture {

@@ -61,7 +61,11 @@ class CustomThemeViewModel(
     }
 
     fun pick(color: Long) {
-        _state.update { it.copy(colors = it.colors + (it.selected to color), saveStatus = SaveStatus.IDLE) }
+        _state.update {
+            // A pick during a save keeps SAVING: the save re-runs when it ends, so this pick is stored too.
+            val status = if (it.saveStatus == SaveStatus.SAVING) SaveStatus.SAVING else SaveStatus.IDLE
+            it.copy(colors = it.colors + (it.selected to color), saveStatus = status)
+        }
         preview(spec())
     }
 
@@ -97,7 +101,12 @@ class CustomThemeViewModel(
             } catch (_: Exception) {
                 false
             }
-            _state.update { it.copy(saveStatus = if (ok) SaveStatus.SAVED else SaveStatus.FAILED) }
+            if (ok && _state.value.colors != snapshot.colors) {
+                // The user picked a colour while the save ran: store that one too.
+                save()
+            } else {
+                _state.update { it.copy(saveStatus = if (ok) SaveStatus.SAVED else SaveStatus.FAILED) }
+            }
         }
     }
 

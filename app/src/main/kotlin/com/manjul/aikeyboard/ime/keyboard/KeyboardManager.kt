@@ -32,6 +32,7 @@ import com.manjul.aikeyboard.fork.smartbar.decisionOrLocked // FORK(S1-smartbar)
 import com.manjul.aikeyboard.ime.policy.PolicyDecision // FORK(S1-smartbar)
 import com.manjul.aikeyboard.fork.translate.BarKeyRouter // FORK(S2-bar)
 import com.manjul.aikeyboard.fork.suggest.AutocorrectGate // FORK(S3-suggest)
+import com.manjul.aikeyboard.fork.suggest.AutocorrectRevert // FORK(DT-G.2)
 import com.manjul.aikeyboard.suggestContext // FORK(S3-suggest)
 import com.manjul.aikeyboard.fork.perf.ImeTrace // FORK(S4-perf)
 import com.manjul.aikeyboard.R
@@ -108,6 +109,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
 
     // FORK(S6-translit): backspace right after a Roman space commit puts the Roman word back once (decision 4)
     private val translitRevert = TranslitRevert.forIme { editorInstance.activeInfo.isRawInputEditor }
+    private val autocorrectRevert = AutocorrectRevert.forIme { editorInstance.activeInfo.isRawInputEditor } // FORK(DT-G.2)
 
     // FORK(S1-smartbar): fail closed when the IME service (and with it the policy controller) is not running
     private fun policyDecision(): PolicyDecision =
@@ -307,6 +309,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
 
     fun commitCandidate(candidate: SuggestionCandidate) {
         translitRevert.invalidate() // FORK(S6-translit): a strip tap ends the Roman undo; a space records a new one
+        autocorrectRevert.invalidate() // FORK(DT-G.2)
         scope.launch {
             candidate.sourceProvider?.notifySuggestionAccepted(subtypeManager.activeSubtype, candidate)
         }
@@ -455,6 +458,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         revertPreviouslyAcceptedCandidate()
         // FORK(S6-translit): "native + space" becomes the Roman word once; the next backspace deletes one character
         if (unit == OperationUnit.CHARACTERS && revertTranslitSpaceCommit()) return
+        if (unit == OperationUnit.CHARACTERS && revertAutocorrectSpaceCommit()) return // FORK(DT-G.2)
         editorInstance.deleteBackwards(unit)
     }
 
@@ -556,6 +560,15 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         }
     }
 
+    // FORK(DT-G.2): the space after an autocorrect clears the upstream record, so AutocorrectRevert keeps its own
+    private fun revertAutocorrectSpaceCommit(): Boolean {
+        val reverted = autocorrectRevert.undo() ?: return false
+        reverted.sourceProvider?.let { provider ->
+            scope.launch { provider.notifySuggestionReverted(subtypeManager.activeSubtype, reverted) }
+        }
+        return true
+    }
+
     /**
      * Handles a [KeyCode.CAPS_LOCK] event.
      */
@@ -583,6 +596,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
      */
     fun handleHardwareKeyboardSpace() {
         translitRevert.invalidate() // FORK(S6-translit): the Roman undo is for the soft space bar only
+        autocorrectRevert.invalidate() // FORK(DT-G.2)
         val candidate = spaceAutoCommitCandidate() // FORK(S3-suggest)
         candidate?.let { commitCandidate(it) }
         // Skip handling changing to characters keyboard and double space periods
@@ -625,6 +639,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 candidate != null) { /* Do nothing */ } else {
             editorInstance.commitText(KeyCode.SPACE.toChar().toString())
             translitRevert.onSpace(candidate, spaceCommitted = true) // FORK(S6-translit): only a Roman commit counts
+            autocorrectRevert.onSpace(candidate, spaceCommitted = true) // FORK(DT-G.2)
         }
     }
 
@@ -743,6 +758,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     override fun onInputKeyUp(data: KeyData) = ImeTrace.keyCommit { activeState.batchEdit {
         // FORK(S6-translit): any key but backspace and shift ends the Roman undo (space records a new one)
         if (data.code != KeyCode.DELETE && data.code != KeyCode.SHIFT) translitRevert.invalidate()
+        // FORK(DT-G.2): same rule for the autocorrect undo (space records a new one after this runs)
+        if (data.code != KeyCode.DELETE && data.code != KeyCode.SHIFT) autocorrectRevert.invalidate()
         // FORK(S2-bar): while the Translate bar is open, text keys, space, backspace and Enter edit the bar only
         if (routeToTranslateBar(data)) return@batchEdit
         when (data.code) {

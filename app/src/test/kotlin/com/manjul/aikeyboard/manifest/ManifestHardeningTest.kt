@@ -304,6 +304,16 @@ class ManifestHardeningTest {
     }
 
     @Test
+    fun `app activity resolves both ui and app deep link schemes`() {
+        // DT-A.11: RouteRegistry supports app://<route>, so the exported activity must declare the scheme too.
+        val schemes = manifest.elements("activity").flatMap { it.children("intent-filter") }
+            .filter { f -> f.children("action").any { it.attr("name") == "android.intent.action.VIEW" } }
+            .flatMap { f -> f.children("data").map { it.attr("scheme") } }
+        assertTrue("ui" in schemes, "ui scheme")
+        assertTrue("app" in schemes, "app scheme")
+    }
+
+    @Test
     fun `ml kit init provider is removed so ml kit never starts with the process`() {
         // S2-mlkit, TRD §2.3: the merged manifest is checked by verify<Variant>NoAdAutoInit (com.google.mlkit.
         // providers are forbidden there); this pins the removal at its source.

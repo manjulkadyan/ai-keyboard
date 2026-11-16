@@ -138,6 +138,7 @@ class ClipboardManager(
     val currentHistory: ClipboardHistory
         get() = historyFlow.value
 
+    private val insertGuard = Mutex() // FORK(DT-I.3): one history insert or move at a time
     private val primaryClipLastFromCallbackGuard = Mutex(locked = false)
     private var primaryClipLastFromCallback: ClipData? = null
     private val _primaryClipFlow = MutableStateFlow<ClipboardItem?>(null)
@@ -296,18 +297,22 @@ class ClipboardManager(
         if (prefs.clipboard.historyEnabled.get() && captureGate.allowsHistory() &&
             !captureGate.isSensitive(newItem.text, newItem.isSensitive)
         ) {
-            val historyElement = currentHistory.all.firstOrNull { it.type == ItemType.TEXT && it.text == newItem.text }
-            if (historyElement != null) {
-                moveToTheBeginning(
-                    oldItem = historyElement,
-                    newItem = if (historyElement.isPinned) {
-                        newItem.copy(isPinned = true)
+            // FORK(DT-I.3): decide on the stored rows, serialized. currentHistory lags the DB, so two copies of the
+            // same text ~20 ms apart both saw "not in history" and each inserted a row.
+            ioScope.launch {
+                insertGuard.withLock {
+                    val dao = clipHistoryDao ?: return@withLock
+                    val stored = historyVault.read { dao.getAll() }
+                    val historyElement = stored.firstOrNull { it.type == ItemType.TEXT && it.text == newItem.text }
+                    if (historyElement != null) {
+                        moveToTheBeginning(
+                            oldItem = historyElement,
+                            newItem = if (historyElement.isPinned) newItem.copy(isPinned = true) else newItem,
+                        ).join()
                     } else {
-                        newItem
+                        insertClip(newItem).join()
                     }
-                )
-            } else {
-                insertClip(newItem)
+                }
             }
         }
     }
@@ -351,16 +356,16 @@ class ClipboardManager(
         }
     }
 
-    private fun moveToTheBeginning(oldItem: ClipboardItem, newItem: ClipboardItem) {
-        ioScope.launch {
+    private fun moveToTheBeginning(oldItem: ClipboardItem, newItem: ClipboardItem): Job { // FORK(DT-I.3): joinable
+        return ioScope.launch {
             val sealed = historyVault.sealForWrite(newItem) ?: return@launch // FORK(S5-clipboard): no key, no write
             clipHistoryDao?.delete(oldItem.id)
             clipHistoryDao?.insert(sealed) // FORK(S5-clipboard): sealed text only
         }
     }
 
-    fun insertClip(item: ClipboardItem) {
-        ioScope.launch {
+    fun insertClip(item: ClipboardItem): Job { // FORK(DT-I.3): joinable
+        return ioScope.launch {
             val sealed = historyVault.sealForWrite(item) ?: return@launch // FORK(S5-clipboard): no key, no write
             val id = clipHistoryDao?.insert(sealed) // FORK(S5-clipboard): sealed text only
             item.id = id ?: 0

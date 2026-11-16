@@ -70,7 +70,8 @@ class TranslitSuggestionProvider(
         allowPossiblyOffensive: Boolean,
         isPrivateSession: Boolean,
     ): List<SuggestionCandidate> {
-        if (!context.allowSuggestions || maxCandidateCount <= 0) return emptyList()
+        // DT-O.9: no Roman strip in email, URL or password fields (fieldAllowsTranslitCommit carries the field kind).
+        if (!context.allowSuggestions || !context.fieldAllowsTranslitCommit || maxCandidateCount <= 0) return emptyList()
         val lang = langOf(subtype) ?: return emptyList()
         val typed = content.composingText
         if (typed.isEmpty() || !hasLatinLetter(typed)) return emptyList()

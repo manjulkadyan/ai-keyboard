@@ -13,6 +13,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,6 +44,7 @@ fun StickerPanelLayout(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val keyboardManager by context.keyboardManager()
     val state by session.controller.state.collectAsState()
+    val notice by session.notice.message.collectAsState()
 
     SnyggColumn(
         elementName = FlorisImeUi.Media.elementName,
@@ -50,6 +59,18 @@ fun StickerPanelLayout(modifier: Modifier = Modifier) {
             onSeePro = session::seePro,
             modifier = Modifier.weight(1f),
         )
+        notice?.let {
+            Text(
+                text = stringResource(it),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .testTag(STICKER_NOTICE_TAG)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         SnyggRow(
             elementName = FlorisImeUi.MediaBottomRow.elementName,
             modifier = Modifier
@@ -76,3 +97,5 @@ fun StickerPanelLayout(modifier: Modifier = Modifier) {
         }
     }
 }
+
+const val STICKER_NOTICE_TAG = "sticker_notice"
