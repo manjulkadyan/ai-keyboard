@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021-2025 The FlorisBoard Contributors
+ * Modified by AI Keyboard contributors, 2026
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +27,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import com.manjul.aikeyboard.app.FlorisPreferenceStore
+import com.manjul.aikeyboard.fork.themes.KeyboardFontScale
 import com.manjul.aikeyboard.keyboardManager
 import com.manjul.aikeyboard.themeManager
 import dev.patrickgold.jetpref.datastore.model.observeAsState
@@ -72,6 +75,8 @@ fun FlorisImeTheme(content: @Composable () -> Unit) {
         CompositionLocalProvider(
             LocalConfig provides activeConfig,
             LocalTextStyle provides TextStyle.Default,
+            // FORK(DT-U.4): cap the system font scale so key labels fit at the largest font size
+            LocalDensity provides KeyboardFontScale.capped(LocalDensity.current),
         ) {
             ProvideSnyggTheme(
                 snyggTheme = snyggTheme,
