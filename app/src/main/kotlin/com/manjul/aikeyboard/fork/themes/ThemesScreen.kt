@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +56,7 @@ import com.manjul.aikeyboard.app.LocalNavController
 import com.manjul.aikeyboard.app.Routes
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.core.datastore.isProAt
+import com.manjul.aikeyboard.core.theme.CustomTheme
 import com.manjul.aikeyboard.core.theme.SnyggGenerator
 import com.manjul.aikeyboard.core.theme.ThemePreset
 import com.manjul.aikeyboard.featureSettingsStore
@@ -111,14 +114,23 @@ fun ThemesScreen() = FlorisScreen {
         val settings by store.flow.collectAsState(initial = store.current)
         val dayTheme by prefs.theme.dayThemeId.asFlow().collectAsState()
         val active = dayTheme.takeIf { it.extensionId == SnyggGenerator.EXTENSION_ID }?.componentId
+        // Custom colours has its own extension, so no preset is the active one while it is applied.
+        val customActive = dayTheme.extensionId == CustomTheme.EXTENSION_ID
         var keyBorder by rememberSaveable { mutableStateOf(active?.endsWith(SnyggGenerator.BORDERLESS_SUFFIX) != true) }
+        // Null while no preset is chosen, which is the case when Custom colours is applied.
         var selected by rememberSaveable {
-            mutableStateOf(active?.removeSuffix(SnyggGenerator.BORDERLESS_SUFFIX) ?: vm.presets.first().id)
+            mutableStateOf(
+                active?.removeSuffix(SnyggGenerator.BORDERLESS_SUFFIX)
+                    ?: if (customActive) null else vm.presets.first().id,
+            )
         }
+        // rememberSaveable restores a stale preset when returning from Custom colours, so reset on theme change.
+        LaunchedEffect(dayTheme) { if (customActive) selected = null }
         val isPro = settings.isProAt(System.currentTimeMillis())
 
         DisposableEffect(selected, keyBorder) {
-            vm.select(selected, keyBorder)
+            val chosen = selected
+            if (chosen != null) vm.select(chosen, keyBorder) else vm.clearPreview()
             onDispose { vm.clearPreview() }
         }
 
@@ -145,8 +157,10 @@ fun ThemesScreen() = FlorisScreen {
         )
         Button(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            enabled = selected != null,
             onClick = {
-                when (val result = vm.apply(selected, keyBorder)) {
+                val chosen = selected ?: return@Button
+                when (val result = vm.apply(chosen, keyBorder)) {
                     ApplyResult.Applied -> Unit
                     // The typed destination of result.route ("paywall?trigger=premium_theme").
                     is ApplyResult.NeedsPro -> navController.navigate(Routes.Paywall(PaywallTrigger.PREMIUM_THEME.wire))
@@ -156,6 +170,11 @@ fun ThemesScreen() = FlorisScreen {
         // S5 Task 8: the free "Custom colours" theme editor.
         OutlinedCard(
             onClick = { navController.navigate(Routes.CustomColors) },
+            border = if (customActive) {
+                BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+            } else {
+                CardDefaults.outlinedCardBorder()
+            },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             ListItem(
