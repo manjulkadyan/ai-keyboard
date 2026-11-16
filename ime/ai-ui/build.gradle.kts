@@ -11,8 +11,14 @@ plugins {
     alias(libs.plugins.aikeyboard.android.library.compose)
 }
 
+apply(from = rootProject.file("gradle/robolectric-offline.gradle.kts"))
+
 android {
     namespace = "com.manjul.aikeyboard.ime.aiui"
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -28,4 +34,11 @@ dependencies {
     testImplementation(testFixtures(projects.ime.editing))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    // A library's unit tests may declare the empty host activity; nothing here ships in an app.
+    testImplementation(libs.androidx.compose.ui.test.manifest)
+    testRuntimeOnly(libs.junit.vintage.engine)
 }
