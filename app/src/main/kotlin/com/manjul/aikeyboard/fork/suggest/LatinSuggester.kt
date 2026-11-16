@@ -50,6 +50,11 @@ class LatinWordCandidate(
     override fun toString(): String = "LatinWordCandidate(autoCommit=$isEligibleForAutoCommit)"
 }
 
+/** A word from the upstream user dictionary (Settings, Typing, Dictionary). [locale] is null for all languages. */
+class UserDictionaryWord(val word: String, val frequency: Int, val locale: String?) {
+    override fun toString(): String = "UserDictionaryWord(frequency=$frequency)" // User content: no text.
+}
+
 /**
  * The fork's suggestion engine behind upstream `LatinLanguageProvider` (PRD FR-05, decision 4).
  *
@@ -70,6 +75,11 @@ class LatinSuggester(
     private val settings: () -> FeatureSettings,
     private val context: SuggestContext,
     private val isPrivateSession: () -> Boolean,
+    /**
+     * Upstream user dictionary entries whose word contains the typed text (DT-G.5). Read only where the field allows
+     * suggestion history and outside incognito.
+     */
+    private val userDictionary: (typed: String) -> List<UserDictionaryWord> = { emptyList() },
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /** `autocorrect_min_score` (decision 4), a `:core:config` default. */
     private val minScore: Double = DefaultsRemoteConfig().double(ConfigKeys.AUTOCORRECT_MIN_SCORE),
@@ -148,6 +158,9 @@ class LatinSuggester(
         val engine = if (context.allowSuggestionHistory) l.engine else l.plainEngine
         val candidates = engine.suggest(typed, previousWord, max)
         val reverted = synchronized(lock) { recentlyReverted.containsKey(typed.lowercase()) }
+        val userEntries = userDictionaryEntries(language, typed)
+        // Upstream treated user dictionary words as correctly spelled, so an exact match counts as known (DT-G.5).
+        val typedInUserDictionary = userEntries.any { it.word.equals(typed, ignoreCase = true) }
         val eligible = AutocorrectPolicy.shouldAutocorrect(
             typed = typed,
             top = candidates.firstOrNull(),
@@ -155,20 +168,67 @@ class LatinSuggester(
             localeEnabled = language in current.autocorrectLocales,
             fieldAllows = context.fieldAllowsAutocorrect,
             recentlyReverted = reverted,
-            typedIsKnown = engine.isKnown(typed),
+            typedIsKnown = typedInUserDictionary || engine.isKnown(typed),
         )
         val prev = previousWord?.lowercase()
-        return candidates.mapIndexed { i, c ->
+        val userWords = userDictionaryCompletions(userEntries, typed, candidates.map { it.word })
+        // Keep the typed word first when it leads (or is a user dictionary word); user dictionary completions then
+        // come before the dictionary's.
+        val leading = candidates.firstOrNull()
+        val typedFirst = leading?.takeIf { it.isTypedWord }
+        val merged = buildList {
+            when {
+                typedFirst != null -> add(typedFirst.word to typedFirst.score)
+                typedInUserDictionary -> add(typed to 1.0)
+            }
+            userWords.forEach { add(it) }
+            val skip = if (typedFirst != null) 1 else 0
+            candidates.drop(skip).forEach { add(it.word to it.score) }
+        }.distinctBy { it.first.lowercase() }.take(max)
+        val firstWord = candidates.firstOrNull()?.word
+        return merged.mapIndexed { i, (word, score) ->
             LatinWordCandidate(
-                text = c.word,
-                confidence = c.score,
-                isEligibleForAutoCommit = i == 0 && eligible,
+                text = word,
+                confidence = score,
+                isEligibleForAutoCommit = i == 0 && eligible && word == firstWord,
                 sourceProvider = source,
                 typed = typed,
                 previousWord = prev,
                 language = language,
             )
         }
+    }
+
+    /** User dictionary entries for [language] whose word contains [typed] as a prefix (any case), minus blocked words. */
+    private fun userDictionaryEntries(language: String, typed: String): List<UserDictionaryWord> {
+        if (!context.allowSuggestionHistory || isPrivateSession()) return emptyList()
+        val lower = typed.lowercase()
+        val entries = try {
+            userDictionary(typed)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return emptyList() // Suggestions still work without it. Nothing is logged (user content).
+        }
+        val repo = learned()
+        return entries.filter { it.locale == null || languageOfTag(it.locale) == language }
+            .filter { it.word.lowercase().startsWith(lower) }
+            .filter { !repo.isBlocked(language, it.word.lowercase()) }
+    }
+
+    /** Completions of [typed] strictly longer than it, best first, as (word, score). */
+    private fun userDictionaryCompletions(
+        entries: List<UserDictionaryWord>,
+        typed: String,
+        already: List<String>,
+    ): List<Pair<String, Double>> {
+        val seen = already.mapTo(HashSet()) { it.lowercase() }
+        return entries.asSequence()
+            .filter { it.word.length > typed.length }
+            .sortedByDescending { it.frequency }
+            .filter { seen.add(it.word.lowercase()) }
+            .map { it.word to (0.5 + 0.5 * it.frequency.coerceIn(0, 255) / 255.0).times(0.85).coerceAtMost(1.0) }
+            .toList()
     }
 
     private fun learningAllowed(): Boolean = context.allowLearning && !isPrivateSession()
@@ -255,6 +315,8 @@ class LatinSuggester(
 
     companion object {
         private const val MAX_REVERTED = 64
+
+        private fun languageOfTag(tag: String): String = tag.substringBefore('-').substringBefore('_').lowercase()
 
         /** Letters, combining marks (Devanagari matras, Arabic harakat), apostrophes and ZWNJ/ZWJ. */
         private fun isWordChar(c: Char): Boolean =

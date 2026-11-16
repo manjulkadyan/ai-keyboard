@@ -20,6 +20,8 @@ import android.content.Context
 import com.manjul.aikeyboard.appContext
 import com.manjul.aikeyboard.featureSettingsStore // FORK(S3-suggest)
 import com.manjul.aikeyboard.fork.suggest.LatinSuggester // FORK(S3-suggest)
+import com.manjul.aikeyboard.fork.suggest.UserDictionaryWord // FORK(DT-G.5)
+import com.manjul.aikeyboard.ime.dictionary.DictionaryManager // FORK(DT-G.5)
 import com.manjul.aikeyboard.keyboardManager // FORK(S3-suggest)
 import com.manjul.aikeyboard.suggestContext // FORK(S3-suggest)
 import com.manjul.aikeyboard.userWordRepository // FORK(S3-suggest)
@@ -56,7 +58,19 @@ class LatinLanguageProvider internal constructor(
             settings = { appContext.featureSettingsStore().value.current },
             context = appContext.suggestContext(),
             isPrivateSession = { appContext.keyboardManager().value.activeState.isIncognitoMode },
+            userDictionary = ::queryUserDictionary, // FORK(DT-G.5)
         )
+    }
+
+    // FORK(DT-G.5): words from the upstream user dictionaries (Floris and system) as suggestion candidates
+    private fun queryUserDictionary(typed: String): List<UserDictionaryWord> {
+        val manager = DictionaryManager.default()
+        manager.loadUserDictionariesIfNecessary()
+        return buildList {
+            for (dao in listOfNotNull(manager.florisUserDictionaryDao(), manager.systemUserDictionaryDao())) {
+                dao.query(typed).forEach { add(UserDictionaryWord(it.word, it.freq, it.locale)) }
+            }
+        }
     }
 
     private fun Subtype.dictLanguage() = LatinSuggester.languageOf(primaryLocale.base) // FORK(S3-suggest)

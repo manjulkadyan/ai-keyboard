@@ -242,4 +242,54 @@ class LatinLanguageProviderTest {
         assertTrue(provider.getListOfWords(subtype("en")).size >= 20_000)
         assertTrue(provider.getFrequencyForWord(subtype("en"), "the") > provider.getFrequencyForWord(subtype("en"), "zymurgy"))
     }
+
+    private var userWords = listOf(UserDictionaryWord("zqxword", 255, null))
+    private val withUserDict = LatinLanguageProvider(
+        app,
+        LatinSuggester(
+            openAsset = { path -> app.assets.open(path) },
+            learned = { repo },
+            settings = { settings },
+            context = context,
+            isPrivateSession = { privateSession },
+            userDictionary = { userWords },
+        ),
+    )
+
+    private fun suggestUser(word: String) = runBlocking {
+        withUserDict.preload(subtype("en"))
+        withUserDict.suggest(subtype("en"), composing(word), 3, false, privateSession).map { it.text.toString() }
+    }
+
+    @Test fun `user dictionary words are suggested`() {
+        assertTrue("zqxword" in suggestUser("zqx"))
+    }
+
+    @Test fun `user dictionary words are not suggested in incognito`() {
+        privateSession = true
+        assertFalse("zqxword" in suggestUser("zqx"))
+    }
+
+    @Test fun `user dictionary words are not suggested where history is forbidden`() {
+        context.update(textField(), PolicyDecision.Unrestricted.copy(allowSuggestionHistory = false))
+        assertFalse("zqxword" in suggestUser("zqx"))
+    }
+
+    @Test fun `user dictionary words for another language are skipped`() {
+        userWords = listOf(UserDictionaryWord("zqxword", 255, "de"))
+        assertFalse("zqxword" in suggestUser("zqx"))
+    }
+
+    @Test fun `a typed user dictionary word is first and never auto-committed to another word`() {
+        for (word in listOf("zqx", "manjul", "zac")) {
+            userWords = listOf(UserDictionaryWord(word, 255, null))
+            val result = runBlocking {
+                withUserDict.preload(subtype("en"))
+                withUserDict.suggest(subtype("en"), composing(word), 3, false, privateSession)
+            }
+            assertEquals(word, result.first().text.toString())
+            assertTrue(result.none { it.isEligibleForAutoCommit && it.text.toString() != word })
+            assertFalse(result.first().isEligibleForAutoCommit)
+        }
+    }
 }
