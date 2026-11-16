@@ -126,9 +126,12 @@ class BarKeyRoutingTest {
         assertTrue(BarKeyRouter.onHardwareKey(r.session, KeyEvent.KEYCODE_I, key(0, KeyEvent.KEYCODE_I)))
         assertTrue(BarKeyRouter.onHardwareKey(r.session, KeyEvent.KEYCODE_DEL, key(0, KeyEvent.KEYCODE_DEL)))
         assertTrue(BarKeyRouter.onHardwareKey(r.session, KeyEvent.KEYCODE_FORWARD_DEL, key(0, KeyEvent.KEYCODE_FORWARD_DEL)))
-        // Ctrl shortcuts are not text.
-        assertFalse(
+        // Ctrl shortcuts are not text and are swallowed so they never reach the host field (DT-K.13).
+        assertTrue(
             BarKeyRouter.onHardwareKey(r.session, KeyEvent.KEYCODE_A, key(0, KeyEvent.KEYCODE_A, KeyEvent.META_CTRL_ON)),
+        )
+        assertTrue(
+            BarKeyRouter.onHardwareKey(r.session, KeyEvent.KEYCODE_X, key(0, KeyEvent.KEYCODE_X, KeyEvent.META_CTRL_ON)),
         )
         runCurrent()
         assertEquals("h ", r.input)

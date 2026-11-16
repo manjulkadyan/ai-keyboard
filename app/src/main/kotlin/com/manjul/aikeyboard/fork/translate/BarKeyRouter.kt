@@ -86,7 +86,9 @@ object BarKeyRouter {
             KeyEvent.KEYCODE_SPACE -> if (translit?.onSpace() != true) buffer.type(" ")
             // API 33+ closes the bar through the predictive back callback (SmartbarTranslateBar).
             KeyEvent.KEYCODE_BACK -> if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) bar.close() else return false
+            // FORK(DT-K.13): Ctrl shortcuts (select all, cut, copy, undo) must not reach the host field behind the bar.
             else -> {
+                if (event?.isCtrlPressed == true && !KeyEvent.isModifierKey(keyCode)) return true
                 val ch = event?.unicodeChar ?: 0
                 if (ch <= 0 || event?.isCtrlPressed == true || event?.isAltPressed == true) return false
                 val typed = String(Character.toChars(ch))
