@@ -973,12 +973,20 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 handleEnter()
                 return true
             }
+            // FORK(DT-G.2): a hardware Backspace takes the same revert path as the soft key; else the system deletes
+            KeyEvent.KEYCODE_DEL -> return handleHardwareBackspace(event)
             KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_SHIFT_RIGHT -> {
                 inputEventDispatcher.sendDown(TextKeyData.SHIFT)
                 return true
             }
             else -> return false
         }
+    }
+
+    // FORK(DT-G.2): consumes plain Backspace only when a revert record acts; shifted, repeated or no record: unchanged
+    private fun handleHardwareBackspace(event: KeyEvent?): Boolean {
+        if (event != null && (event.isShiftPressed || event.repeatCount > 0)) return false
+        return revertTranslitSpaceCommit() || revertAutocorrectSpaceCommit()
     }
 
     fun onHardwareKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
