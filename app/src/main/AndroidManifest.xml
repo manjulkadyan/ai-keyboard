@@ -103,6 +103,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="ui" android:host="florisboard" android:pathPrefix="/" />
             </intent-filter>
+            <!-- FORK(DT-A.11): app://<route> links; RouteRegistry (AppIntents) allow-lists the route -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="app" />
+            </intent-filter>
             <intent-filter android:label="Import Extension">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
