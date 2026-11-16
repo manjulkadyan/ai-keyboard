@@ -34,22 +34,21 @@ Most blocked cases need hardware or setup that the emulator does not have: ad un
 | ID | Bug |
 |---|---|
 | F.2 | A new typed word is never learned. Learning happens only when a strip candidate is picked. Product gap or bug. |
-| G.2 | A hardware Backspace after an autocorrect deletes only the space and does not undo the correction. The soft Backspace undo works since fix c8fa8da1. |
 | K.12 | A field switch during a Live preview commits the preview into the old field. A fix attempt was rejected because Android deactivates the old field's InputConnection before the IME hears about the switch, so a new design or a documented platform limit is needed. |
 | N.4, N.5 | After a voice uninstall, Google TTS reports LANG_NOT_SUPPORTED, so the app never offers Install voice. |
 | N.1 | One ANR (app not responding) in the settings app. The process used 101% CPU, mostly kernel time. No stack. Cause unknown. |
-| R.12 | In Custom colours, a pick made just after Save shows in the preview but is not stored. It is lost on exit with no notice. Fix 775c83cb re-saves only a pick made while the write runs, and on the emulator the write ends before the tap. |
 
 ### Continue here
 
 All planned emulator cases ran. These items are still open:
 
-1. Fix and retest the bugs in "Open app bugs". R.12 needs a fix that also keeps a pick made after the write ends. K.12 needs a new design or a documented platform limit.
+1. Fix and retest the bugs in "Open app bugs". K.12 needs a new design or a documented platform limit.
 2. R.20: rerun on a fresh setup. Install a dictionary pack and a custom colour theme first, then run Clear on device only. Do not run R.19 before it, because a `bmgr restore` wipes all app data.
 3. S.5: needs a verbose build and a reinstall.
 4. Section X: needs `aikb.firebase.*` and test ad unit ids in Remote Config. Without them no ad can load, so X.1 to X.6 and X.8 are blocked and X.7 and X.9 are partial.
 5. Section W: TalkBack speech was not heard on the emulator. Run W.1 to W.6 on a device with TalkBack audio.
 6. Section T and the blocked C cases: run on the Pixel 9.
+7. G.2: on a device, type "teh " in English and press a hardware Backspace once, to confirm the English autocorrect revert.
 
 Restore this state first:
 
@@ -244,7 +243,7 @@ and note `ai_left_today`.
 | ID | Where | Steps | Expected | Result |
 |---|---|---|---|---|
 | G.1 | EMU | Turn autocorrect on for English. Type "teh " in the URL, Email and Password fields of the test page and in Chrome incognito. | The word is never replaced in these fields. | Pass (EMU 2026-11-15) |
-| G.2 | EMU | Type "teh " in the Normal field. Press Backspace to revert. Type "teh " again. | "the " replaces it the first time. After the revert, no second replace. | Pass on rerun after fix c8fa8da1 (EMU 2026-11-16), with the on-screen Backspace key. "teh " became "The ", Backspace gave "Teh", and the second "teh " stayed "teh". Note: a hardware Backspace (`adb shell input keyevent 67`) still deletes only the space. Earlier: Fail, Backspace did not undo the correction. |
+| G.2 | EMU | Type "teh " in the Normal field. Press Backspace to revert. Type "teh " again. | "the " replaces it the first time. After the revert, no second replace. | Pass on rerun after fix 1a6890bb (EMU 2026-11-16): a hardware Backspace (KEYCODE_DEL) and the on-screen Backspace both revert the commit, checked on the Roman Urdu transliteration commit. Still to check: the English autocorrect "teh" case with a hardware Backspace. Earlier: Pass after fix c8fa8da1 with the on-screen Backspace only. Before that: Fail, Backspace did not undo the correction. |
 | G.3 | EMU | Type words with digits, ALL CAPS, `@` or `/`, each with a space after it. | None of them is replaced. | Pass (EMU 2026-11-15) |
 | G.4 | DEVICE | Swap two letters in common words in en, es, fr, pt and id. Type first-letter typos such as "jello". | Record how often autocorrect picks the right word and the first-letter miss rate. | |
 | G.5 | EMU | Open Home, Typing, User dictionaries, Manage internal user dictionary. Add the word "zqxword". Type "zqx". | The word shows as a suggestion. | Pass on rerun after fix 135b604a (EMU 2026-11-16). "zqxword" added to the internal user dictionary. Typing "zqx" in Messages showed "zqxword" first, then "Zac" and "Sax". Earlier: Fail, user words never showed. |
@@ -468,7 +467,7 @@ Use the AI build and the local backend. Agree to AI consent first (B.3).
 | R.9 | EMU | Pick Material You. Change the wallpaper. | Keyboard colours follow the new wallpaper. | Blocked: the emulator wallpaper change and the Material You colour check need a person to compare colours. Not run within the budget. (EMU 2026-11-15) |
 | R.10 | EMU | Custom colours: pick a colour with the wheel, the hex field and a recent colour. | Each applies to the chosen element. | Pass. Wheel: a tap on the hue ring set Keys to `#80CC33`. Hex: `#3366CC` on Keys applied live. Recent colour: a tap on "Recent colour #FDFDFE" set Key text to `#FDFDFE`. Plan fix: type the leading `#`. With `adb shell input text`, escape it, because the shell reads `#` as a comment. (EMU 2026-11-15) |
 | R.11 | EMU | Force-stop the app. Open the picker. | The recent colours stay. The custom theme applies live in the keyboard. | Pass. After Save and a force-stop, the picker shows Keys `#3366CC` and the recent colour `#FDFDFE`. The keyboard shows the blue custom theme (`theme__day_theme_id` = `com.manjul.aikeyboard.themes.custom:custom`). My first Save tap did not store anything (`customThemeColors` stayed empty), most likely because the tap landed while the layout moved. The second tap stored it. (EMU 2026-11-15) |
-| R.12 | EMU | Tap Save and pick a colour while it runs. | The saved theme and the preview match the last colour picked. | Fail on rerun after fix 775c83cb (EMU 2026-11-16). Highlight part: Pass. After Custom colours, Appearance highlights no preset, and the Custom colours card is outlined. Save part: Fail. I tapped Save, then 20, 50 and 100 ms later tapped the hue ring. Each time the screen showed `#7FFA03`, but the store kept `#03B7FA`. Back left the screen with no notice. A Save with no later pick stores the colour. The fix re-saves only a pick made while the write runs. On the emulator the write ends before a tap 20 ms later, so the later pick is still dropped on exit. Earlier: Fail, the pick after Save was not stored, and Appearance highlighted Light. |
+| R.12 | EMU | Tap Save and pick a colour while it runs. | The saved theme and the preview match the last colour picked. | Pass on rerun after fix 28ad4697 (EMU 2026-11-16): a colour picked about 30 ms after Save is stored when the user leaves the screen and is kept after a force-stop. Earlier: Fail after fix 775c83cb, a pick after the write ended was dropped. |
 | R.13 | DEVICE | On a low-end phone, drag on the hue ring and on the saturation and value panel. | The drag stays smooth. | Blocked: DEVICE case (low-end phone). Not run on the emulator. (EMU 2026-11-15) |
 | R.14 | EMU | Settings, Privacy: tap Clear data. Go back. Tap Delete my data. | Both open the Delete my data screen. | Pass. Clear data and Delete my data both open the Delete my data screen. No button on it was tapped. (EMU 2026-11-15) |
 | R.15 | EMU | Translate and star a few texts. Run `adb shell bmgr backupnow $PKG`. Install a later debug build over it. | The backup does not hold `databases/app_database*`. History and favourites stay after the update. | Partial pass. `data_extraction_rules.xml` includes only `jetpref_datastore` and `files/ime`. A `bmgr backupnow` on LocalTransport succeeded with 12800 bytes, but `databases/` holds 2.4 MB, so `app_database` is not in it. The archive cannot be read (no root on this image). The update step was not run, because a new build would replace the AI build under test. Plan fix: run `adb shell bmgr enable true` and pick LocalTransport first. On this emulator Backup Manager is disabled by default. I set both back afterward. (EMU 2026-11-15) |
