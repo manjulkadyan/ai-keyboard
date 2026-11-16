@@ -88,7 +88,9 @@ fun QuickActionButton(
         }
     }
 
+    // FORK(DT-W.3): tooltip text reused as the chip content description
     val chipDescription = action.computeTooltip(evaluator)
+    // FORK(DT-W.3): pass the shared chip description
     PlainTooltip(chipDescription, enabled = type == QuickActionBarType.INTERACTIVE_BUTTON) {
         SnyggBox(
             elementName = elementName,
