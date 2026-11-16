@@ -118,6 +118,7 @@ class FlorisAppActivity : ComponentActivity() {
             }
         }
         super.onCreate(savedInstanceState)
+        val launchIntent = intent // FORK(DT-A.10)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         // FORK(S4-rc): activate Remote Config at the cold start, fetch after the first frame, and listen for
         // kill-switch updates while this Activity is started. Does nothing without Firebase options.
@@ -126,6 +127,10 @@ class FlorisAppActivity : ComponentActivity() {
         billing().value.onAppStart()
         // FORK(S4-ads): entry source, foreground, background and external-flow returns for the ad rules
         AdsAppGraph.get(application).attach(this)
+        // FORK(DT-A.10): the nav library handles the activity intent when the NavHost is set, which would open a
+        // deep link without the allow-list or the onboarding gate. Replace it after the ad tracker has read it
+        // (entry source) and before setContent; handleLaunchIntent gets the real launch intent.
+        setIntent(Intent(Intent.ACTION_MAIN))
 
         prefs.other.settingsTheme.asFlow().collectIn(lifecycleScope) {
             appTheme = it
@@ -172,7 +177,7 @@ class FlorisAppActivity : ComponentActivity() {
                     }
                 }
             }
-            onNewIntent(intent)
+            handleLaunchIntent(launchIntent) // FORK(DT-A.10)
             // FORK(S4-ads): UMP consent, then GMA, once per Activity cold start (not on a recreate) after onboarding.
             // AdsAppGraph skips Pro users and ads_enabled_global = false. Never reached from the IME.
             if (savedInstanceState == null) {
@@ -226,6 +231,10 @@ class FlorisAppActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        handleLaunchIntent(intent) // FORK(DT-A.10)
+    }
+
+    private fun handleLaunchIntent(intent: Intent) {
         // FORK(S2-routes): open_screen and ui:// / app:// links go through RouteRegistry (unknown -> Home and
         // deeplink_unknown). The activity keeps a bare intent so the nav library never handles the raw one
         // (its own deep-link handling would bypass the allow-list), and a rotation does not navigate again.
