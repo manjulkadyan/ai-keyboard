@@ -25,7 +25,7 @@ Last run: 2026-11-15, on `emulator-5554` and the local kb-api, build `52f01daa`.
 
 The continuation ran on 2026-11-15 in three batches. The reruns of E.5, K.9 and P.5 pass. The G.5 rerun confirms the app bug.
 
-On 2026-11-16 the fixed bugs ran again on `emulator-5554`, build `47ec72cf` on branch `fix/device-test-bugs`. A.10, A.11, G.2, G.5, I.3, K.13, O.9, Q.3, U.4, W.3 and W.6 pass. R.12 still fails for a pick made just after Save. B.8 became a plan fix.
+On 2026-11-16 the fixed bugs ran again on `emulator-5554`, build `47ec72cf` on branch `fix/device-test-bugs`. A.10, A.11, G.2, G.5, I.3, K.13, O.9, Q.3, U.4, W.3 and W.6 pass. R.12 still failed for a pick made just after Save. B.8 became a plan fix. Round 2 on branch `fix/device-test-bugs-2` fixed R.12 (`28ad4697`) and the G.2 hardware Backspace (`1a6890bb`). Both pass on the emulator.
 
 Most blocked cases need hardware or setup that the emulator does not have: ad unit ids and Firebase (X), a release or verbose build (S.5, T), a real device (C, T) or Pro billing (B.6).
 
