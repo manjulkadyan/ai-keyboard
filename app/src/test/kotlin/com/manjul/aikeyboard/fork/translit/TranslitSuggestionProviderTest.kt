@@ -95,6 +95,21 @@ class TranslitSuggestionProviderTest {
         assertTrue(suggest("kya").isEmpty())
     }
 
+    @Test fun `email url and password fields give nothing`() {
+        val text = InputType.TYPE_CLASS_TEXT
+        for (variation in listOf(
+            InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_URI,
+            InputType.TYPE_TEXT_VARIATION_PASSWORD,
+        )) {
+            context.update(EditorInfo().apply { inputType = text or variation }, PolicyDecision.Unrestricted)
+            assertTrue(suggest("kya").isEmpty())
+        }
+        allow()
+        assertTrue(suggest("kya").isNotEmpty())
+    }
+
     @Test fun `a word without a Latin letter gives nothing`() {
         allow()
         assertTrue(suggest("123").isEmpty())
