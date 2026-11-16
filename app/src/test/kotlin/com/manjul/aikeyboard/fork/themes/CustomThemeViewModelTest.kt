@@ -160,6 +160,21 @@ class CustomThemeViewModelTest {
         assertEquals(late, CustomTheme.fromStored(store.current.customThemeColors, base)[Element.ACCENT])
     }
 
+    @Test fun `a pick made after the save finished is stored when the screen is left`() = runBlocking {
+        val vm = vm()
+        vm.select(Element.ACCENT)
+        vm.pick(0xFF3366CCL)
+        vm.save()
+        awaitUntil { vm.state.value.saveStatus == SaveStatus.SAVED }
+        val late = 0xFF80CC33L
+        vm.pick(late)
+        vm.saveIfUnsaved()
+        awaitUntil { vm.state.value.saveStatus == SaveStatus.SAVED && installed.size == 2 }
+        assertEquals(late, CustomTheme.fromStored(store.current.customThemeColors, base)[Element.ACCENT])
+        vm.saveIfUnsaved()
+        assertEquals(2, installed.size)
+    }
+
     @Test fun `save stores the colours and cancels a pending premium theme`() = runBlocking {
         store.update { it.copy(pendingPremiumThemeId = "sunset") }
         val vm = vm()

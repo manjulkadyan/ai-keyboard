@@ -50,6 +50,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import org.florisboard.lib.compose.stringRes
 import org.florisboard.lib.snygg.SnyggStylesheet
 
@@ -76,7 +78,12 @@ internal class CustomThemeHolder(context: Context) : ViewModel() {
 
     override fun onCleared() {
         vm.clearPreview()
-        scope.cancel()
+        // A pick made after Save is stored on exit, then the scope ends.
+        vm.saveIfUnsaved()
+        scope.launch {
+            vm.state.first { it.saveStatus != SaveStatus.SAVING }
+            scope.cancel()
+        }
     }
 
     /**

@@ -54,6 +54,9 @@ class CustomThemeViewModel(
     )
     val state: StateFlow<State> = _state.asStateFlow()
 
+    /** The colours last stored (or loaded). A pick that differs from them is not stored yet. */
+    private var storedColors: Map<Element, Long> = _state.value.colors
+
     fun spec(): ThemeSpec = CustomTheme.spec(_state.value.colors, base)
 
     fun select(element: Element) {
@@ -101,6 +104,7 @@ class CustomThemeViewModel(
             } catch (_: Exception) {
                 false
             }
+            if (ok) storedColors = snapshot.colors
             if (ok && _state.value.colors != snapshot.colors) {
                 // The user picked a colour while the save ran: store that one too.
                 save()
@@ -108,6 +112,15 @@ class CustomThemeViewModel(
                 _state.update { it.copy(saveStatus = if (ok) SaveStatus.SAVED else SaveStatus.FAILED) }
             }
         }
+    }
+
+    /**
+     * Stores a pick that no Save has stored yet, for example one made after Save finished. The screen calls this
+     * when it is left, so a pick is never lost silently. A save that is running re-runs by itself for a newer pick.
+     */
+    fun saveIfUnsaved() {
+        val s = _state.value
+        if (s.saveStatus != SaveStatus.SAVING && s.colors != storedColors) save()
     }
 
     companion object {
